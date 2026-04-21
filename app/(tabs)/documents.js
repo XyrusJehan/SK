@@ -146,6 +146,8 @@ const DocumentCard = ({ group, onCreateNew, onItemPress }) => {
             <Text style={[styles.docItemText, { color: colors.subText }]}>{item}</Text>
           </TouchableOpacity>
         ))}
+
+
       </View>
     </View>
   );
