@@ -11,6 +11,11 @@ import {
   Image,
   Platform,
 } from 'react-native';
+<<<<<<< HEAD
+import { useRouter } from 'expo-router';
+import { useNav } from './navContext';
+=======
+>>>>>>> 4883f35edbfdaedde52ffa8c6d7b191a5a3f2f24
 
 // ─── MOCK DATA ────────────────────────────────────────────────────────────────
 const TASKS = [
@@ -90,11 +95,29 @@ const COLORS = {
 
 // ─── MAIN COMPONENT ───────────────────────────────────────────────────────────
 export default function HomeScreen({ navigation }) {
+<<<<<<< HEAD
+  const router = useRouter();
+  const { activeTab, setActiveTab } = useNav();
+  const [searchText, setSearchText] = useState('');
+  const [sortBy, setSortBy] = useState('Newest');
+  const [notifCount] = useState(2);
+
+  const handleNavPress = (tab) => {
+    if (tab === 'Home') {
+      router.push('/(tabs)');
+    } else if (tab === 'Documents') {
+      router.push('/(tabs)/documents');
+    }
+    setActiveTab(tab);
+  };
+
+=======
   const [searchText, setSearchText] = useState('');
   const [activeTab, setActiveTab] = useState('Home');
   const [sortBy, setSortBy] = useState('Newest');
   const [notifCount] = useState(2);
 
+>>>>>>> 4883f35edbfdaedde52ffa8c6d7b191a5a3f2f24
   const sortedActivities =
     sortBy === 'Name'
       ? [...ACTIVITIES].sort((a, b) => a.label.localeCompare(b.label))
@@ -126,7 +149,11 @@ export default function HomeScreen({ navigation }) {
               <TouchableOpacity
                 key={tab}
                 style={[styles.navItem, active && styles.navItemActive]}
+<<<<<<< HEAD
+                onPress={() => handleNavPress(tab)}
+=======
                 onPress={() => setActiveTab(tab)}
+>>>>>>> 4883f35edbfdaedde52ffa8c6d7b191a5a3f2f24
                 activeOpacity={0.8}
               >
                 <Text style={[styles.navLabel, active && styles.navLabelActive]}>
@@ -280,8 +307,13 @@ const styles = StyleSheet.create({
 
   // ── Sidebar
   sidebar: {
+<<<<<<< HEAD
+    width: 250,
+    backgroundColor: '#750d18',
+=======
     width: 130,
     backgroundColor: COLORS.maroon,
+>>>>>>> 4883f35edbfdaedde52ffa8c6d7b191a5a3f2f24
     alignItems: 'center',
     paddingTop: 20,
     paddingBottom: 24,
