@@ -115,6 +115,30 @@ const SearchIcon = () => (
   </View>
 );
 
+// ─── DROPDOWN MENU ────────────────────────────────────────────────────────────
+const DropdownMenu = ({ visible, options, onSelect, onClose, buttonColor }) => {
+  if (!visible) return null;
+  return (
+    <View style={styles.dropdownOverlay}>
+      <TouchableOpacity style={styles.dropdownBackdrop} onPress={onClose} />
+      <View style={[styles.dropdownMenu, { borderTopColor: buttonColor }]}>
+        {options.map((opt, idx) => (
+          <TouchableOpacity
+            key={idx}
+            style={styles.dropdownItem}
+            onPress={() => {
+              onSelect(opt);
+              onClose();
+            }}
+          >
+            <Text style={styles.dropdownItemText}>{opt}</Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+    </View>
+  );
+};
+
 // ─── DOCUMENT ROW ─────────────────────────────────────────────────────────────
 const DocumentRow = ({ doc, accentColor, onMenu }) => (
   <View style={styles.docRow}>
@@ -148,6 +172,11 @@ export default function DocumentListScreen({ route, navigation }) {
   const [activeCategory, setActiveCategory] = useState(initialCategory);
   const [sortBy, setSortBy] = useState('Newest');
   const [notifCount] = useState(2);
+
+  // Dropdown state
+  const [dropdownVisible, setDropdownVisible] = useState(false);
+  const [dropdownOptions, setDropdownOptions] = useState([]);
+  const [dropdownButtonColor, setDropdownButtonColor] = useState(COLORS.maroon);
 
   const meta = CATEGORY_META[activeCategory] ?? CATEGORY_META['All'];
   const accentColor = meta.color;
@@ -294,7 +323,15 @@ export default function DocumentListScreen({ route, navigation }) {
                   </TouchableOpacity>
                 );
               })}
-              <TouchableOpacity style={styles.catBtnGold} activeOpacity={0.8}>
+              <TouchableOpacity
+                style={styles.catBtnGold}
+                onPress={() => {
+                  setDropdownOptions(['ABYIP', 'CBYDP', 'MIL', 'RCB']);
+                  setDropdownButtonColor(COLORS.gold);
+                  setDropdownVisible(true);
+                }}
+                activeOpacity={0.8}
+              >
                 <Text style={styles.catBtnGoldText}>Create New +</Text>
               </TouchableOpacity>
             </ScrollView>
@@ -343,6 +380,15 @@ export default function DocumentListScreen({ route, navigation }) {
             />
           </View>
         </ScrollView>
+
+        {/* Dropdown Menu */}
+        <DropdownMenu
+          visible={dropdownVisible}
+          options={dropdownOptions}
+          buttonColor={dropdownButtonColor}
+          onSelect={(item) => console.log('Create:', item)}
+          onClose={() => setDropdownVisible(false)}
+        />
       </View>
     </SafeAreaView>
   );
@@ -636,4 +682,45 @@ const styles = StyleSheet.create({
   // Empty
   emptyState: { alignItems: 'center', paddingVertical: 40 },
   emptyText: { fontSize: 13, color: COLORS.midGray },
+
+  // Dropdown
+  dropdownOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+  },
+  dropdownBackdrop: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+  },
+  dropdownMenu: {
+    position: 'absolute',
+    left: 860,
+    top: 140,
+    backgroundColor: COLORS.white,
+    borderRadius: 12,
+    width: 180,
+    borderTopWidth: 4,
+    elevation: 5,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+  },
+  dropdownItem: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.lightGray,
+  },
+  dropdownItemText: {
+    fontSize: 13,
+    color: COLORS.darkText,
+    fontWeight: '500',
+  },
 });
