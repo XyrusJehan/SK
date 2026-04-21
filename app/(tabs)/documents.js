@@ -372,9 +372,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: 'transparent',
   },
-  navItemActive: { backgroundColor: COLORS.white },
+  navItemActive: {    backgroundColor: '#133E75',
+    borderWidth: 1.5,
+    borderColor: COLORS.black, },
   navLabel: { fontSize: 13, fontWeight: '600', color: 'rgba(255,255,255,0.7)', letterSpacing: 0.3 },
-  navLabelActive: { color: COLORS.maroon, fontWeight: '800' },
+  navLabelActive: { color: COLORS.white, fontWeight: '800' },
 
   // Main
   main: {
