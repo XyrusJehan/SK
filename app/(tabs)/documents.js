@@ -146,15 +146,6 @@ const DocumentCard = ({ group, onCreateNew, onItemPress }) => {
             <Text style={[styles.docItemText, { color: colors.subText }]}>{item}</Text>
           </TouchableOpacity>
         ))}
-
-        {/* Create New Button */}
-        <TouchableOpacity
-          style={[styles.createBtn, { backgroundColor: colors.btn }]}
-          onPress={() => onCreateNew && onCreateNew(group)}
-          activeOpacity={0.8}
-        >
-          <Text style={styles.createBtnText}>+ Create New</Text>
-        </TouchableOpacity>
       </View>
     </View>
   );
