@@ -335,7 +335,9 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
   },
   navItemActive: {
-    backgroundColor: COLORS.white,
+    backgroundColor: '#133E75',
+    borderWidth: 1.5,
+    borderColor: COLORS.black,
   },
   navLabel: {
     fontSize: 13,
@@ -344,7 +346,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.3,
   },
   navLabelActive: {
-    color: COLORS.maroon,
+    color: COLORS.white,
     fontWeight: '800',
   },
 
