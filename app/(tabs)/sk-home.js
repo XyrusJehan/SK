@@ -8,11 +8,13 @@ import {
   StyleSheet,
   SafeAreaView,
   StatusBar,
-  Image,
-  Platform,
+  Dimensions,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useNav } from './navContext';
+
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
+const isMobile = SCREEN_WIDTH < 768;
 
 // ─── MOCK DATA ────────────────────────────────────────────────────────────────
 const TASKS = [
@@ -47,7 +49,7 @@ const ACTIVITIES = [
   },
 ];
 
-// ─── ICON COMPONENTS (SVG-free, emoji-free pure RN shapes) ───────────────────
+// ─── ICON COMPONENTS ───────────────────────────────────────────────────────────
 const BellIcon = ({ hasNotif }) => (
   <View style={styles.bellWrapper}>
     <View style={styles.bellBody} />
@@ -70,6 +72,14 @@ const ActivityDot = ({ type }) => (
       { backgroundColor: type === 'upload' ? COLORS.accent : COLORS.teal },
     ]}
   />
+);
+
+const MenuIcon = () => (
+  <View style={styles.menuIconContainer}>
+    <View style={styles.menuLine} />
+    <View style={styles.menuLine} />
+    <View style={styles.menuLine} />
+  </View>
 );
 
 // ─── COLOR PALETTE ────────────────────────────────────────────────────────────
@@ -97,6 +107,7 @@ export default function HomeScreen({ navigation }) {
   const [searchText, setSearchText] = useState('');
   const [sortBy, setSortBy] = useState('Newest');
   const [notifCount] = useState(2);
+  const [sidebarVisible, setSidebarVisible] = useState(false);
 
   const handleNavPress = (tab) => {
     if (tab === 'Home') {
@@ -105,6 +116,7 @@ export default function HomeScreen({ navigation }) {
       router.push('/(tabs)/sk-document');
     }
     setActiveTab(tab);
+    setSidebarVisible(false);
   };
 
   const sortedActivities =
@@ -112,63 +124,89 @@ export default function HomeScreen({ navigation }) {
       ? [...ACTIVITIES].sort((a, b) => a.label.localeCompare(b.label))
       : ACTIVITIES;
 
+  const renderSidebar = () => (
+    <View style={styles.sidebar}>
+      <View style={styles.logoPill}>
+        <View style={styles.logoCircle}>
+          <Text style={styles.logoText}>SK</Text>
+        </View>
+      </View>
+      <View style={styles.sidebarSpacer} />
+      {['Home', 'Documents'].map((tab) => {
+        const active = activeTab === tab;
+        return (
+          <TouchableOpacity
+            key={tab}
+            style={[styles.navItem, active && styles.navItemActive]}
+            onPress={() => handleNavPress(tab)}
+            activeOpacity={0.8}
+          >
+            <Text style={[styles.navLabel, active && styles.navLabelActive]}>
+              {tab}
+            </Text>
+          </TouchableOpacity>
+        );
+      })}
+    </View>
+  );
+
   return (
     <SafeAreaView style={styles.safe}>
       <StatusBar barStyle="light-content" backgroundColor={COLORS.maroon} />
 
-      {/* ── SIDEBAR + CONTENT LAYOUT ── */}
       <View style={styles.layout}>
+        {/* Mobile: Sidebar as overlay */}
+        {isMobile && sidebarVisible && (
+          <TouchableOpacity
+            style={styles.sidebarOverlay}
+            activeOpacity={1}
+            onPress={() => setSidebarVisible(false)}
+          />
+        )}
 
-        {/* ── SIDEBAR ── */}
-        <View style={styles.sidebar}>
-          {/* Logo Pill */}
-          <View style={styles.logoPill}>
-            {/* SK Logo placeholder — replace with your actual <Image> */}
-            <View style={styles.logoCircle}>
-              <Text style={styles.logoText}>SK</Text>
-            </View>
-          </View>
+        {/* Sidebar - hidden on mobile, shown as overlay */}
+        {isMobile ? (
+          sidebarVisible && renderSidebar()
+        ) : (
+          renderSidebar()
+        )}
 
-          <View style={styles.sidebarSpacer} />
-
-          {/* Nav Items */}
-          {['Home', 'Documents'].map((tab) => {
-            const active = activeTab === tab;
-            return (
-              <TouchableOpacity
-                key={tab}
-                style={[styles.navItem, active && styles.navItemActive]}
-                onPress={() => handleNavPress(tab)}
-                activeOpacity={0.8}
-              >
-                <Text style={[styles.navLabel, active && styles.navLabelActive]}>
-                  {tab}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </View>
-
-        {/* ── MAIN CONTENT ── */}
+        {/* Main Content */}
         <ScrollView
-          style={styles.main}
+          style={[styles.main, isMobile && styles.mainMobile]}
           contentContainerStyle={styles.mainContent}
           showsVerticalScrollIndicator={false}
         >
+          {/* Mobile Header with Menu */}
+          {isMobile && (
+            <View style={styles.mobileHeader}>
+              <TouchableOpacity
+                style={styles.menuBtn}
+                onPress={() => setSidebarVisible(!sidebarVisible)}
+              >
+                <MenuIcon />
+              </TouchableOpacity>
+              <Text style={styles.mobileTitle}>SK Home</Text>
+              <View style={{ width: 40 }} />
+            </View>
+          )}
+
           {/* Header */}
           <View style={styles.header}>
             <View>
               <Text style={styles.headerSub}>SANGGUNIANG KABATAAN</Text>
               <Text style={styles.headerTitle}>BARANGAY SAN JOSE</Text>
             </View>
-            <TouchableOpacity style={styles.bellBtn} activeOpacity={0.7}>
-              <BellIcon hasNotif={notifCount > 0} />
-              {notifCount > 0 && (
-                <View style={styles.notifBadge}>
-                  <Text style={styles.notifBadgeText}>{notifCount}</Text>
-                </View>
-              )}
-            </TouchableOpacity>
+            {!isMobile && (
+              <TouchableOpacity style={styles.bellBtn} activeOpacity={0.7}>
+                <BellIcon hasNotif={notifCount > 0} />
+                {notifCount > 0 && (
+                  <View style={styles.notifBadge}>
+                    <Text style={styles.notifBadgeText}>{notifCount}</Text>
+                  </View>
+                )}
+              </TouchableOpacity>
+            )}
           </View>
 
           {/* Search Bar */}
@@ -290,7 +328,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
   },
 
-  // ── Sidebar
+  // Sidebar
   sidebar: {
     width: 250,
     backgroundColor: '#133E75',
@@ -298,6 +336,16 @@ const styles = StyleSheet.create({
     paddingTop: 20,
     paddingBottom: 24,
     paddingHorizontal: 10,
+    zIndex: 10,
+  },
+  sidebarOverlay: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
+    right: 0,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    zIndex: 5,
   },
   logoPill: {
     width: 70,
@@ -335,37 +383,72 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderColor: COLORS.white,
     backgroundColor: '#133E75',
-    color: 'rgba(0, 0, 0, 0.7)',
   },
   navItemActive: {
-    backgroundColor: '#133E75',
+    backgroundColor: '#ffffff',
     borderWidth: 1.5,
-    borderColor: COLORS.black,
+    borderColor: '#000000',
   },
   navLabel: {
     fontSize: 13,
     fontWeight: '600',
-    color: 'rgba(0, 0, 0, 0.7)',
+    color: 'rgba(0, 0, 0, 0.8)',
     letterSpacing: 0.3,
   },
   navLabelActive: {
-    color: COLORS.white,
+    color: COLORS.black,
     fontWeight: '800',
-    
   },
 
-  // ── Main
+  // Main
   main: {
     flex: 1,
     backgroundColor: COLORS.offWhite,
     borderTopLeftRadius: 20,
-    borderBottomLeftRadius: 0,
+  },
+  mainMobile: {
+    borderTopLeftRadius: 0,
   },
   mainContent: {
     padding: 20,
   },
 
-  // ── Header
+  // Mobile Header
+  mobileHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 16,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.lightGray,
+  },
+  menuBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: COLORS.cardBg,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  menuIconContainer: {
+    width: 20,
+    height: 16,
+    justifyContent: 'space-between',
+  },
+  menuLine: {
+    width: 20,
+    height: 2,
+    backgroundColor: COLORS.maroon,
+    borderRadius: 1,
+  },
+  mobileTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: COLORS.darkText,
+  },
+
+  // Header
   header: {
     flexDirection: 'row',
     alignItems: 'flex-start',
@@ -405,7 +488,7 @@ const styles = StyleSheet.create({
     height: 12,
     borderRadius: 7,
     borderWidth: 2,
-    borderColor: COLORS.white,
+    borderColor: COLORS.maroon,
     marginTop: 4,
   },
   bellBottom: {
@@ -413,7 +496,7 @@ const styles = StyleSheet.create({
     height: 4,
     borderBottomLeftRadius: 4,
     borderBottomRightRadius: 4,
-    backgroundColor: '#133E75',
+    backgroundColor: COLORS.maroon,
     marginTop: -1,
   },
   bellDot: {
@@ -442,7 +525,7 @@ const styles = StyleSheet.create({
   },
   notifBadgeText: { fontSize: 8, fontWeight: '900', color: COLORS.maroon },
 
-  // ── Search
+  // Search
   searchBar: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -493,7 +576,7 @@ const styles = StyleSheet.create({
     padding: 0,
   },
 
-  // ── Cards
+  // Cards
   card: {
     backgroundColor: COLORS.cardBg,
     borderRadius: 18,
@@ -535,7 +618,7 @@ const styles = StyleSheet.create({
   },
   taskBadgeText: { fontSize: 11, fontWeight: '700', color: COLORS.white },
 
-  // ── Table
+  // Table
   tableHead: {
     flexDirection: 'row',
     paddingHorizontal: 16,
@@ -603,7 +686,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.3,
   },
 
-  // ── Sort
+  // Sort
   sortRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -631,7 +714,7 @@ const styles = StyleSheet.create({
     color: COLORS.teal,
   },
 
-  // ── Activity
+  // Activity
   activityRow: {
     flexDirection: 'row',
     alignItems: 'center',

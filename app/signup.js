@@ -3,9 +3,13 @@ import {
   View, Text, TextInput, TouchableOpacity,
   StyleSheet, SafeAreaView, StatusBar,
   KeyboardAvoidingView, Platform, ScrollView,
+  Dimensions,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuth } from './(tabs)/authContext';
+
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
+const isMobile = SCREEN_WIDTH < 400;
 
 const COLORS = {
   navy: '#1E3A6E',
@@ -83,7 +87,6 @@ export default function SignUpScreen() {
 
     const result = signup(email, password, firstName, lastName);
     if (result.success) {
-      // New users default to SK role
       router.replace('/(tabs)/sk-home');
     }
   };
@@ -115,23 +118,36 @@ export default function SignUpScreen() {
                 placeholder="Last Name"
                 value={lastName}
                 onChangeText={setLastName}
-                style={styles.nameFieldLarge}
+                style={isMobile ? styles.nameFieldStack : styles.nameFieldLarge}
               />
               <InputField
                 label="First Name"
                 placeholder="First Name"
                 value={firstName}
                 onChangeText={setFirstName}
-                style={styles.nameFieldLarge}
+                style={isMobile ? styles.nameFieldStack : styles.nameFieldLarge}
               />
+              {!isMobile && (
+                <InputField
+                  label="M.I."
+                  placeholder="M.I."
+                  value={middleInitial}
+                  onChangeText={(t) => setMiddleInitial(t.slice(0, 2).toUpperCase())}
+                  style={styles.nameFieldSmall}
+                />
+              )}
+            </View>
+
+            {/* Mobile: Middle Initial below */}
+            {isMobile && (
               <InputField
                 label="M.I."
                 placeholder="M.I."
                 value={middleInitial}
                 onChangeText={(t) => setMiddleInitial(t.slice(0, 2).toUpperCase())}
-                style={styles.nameFieldSmall}
+                style={{ marginTop: 14 }}
               />
-            </View>
+            )}
 
             {/* Email */}
             <InputField
@@ -247,8 +263,8 @@ const styles = StyleSheet.create({
     maxWidth: 440,
     backgroundColor: COLORS.navy,
     borderRadius: 20,
-    padding: 28,
-    paddingTop: 36,
+    padding: isMobile ? 16 : 28,
+    paddingTop: isMobile ? 20 : 36,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.3,
@@ -257,21 +273,23 @@ const styles = StyleSheet.create({
   },
 
   // Seal
-  sealWrap: { alignItems: 'center', marginBottom: 28 },
+  sealWrap: { alignItems: 'center', marginBottom: isMobile ? 20 : 28 },
   sealPlaceholder: {
-    width: 90, height: 90, borderRadius: 45,
+    width: isMobile ? 70 : 90, height: isMobile ? 70 : 90,
+    borderRadius: isMobile ? 35 : 45,
     backgroundColor: COLORS.navyLight,
     borderWidth: 3, borderColor: COLORS.gold,
     alignItems: 'center', justifyContent: 'center',
   },
   sealInner: { alignItems: 'center' },
-  sealText: { fontSize: 20, fontWeight: '900', color: COLORS.white },
-  sealSub: { fontSize: 8, fontWeight: '700', color: COLORS.gold, letterSpacing: 2 },
+  sealText: { fontSize: isMobile ? 16 : 20, fontWeight: '900', color: COLORS.white },
+  sealSub: { fontSize: isMobile ? 6 : 8, fontWeight: '700', color: COLORS.gold, letterSpacing: 2 },
 
   // Name Row
-  nameRow: { flexDirection: 'row', gap: 8 },
+  nameRow: { flexDirection: 'row', gap: isMobile ? 6 : 8 },
   nameFieldLarge: { flex: 1 },
-  nameFieldSmall: { width: 60 },
+  nameFieldSmall: { width: isMobile ? 50 : 60 },
+  nameFieldStack: { flex: 1 },
 
   // Labels & Inputs
   label: { fontSize: 12, fontWeight: '700', color: COLORS.label, marginBottom: 5, marginTop: 2 },
