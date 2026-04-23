@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -12,6 +12,7 @@ import {
   Dimensions,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useNav } from './navContext';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const isMobile = SCREEN_WIDTH < 768;
@@ -38,10 +39,11 @@ const STATS = [
 ];
 
 // ─── ICON COMPONENTS ──────────────────────────────────────────────────────────
-const BellIcon = () => (
+const BellIcon = ({ hasNotif }) => (
   <View style={styles.bellWrapper}>
     <View style={styles.bellBody} />
     <View style={styles.bellBottom} />
+    {hasNotif && <View style={styles.bellDot} />}
   </View>
 );
 
@@ -84,8 +86,12 @@ const COLORS = {
 // ─── MAIN COMPONENT ───────────────────────────────────────────────────────────
 export default function LYDOHomeScreen({ navigation }) {
   const router = useRouter();
+  const { activeTab, setActiveTab } = useNav();
   const [searchText, setSearchText]   = useState('');
-  const [activeTab, setActiveTab]     = useState('Home');
+
+  useEffect(() => {
+    setActiveTab('Home');
+  }, []);
   const [sortBy, setSortBy]           = useState('Newest');
   const [notifCount]                  = useState(3);
   const [pendingCount, setPendingCount] = useState(14);
@@ -104,7 +110,7 @@ export default function LYDOHomeScreen({ navigation }) {
     setActiveTab(tab);
     setSidebarVisible(false);
     if (tab === 'Documents') {
-      router.push('/(tabs)/sk-document');
+      router.push('/(tabs)/lydo-document');
     }
   };
 
@@ -187,7 +193,7 @@ export default function LYDOHomeScreen({ navigation }) {
             </View>
             {!isMobile && (
               <TouchableOpacity style={styles.bellBtn} activeOpacity={0.7}>
-                <BellIcon />
+                <BellIcon hasNotif={notifCount > 0} />
                 {notifCount > 0 && (
                   <View style={styles.notifBadge}>
                     <Text style={styles.notifBadgeText}>{notifCount}</Text>
@@ -402,27 +408,11 @@ const styles = StyleSheet.create({
     letterSpacing: 2, marginBottom: 2, textTransform: 'uppercase',
   },
   headerTitle: { fontSize: 20, fontWeight: '900', color: COLORS.darkText, letterSpacing: 0.5 },
-  bellBtn: {
-    width: 40, height: 40, borderRadius: 20, backgroundColor: COLORS.cardBg,
-    alignItems: 'center', justifyContent: 'center',
-    shadowColor: 'rgba(0,0,0,0.08)', shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 1, shadowRadius: 6, elevation: 3,
-  },
   bellWrapper: { width: 20, height: 22, alignItems: 'center' },
-  bellBody: {
-    width: 14, height: 12, borderRadius: 7,
-    borderWidth: 2, borderColor: COLORS.maroon, marginTop: 4,
-  },
-  bellBottom: {
-    width: 8, height: 4, borderBottomLeftRadius: 4, borderBottomRightRadius: 4,
-    backgroundColor: COLORS.maroon, marginTop: -1,
-  },
-  notifBadge: {
-    position: 'absolute', top: -2, right: -2,
-    width: 16, height: 16, borderRadius: 8,
-    backgroundColor: COLORS.gold, alignItems: 'center', justifyContent: 'center',
-    borderWidth: 1.5, borderColor: COLORS.white,
-  },
+  bellBody: { width: 14, height: 12, borderRadius: 7, borderWidth: 2, borderColor: COLORS.maroon, marginTop: 4 },
+  bellBottom: { width: 8, height: 4, borderBottomLeftRadius: 4, borderBottomRightRadius: 4, backgroundColor: COLORS.maroon, marginTop: -1 },
+  bellDot: { position: 'absolute', top: 0, right: 1, width: 7, height: 7, borderRadius: 4, backgroundColor: COLORS.gold, borderWidth: 1.5, borderColor: COLORS.cardBg },
+  notifBadge: { position: 'absolute', top: -2, right: -2, width: 16, height: 16, borderRadius: 8, backgroundColor: COLORS.gold, alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: COLORS.white },
   notifBadgeText: { fontSize: 8, fontWeight: '900', color: COLORS.maroon },
 
   // Stat Cards
