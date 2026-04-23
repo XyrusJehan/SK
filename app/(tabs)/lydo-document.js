@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -11,6 +11,7 @@ import {
   Dimensions,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useNav } from './navContext';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const isMobile = SCREEN_WIDTH < 768;
@@ -177,8 +178,12 @@ const DocumentCard = ({ group, onItemPress }) => {
 // ─── MAIN SCREEN ──────────────────────────────────────────────────────────────
 export default function LYDODocumentsScreen({ navigation }) {
   const router = useRouter();
-  const [activeTab, setActiveTab]           = useState('Documents');
+  const { activeTab, setActiveTab } = useNav();
   const [searchText, setSearchText]         = useState('');
+
+  useEffect(() => {
+    setActiveTab('Documents');
+  }, []);
   const [activeCategory, setActiveCategory] = useState('All');
   const [notifCount]                        = useState(2);
   const [sidebarVisible, setSidebarVisible] = useState(false);
