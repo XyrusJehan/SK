@@ -27,6 +27,9 @@ export default function App() {
           component={DocumentListScreen}
           options={{ animation: 'slide_from_right' }}
         />
+        <Stack.Screen name="Login"  component={LoginScreen} />
+<Stack.Screen name="SignUp" component={SignUpScreen} />
+// Set initialRouteName="Login" so the app opens on login
       </Stack.Navigator>
     </NavigationContainer>
   );

@@ -283,7 +283,7 @@ export default function HomeScreen({ navigation }) {
 const styles = StyleSheet.create({
   safe: {
     flex: 1,
-    backgroundColor: COLORS.maroon,
+    backgroundColor: '#133E75',
   },
   layout: {
     flex: 1,
@@ -293,7 +293,7 @@ const styles = StyleSheet.create({
   // ── Sidebar
   sidebar: {
     width: 250,
-    backgroundColor: '#750d18',
+    backgroundColor: '#133E75',
     alignItems: 'center',
     paddingTop: 20,
     paddingBottom: 24,
@@ -333,14 +333,14 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     alignItems: 'center',
     borderWidth: 1.5,
-    borderColor: COLORS.black,
+    borderColor: COLORS.white,
     backgroundColor: '#133E75',
     color: 'rgba(0, 0, 0, 0.7)',
   },
   navItemActive: {
     backgroundColor: '#ffffff',
     borderWidth: 1.5,
-    borderColor: COLORS.black,
+    borderColor: '#000000',
   },
   navLabel: {
     fontSize: 13,
@@ -405,7 +405,7 @@ const styles = StyleSheet.create({
     height: 12,
     borderRadius: 7,
     borderWidth: 2,
-    borderColor: COLORS.maroon,
+    borderColor: COLORS.white,
     marginTop: 4,
   },
   bellBottom: {
@@ -413,7 +413,7 @@ const styles = StyleSheet.create({
     height: 4,
     borderBottomLeftRadius: 4,
     borderBottomRightRadius: 4,
-    backgroundColor: COLORS.maroon,
+    backgroundColor: '#133E75',
     marginTop: -1,
   },
   bellDot: {

@@ -409,13 +409,13 @@ export default function DocumentsScreen({ navigation }) {
 
 // ─── STYLES ───────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: COLORS.maroon },
+  safe: { flex: 1, backgroundColor: '#133E75' },
   layout: { flex: 1, flexDirection: 'row' },
 
   // Sidebar
   sidebar: {
     width: 250,
-    backgroundColor: '#750d18',
+    backgroundColor: '#133E75',
     alignItems: 'center',
     paddingTop: 20,
     paddingBottom: 24,
@@ -450,12 +450,12 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     alignItems: 'center',
     borderWidth: 1.5,
-    borderColor: COLORS.black,
+    borderColor: COLORS.white,
     backgroundColor: '#133E75',
   },
   navItemActive: {    backgroundColor: '#ffffff',
     borderWidth: 1.5,
-    borderColor: COLORS.black, },
+    borderColor: '#000000', },
   navLabel: { fontSize: 13, fontWeight: '600', color: 'rgba(0, 0, 0, 0.7)', letterSpacing: 0.3 },
   navLabelActive: { color: COLORS.black, fontWeight: '800' },
 
