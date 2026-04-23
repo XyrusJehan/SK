@@ -501,8 +501,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#133E75',
   },
   navItemActive: { backgroundColor: '#ffffff', borderWidth: 1.5, borderColor: '#000000' },
-  navLabel: { fontSize: 13, fontWeight: '600', color: 'rgba(255,255,255,0.8)', letterSpacing: 0.3 },
-  navLabelActive: { color: COLORS.black, fontWeight: '800' },
+  navLabel: { fontSize: 13, fontWeight: '600', color: 'rgba(0, 0, 0, 0.8)', letterSpacing: 0.3 },
+  navLabelActive: { color: '#000000', fontWeight: '800' },
 
   // Main
   main: {
@@ -608,9 +608,11 @@ const styles = StyleSheet.create({
   categoryLabel: { fontSize: 12, fontWeight: '700', color: COLORS.subText, marginRight: 8 },
   categoryScroll: { flexGrow: 0 },
   catBtn: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20, borderWidth: 1.5, backgroundColor: COLORS.white },
+  catBtnActive: { backgroundColor: COLORS.maroon, borderColor: COLORS.maroon },
+  catBtnInactive: { backgroundColor: COLORS.white, borderColor: COLORS.maroon + '40' },
   catBtnText: { fontSize: 12, fontWeight: '700' },
   catBtnTextActive: { color: COLORS.white },
-  catBtnTextInactive: {},
+  catBtnTextInactive: { color: COLORS.maroon },
   catBtnGold: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20, backgroundColor: COLORS.gold },
   catBtnGoldText: { fontSize: 12, fontWeight: '800', color: COLORS.maroon },
 
@@ -628,14 +630,14 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.08,
     shadowRadius: 12,
   },
-  sortRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 10, gap: 6, borderBottomWidth: 1, borderBottomColor: COLORS.lightGray },
-  sortLabel: { fontSize: 11, color: COLORS.subText, marginRight: 2 },
-  sortBtn: { fontSize: 12, fontWeight: '600', color: COLORS.midGray, paddingHorizontal: 4 },
+  sortRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 10, gap: 6, borderBottomWidth: 1, borderBottomColor: COLORS.lightGray, backgroundColor: COLORS.maroon + '08' },
+  sortLabel: { fontSize: 11, color: COLORS.subText, fontWeight: '500', marginRight: 2 },
+  sortBtn: { fontSize: 11, fontWeight: '600', color: COLORS.midGray, paddingHorizontal: 4 },
   sortBtnActive: { fontWeight: '800' },
 
-  tableHead: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 9, borderBottomWidth: 1.5 },
-  tableHeadDoc: { flex: 1, fontSize: 12, fontWeight: '800', letterSpacing: 0.3 },
-  tableHeadDate: { width: 68, fontSize: 12, fontWeight: '800', textAlign: 'right', letterSpacing: 0.3 },
+  tableHead: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 9, borderBottomWidth: 1.5, backgroundColor: COLORS.maroon + '10' },
+  tableHeadDoc: { flex: 1, fontSize: 11, fontWeight: '700', color: COLORS.maroon, letterSpacing: 0.8, textTransform: 'uppercase' },
+  tableHeadDate: { width: 68, fontSize: 11, fontWeight: '700', color: COLORS.maroon, textAlign: 'right', letterSpacing: 0.8, textTransform: 'uppercase' },
 
   // Doc Row
   docRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: COLORS.lightGray },
