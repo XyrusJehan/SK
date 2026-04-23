@@ -122,6 +122,30 @@ const BellIcon = ({ hasNotif }) => (
   </View>
 );
 
+// ─── DROPDOWN MENU ────────────────────────────────────────────────────────────
+const DropdownMenu = ({ visible, options, onSelect, onClose, buttonColor }) => {
+  if (!visible) return null;
+  return (
+    <View style={styles.dropdownOverlay}>
+      <TouchableOpacity style={styles.dropdownBackdrop} onPress={onClose} />
+      <View style={[styles.dropdownMenu, { borderTopColor: buttonColor }]}>
+        {options.map((opt, idx) => (
+          <TouchableOpacity
+            key={idx}
+            style={styles.dropdownItem}
+            onPress={() => {
+              onSelect(opt);
+              onClose();
+            }}
+          >
+            <Text style={styles.dropdownItemText}>{opt}</Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+    </View>
+  );
+};
+
 // ─── DOCUMENT CARD ────────────────────────────────────────────────────────────
 const DocumentCard = ({ group, onCreateNew, onItemPress }) => {
   const { colors, title, icon, items } = group;
@@ -160,6 +184,44 @@ export default function DocumentsScreen({ navigation }) {
   const [searchText, setSearchText] = useState('');
   const [activeCategory, setActiveCategory] = useState('All');
   const [notifCount] = useState(2);
+
+  // Dropdown state
+  const [dropdownVisible, setDropdownVisible] = useState(false);
+  const [dropdownOptions, setDropdownOptions] = useState([]);
+  const [dropdownButtonColor, setDropdownButtonColor] = useState(COLORS.maroon);
+
+  const createNewOptions = [
+    'ABYIP',
+    'CBYDP',
+    'Monthly Itemized List',
+    'Quarterly Register of Bank',
+    'Annual Budget',
+    'Disbursement Vouchers',
+    'Resolutions',
+    'Ordinances',
+    'Accomplishment Reports',
+    'Activity Documentation',
+    'Event Reports',
+    'Minutes of Meetings',
+  ];
+
+  const handleCreateNewPress = () => {
+    setDropdownOptions(createNewOptions);
+    setDropdownButtonColor(COLORS.gold);
+    setDropdownVisible(true);
+  };
+
+  const handleItemPress = (item, group) => {
+    const options = [...group.items];
+    setDropdownOptions(options);
+    setDropdownButtonColor(group.colors.header);
+    setDropdownVisible(true);
+  };
+
+  const handleDropdownSelect = (item) => {
+    router.push({ pathname: '/(tabs)/sk-document-list', params: { category: 'All' } });
+    console.log('Selected:', item);
+  };
 
   const handleNavPress = (tab) => {
     if (tab === 'Home') {
@@ -295,7 +357,15 @@ export default function DocumentsScreen({ navigation }) {
               })}
 
               {/* Create New + */}
-              <TouchableOpacity style={styles.catBtnGold} activeOpacity={0.8}>
+              <TouchableOpacity
+                style={styles.catBtnGold}
+                onPress={() => {
+                  setDropdownOptions(['ABYIP', 'CBYDP', 'MIL', 'RCB']);
+                  setDropdownButtonColor(COLORS.gold);
+                  setDropdownVisible(true);
+                }}
+                activeOpacity={0.8}
+              >
                 <Text style={styles.catBtnGoldText}>Create New +</Text>
               </TouchableOpacity>
             </ScrollView>
@@ -323,6 +393,15 @@ export default function DocumentsScreen({ navigation }) {
             )}
           </View>
         </ScrollView>
+
+        {/* Dropdown Menu */}
+        <DropdownMenu
+          visible={dropdownVisible}
+          options={dropdownOptions}
+          buttonColor={dropdownButtonColor}
+          onSelect={(item) => console.log('Create:', item)}
+          onClose={() => setDropdownVisible(false)}
+        />
       </View>
     </SafeAreaView>
   );
@@ -330,13 +409,13 @@ export default function DocumentsScreen({ navigation }) {
 
 // ─── STYLES ───────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: COLORS.maroon },
+  safe: { flex: 1, backgroundColor: '#133E75' },
   layout: { flex: 1, flexDirection: 'row' },
 
   // Sidebar
   sidebar: {
     width: 250,
-    backgroundColor: '#750d18',
+    backgroundColor: '#133E75',
     alignItems: 'center',
     paddingTop: 20,
     paddingBottom: 24,
@@ -370,7 +449,9 @@ const styles = StyleSheet.create({
     borderRadius: 24,
     marginBottom: 8,
     alignItems: 'center',
-    backgroundColor: 'transparent',
+    borderWidth: 1.5,
+    borderColor: COLORS.white,
+    backgroundColor: '#133E75',
   },
   navItemActive: {    backgroundColor: '#133E75',
     borderWidth: 1.5,
@@ -577,4 +658,45 @@ const styles = StyleSheet.create({
   // Empty
   emptyState: { flex: 1, alignItems: 'center', marginTop: 60 },
   emptyText: { fontSize: 14, color: COLORS.midGray },
+
+  // Dropdown
+  dropdownOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+  },
+  dropdownBackdrop: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+  },
+  dropdownMenu: {
+    position: 'absolute',
+    left: 860,
+    top: 140,
+    backgroundColor: COLORS.white,
+    borderRadius: 12,
+    width: 180,
+    borderTopWidth: 4,
+    elevation: 5,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+  },
+  dropdownItem: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.lightGray,
+  },
+  dropdownItemText: {
+    fontSize: 13,
+    color: COLORS.darkText,
+    fontWeight: '500',
+  },
 });

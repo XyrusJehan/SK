@@ -283,7 +283,7 @@ export default function HomeScreen({ navigation }) {
 const styles = StyleSheet.create({
   safe: {
     flex: 1,
-    backgroundColor: COLORS.maroon,
+    backgroundColor: '#133E75',
   },
   layout: {
     flex: 1,
@@ -293,7 +293,7 @@ const styles = StyleSheet.create({
   // ── Sidebar
   sidebar: {
     width: 250,
-    backgroundColor: '#750d18',
+    backgroundColor: '#133E75',
     alignItems: 'center',
     paddingTop: 20,
     paddingBottom: 24,
@@ -332,7 +332,10 @@ const styles = StyleSheet.create({
     borderRadius: 24,
     marginBottom: 8,
     alignItems: 'center',
-    backgroundColor: 'transparent',
+    borderWidth: 1.5,
+    borderColor: COLORS.white,
+    backgroundColor: '#133E75',
+    color: 'rgba(0, 0, 0, 0.7)',
   },
   navItemActive: {
     backgroundColor: '#133E75',
@@ -342,12 +345,13 @@ const styles = StyleSheet.create({
   navLabel: {
     fontSize: 13,
     fontWeight: '600',
-    color: 'rgba(255,255,255,0.7)',
+    color: 'rgba(0, 0, 0, 0.7)',
     letterSpacing: 0.3,
   },
   navLabelActive: {
     color: COLORS.white,
     fontWeight: '800',
+    
   },
 
   // ── Main
@@ -401,7 +405,7 @@ const styles = StyleSheet.create({
     height: 12,
     borderRadius: 7,
     borderWidth: 2,
-    borderColor: COLORS.maroon,
+    borderColor: COLORS.white,
     marginTop: 4,
   },
   bellBottom: {
@@ -409,7 +413,7 @@ const styles = StyleSheet.create({
     height: 4,
     borderBottomLeftRadius: 4,
     borderBottomRightRadius: 4,
-    backgroundColor: COLORS.maroon,
+    backgroundColor: '#133E75',
     marginTop: -1,
   },
   bellDot: {
