@@ -443,8 +443,8 @@ const styles = StyleSheet.create({
   navItemActive: {    backgroundColor: '#133E75',
     borderWidth: 1.5,
     borderColor: COLORS.black, },
-  navLabel: { fontSize: 13, fontWeight: '600', color: 'rgba(255,255,255,0.7)', letterSpacing: 0.3 },
-  navLabelActive: { color: COLORS.white, fontWeight: '800' },
+  navLabel: { fontSize: 13, fontWeight: '600', color: 'rgba(0, 0, 0, 0.7)', letterSpacing: 0.3 },
+  navLabelActive: { color: COLORS.black, fontWeight: '500' },
 
   // Main
   main: {
