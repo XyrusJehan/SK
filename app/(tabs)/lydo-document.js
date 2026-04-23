@@ -71,7 +71,7 @@ const SAMPLE_DOCS = [
   { id: '8', name: 'Event Report - Linggo.pdf',     type: 'pdf',   date: 'Mar 22, 2024', size: '0.9 MB' },
 ];
 
-const NAV_TABS = ['Home', 'Documents', 'Barangay'];
+const NAV_TABS = ['Home', 'Documents', 'Monitor'];
 
 // ─── MENU / BELL ICONS ────────────────────────────────────────────────────────
 const MenuIcon = () => (
@@ -262,7 +262,7 @@ export default function SKDocumentsScreen() {
     setActiveTab(tab);
     setSidebarVisible(false);
     if (tab === 'Home') router.push('/(tabs)/lydo-home');
-    if (tab === 'Barangay') router.push('/(tabs)/barangay');
+    if (tab === 'Monitor') router.push('/(tabs)/monitor');
   };
 
   const openFolder = (item) => {

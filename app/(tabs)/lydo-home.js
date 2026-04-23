@@ -127,7 +127,7 @@ export default function LYDOHomeScreen({ navigation }) {
         </View>
       </View>
       <View style={styles.sidebarSpacer} />
-      {['Home', 'Documents', 'Barangay'].map((tab) => {
+      {['Home', 'Documents', 'Monitor'].map((tab) => {
         const active = activeTab === tab;
         return (
           <TouchableOpacity

@@ -211,8 +211,8 @@ export default function LYDODocumentsScreen({ navigation }) {
     if (tab === 'Home') {
       router.push('/(tabs)/lydo-home');
     }
-    if (tab === 'Barangay') {
-      // router.push('/(tabs)/barangay');
+    if (tab === 'Monitor') {
+      // router.push('/(tabs)/monitor');
     }
   };
 
@@ -256,7 +256,7 @@ export default function LYDODocumentsScreen({ navigation }) {
 
             <View style={styles.sidebarSpacer} />
 
-            {['Home', 'Documents', 'Barangay'].map((tab) => {
+            {['Home', 'Documents', 'Monitor'].map((tab) => {
               const active = activeTab === tab;
               return (
                 <TouchableOpacity
