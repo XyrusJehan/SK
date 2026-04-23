@@ -4,9 +4,8 @@ import {
   StyleSheet, SafeAreaView, StatusBar,
   KeyboardAvoidingView, Platform, ScrollView,
 } from 'react-native';
-
-// Replace with: import { Image } from 'react-native'; and use your seal asset
-// <Image source={require('../assets/seal.png')} style={styles.seal} />
+import { useRouter } from 'expo-router';
+import { useAuth } from './(tabs)/authContext';
 
 const COLORS = {
   navy: '#1E3A6E',
@@ -14,8 +13,6 @@ const COLORS = {
   navyLight: '#264A88',
   white: '#FFFFFF',
   inputBg: '#FFFFFF',
-  inputBorder: 'rgba(255,255,255,0.3)',
-  inputBorderFocus: '#FFFFFF',
   placeholder: '#999',
   label: '#FFFFFF',
   subText: 'rgba(255,255,255,0.65)',
@@ -23,18 +20,37 @@ const COLORS = {
   btnBg: '#FFFFFF',
   btnText: '#1E3A6E',
   gold: '#C8A84B',
+  error: '#FF6B6B',
 };
 
-export default function LoginScreen({ navigation }) {
+export default function LoginScreen() {
+  const router = useRouter();
+  const { login } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [emailFocused, setEmailFocused] = useState(false);
   const [passFocused, setPassFocused] = useState(false);
+  const [error, setError] = useState('');
 
   const handleLogin = () => {
-    // TODO: hook up your auth logic
-    navigation.navigate('Home');
+    if (!email || !password) {
+      setError('Please enter email and password');
+      return;
+    }
+
+    const result = login(email, password);
+    if (result.success) {
+      setError('');
+      // Redirect based on user role
+      if (result.user.role === 'lydo') {
+        router.replace('/(tabs)/lydo-home');
+      } else {
+        router.replace('/(tabs)/sk-home');
+      }
+    } else {
+      setError(result.error);
+    }
   };
 
   return (
@@ -49,7 +65,6 @@ export default function LoginScreen({ navigation }) {
 
             {/* Seal / Logo */}
             <View style={styles.sealWrap}>
-              {/* Replace this placeholder with your actual seal image */}
               <View style={styles.sealPlaceholder}>
                 <View style={styles.sealInner}>
                   <Text style={styles.sealText}>SK</Text>
@@ -68,7 +83,10 @@ export default function LoginScreen({ navigation }) {
                 keyboardType="email-address"
                 autoCapitalize="none"
                 value={email}
-                onChangeText={setEmail}
+                onChangeText={(text) => {
+                  setEmail(text);
+                  setError('');
+                }}
                 onFocus={() => setEmailFocused(true)}
                 onBlur={() => setEmailFocused(false)}
               />
@@ -83,7 +101,10 @@ export default function LoginScreen({ navigation }) {
                 placeholderTextColor={COLORS.placeholder}
                 secureTextEntry={!showPassword}
                 value={password}
-                onChangeText={setPassword}
+                onChangeText={(text) => {
+                  setPassword(text);
+                  setError('');
+                }}
                 onFocus={() => setPassFocused(true)}
                 onBlur={() => setPassFocused(false)}
               />
@@ -91,6 +112,13 @@ export default function LoginScreen({ navigation }) {
                 <Text style={styles.eyeIcon}>{showPassword ? '🙈' : '👁'}</Text>
               </TouchableOpacity>
             </View>
+
+            {/* Error Message */}
+            {error !== '' && (
+              <View style={styles.errorBox}>
+                <Text style={styles.errorText}>{error}</Text>
+              </View>
+            )}
 
             {/* Forgot Password */}
             <TouchableOpacity style={styles.forgotWrap} onPress={() => {}}>
@@ -105,9 +133,16 @@ export default function LoginScreen({ navigation }) {
             {/* Sign Up Link */}
             <View style={styles.signupRow}>
               <Text style={styles.subText}>Don't have an account? </Text>
-              <TouchableOpacity onPress={() => navigation.navigate('SignUp')}>
+              <TouchableOpacity onPress={() => router.push('/signup')}>
                 <Text style={styles.linkText}>Sign Up</Text>
               </TouchableOpacity>
+            </View>
+
+            {/* Demo Accounts Info */}
+            <View style={styles.demoBox}>
+              <Text style={styles.demoTitle}>Demo Accounts:</Text>
+              <Text style={styles.demoText}>LYDO: lydo@sk.com / lydo123</Text>
+              <Text style={styles.demoText}>SK: sk@sk.com / sk123</Text>
             </View>
 
           </View>
@@ -172,6 +207,15 @@ const styles = StyleSheet.create({
   eyeBtn: { paddingLeft: 8 },
   eyeIcon: { fontSize: 16 },
 
+  // Error
+  errorBox: {
+    backgroundColor: 'rgba(255,107,107,0.15)',
+    borderRadius: 8, padding: 10,
+    borderWidth: 1, borderColor: COLORS.error,
+    marginTop: 12,
+  },
+  errorText: { fontSize: 12, color: COLORS.error, fontWeight: '600', textAlign: 'center' },
+
   // Forgot
   forgotWrap: { alignItems: 'flex-end', marginTop: 8, marginBottom: 4 },
   forgotText: { fontSize: 12, color: COLORS.link, fontWeight: '600' },
@@ -197,4 +241,14 @@ const styles = StyleSheet.create({
   },
   subText: { fontSize: 13, color: COLORS.subText },
   linkText: { fontSize: 13, fontWeight: '700', color: COLORS.link },
+
+  // Demo Box
+  demoBox: {
+    marginTop: 24,
+    padding: 12,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    borderRadius: 10,
+  },
+  demoTitle: { fontSize: 12, fontWeight: '700', color: COLORS.gold, marginBottom: 6 },
+  demoText: { fontSize: 11, color: COLORS.subText, marginBottom: 2 },
 });

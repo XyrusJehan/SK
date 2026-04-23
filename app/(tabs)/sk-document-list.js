@@ -185,7 +185,7 @@ export default function DocumentListScreen({ route, navigation }) {
     if (tab === 'Home') {
       router.push('/(tabs)');
     } else if (tab === 'Documents') {
-      router.push('/(tabs)/documents');
+      router.push('/(tabs)/sk-document');
     }
     setActiveTab(tab);
   };

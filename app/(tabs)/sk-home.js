@@ -100,9 +100,9 @@ export default function HomeScreen({ navigation }) {
 
   const handleNavPress = (tab) => {
     if (tab === 'Home') {
-      router.push('/(tabs)');
+      router.push('/(tabs)/sk-home');
     } else if (tab === 'Documents') {
-      router.push('/(tabs)/documents');
+      router.push('/(tabs)/sk-document');
     }
     setActiveTab(tab);
   };

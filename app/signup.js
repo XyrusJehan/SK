@@ -4,6 +4,8 @@ import {
   StyleSheet, SafeAreaView, StatusBar,
   KeyboardAvoidingView, Platform, ScrollView,
 } from 'react-native';
+import { useRouter } from 'expo-router';
+import { useAuth } from './(tabs)/authContext';
 
 const COLORS = {
   navy: '#1E3A6E',
@@ -52,7 +54,9 @@ const InputField = ({ label, placeholder, value, onChangeText, secureTextEntry, 
   );
 };
 
-export default function SignUpScreen({ navigation }) {
+export default function SignUpScreen() {
+  const router = useRouter();
+  const { signup } = useAuth();
   const [lastName, setLastName] = useState('');
   const [firstName, setFirstName] = useState('');
   const [middleInitial, setMiddleInitial] = useState('');
@@ -76,8 +80,12 @@ export default function SignUpScreen({ navigation }) {
       return;
     }
     setError('');
-    // TODO: hook up your registration logic
-    navigation.navigate('Home');
+
+    const result = signup(email, password, firstName, lastName);
+    if (result.success) {
+      // New users default to SK role
+      router.replace('/(tabs)/sk-home');
+    }
   };
 
   return (
@@ -130,7 +138,10 @@ export default function SignUpScreen({ navigation }) {
               label="E-mail"
               placeholder="Enter your E-mail"
               value={email}
-              onChangeText={setEmail}
+              onChangeText={(text) => {
+                setEmail(text);
+                setError('');
+              }}
               keyboardType="email-address"
               autoCapitalize="none"
               style={{ marginTop: 14 }}
@@ -141,7 +152,10 @@ export default function SignUpScreen({ navigation }) {
               label="Password"
               placeholder="Password"
               value={password}
-              onChangeText={setPassword}
+              onChangeText={(text) => {
+                setPassword(text);
+                setError('');
+              }}
               secureTextEntry
               autoCapitalize="none"
               style={{ marginTop: 14 }}
@@ -152,7 +166,10 @@ export default function SignUpScreen({ navigation }) {
               label="Confirm Password"
               placeholder="Confirm Password"
               value={confirmPassword}
-              onChangeText={setConfirmPassword}
+              onChangeText={(text) => {
+                setConfirmPassword(text);
+                setError('');
+              }}
               secureTextEntry
               autoCapitalize="none"
               style={{ marginTop: 14 }}
@@ -204,7 +221,7 @@ export default function SignUpScreen({ navigation }) {
             {/* Login link */}
             <View style={styles.loginRow}>
               <Text style={styles.subText}>Already have an account? </Text>
-              <TouchableOpacity onPress={() => navigation.navigate('Login')}>
+              <TouchableOpacity onPress={() => router.back()}>
                 <Text style={styles.linkText}>Login</Text>
               </TouchableOpacity>
             </View>
