@@ -221,7 +221,7 @@ const SidebarContent = ({ activeTab, onNav, logoLabel }) => (
     {/* Logo */}
     <View style={styles.logoPill}>
       <View style={styles.logoCircle}>
-        <Text style={styles.logoText}>{logoLabel ?? 'SK'}</Text>
+        <Text style={styles.logoText}>{logoLabel ?? 'LYDO'}</Text>
       </View>
     </View>
     <View style={{ height: 28 }} />
@@ -278,7 +278,7 @@ export default function SKDocumentsScreen() {
         <View style={styles.layout}>
 
           {/* Sidebar */}
-          <SidebarContent activeTab={activeTab} onNav={handleNav} logoLabel="SK" />
+          <SidebarContent activeTab={activeTab} onNav={handleNav} logoLabel="LYDO" />
 
           {/* Main */}
           <ScrollView style={styles.main} contentContainerStyle={styles.mainContent} showsVerticalScrollIndicator={false}>

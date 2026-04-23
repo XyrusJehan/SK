@@ -123,7 +123,7 @@ export default function LYDOHomeScreen({ navigation }) {
     <View style={styles.sidebar}>
       <View style={styles.logoPill}>
         <View style={styles.logoCircle}>
-          <Text style={styles.logoText}>SKF</Text>
+          <Text style={styles.logoText}>LYDO</Text>
         </View>
       </View>
       <View style={styles.sidebarSpacer} />
