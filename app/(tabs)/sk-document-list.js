@@ -501,7 +501,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#133E75',
   },
   navItemActive: { backgroundColor: '#ffffff', borderWidth: 1.5, borderColor: '#000000' },
-  navLabel: { fontSize: 13, fontWeight: '600', color: 'rgba(0, 0, 0, 0.8)', letterSpacing: 0.3 },
+  navLabel: { fontSize: 13, fontWeight: '600', color: 'rgba(255, 255, 255, 0.8)', letterSpacing: 0.3 },
   navLabelActive: { color: '#000000', fontWeight: '800' },
 
   // Main
