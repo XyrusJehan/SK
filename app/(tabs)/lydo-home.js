@@ -359,11 +359,11 @@ const styles = StyleSheet.create({
   navLabel: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#000000',
+    color: '#ffffff',
     letterSpacing: 0.3,
   },
   navLabelActive: {
-    color: COLORS.black,
+    color: '#000000',
     fontWeight: '800',
   },
 
