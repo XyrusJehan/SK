@@ -33,18 +33,8 @@ const C = {
   border:    '#D1D1D6',
   folderBlue:'#1A8CFF',
   folderTop: '#1075D8',
-    maroon:     '#8B0000',
-  maroonDark: '#6B0000',
-  gold:       '#E8C547',
-  accent:     '#D4A017',
-  white:      '#FFFFFF',
-  offWhite:   '#F7F5F2',
-  lightGray:  '#ECECEC',
-  midGray:    '#B0B0B0',
-  darkText:   '#1A1A1A',
-  subText:    '#666666',
-  teal:       '#2A7B7B',
-  cardBg:     '#FFFFFF',
+  maroon:    '#8B0000',
+  teal:      '#2A7B7B',
 };
 
 // ─── BARANGAY DATA ─────────────────────────────────────────────────────────────
@@ -262,7 +252,6 @@ export default function SKDocumentsScreen() {
     setActiveTab(tab);
     setSidebarVisible(false);
     if (tab === 'Home') router.push('/(tabs)/lydo-home');
-    if (tab === 'Monitor') router.push('/(tabs)/monitor');
   };
 
   const openFolder = (item) => {
@@ -351,7 +340,7 @@ export default function SKDocumentsScreen() {
         activeTab={activeTab}
         onNav={handleNav}
         onClose={() => setSidebarVisible(false)}
-        logoLabel="SK"
+        logoLabel="LYDO"
       />
 
       {/* White content area */}
@@ -426,10 +415,12 @@ const styles = StyleSheet.create({
 
   // ── Sidebar ──
   sidebar: {
-    width: 250, backgroundColor: '#133E75',
+    width: 250, backgroundColor: C.navy,
     alignItems: 'center', paddingTop: 20, paddingBottom: 24, paddingHorizontal: 10,
     zIndex: 10,
   },
+  sidebarBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)' },
+  sidebarDrawer: { position: 'absolute', left: 0, top: 0, bottom: 0, width: 200, zIndex: 20 },
   sidebarOverlay: {
     position: 'absolute',
     left: 0, top: 0, bottom: 0, right: 0,
