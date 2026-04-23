@@ -338,9 +338,9 @@ const styles = StyleSheet.create({
     color: 'rgba(0, 0, 0, 0.7)',
   },
   navItemActive: {
-    backgroundColor: '#ffffff',
+    backgroundColor: '#133E75',
     borderWidth: 1.5,
-    borderColor: '#000000',
+    borderColor: COLORS.black,
   },
   navLabel: {
     fontSize: 13,
@@ -349,7 +349,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.3,
   },
   navLabelActive: {
-    color: COLORS.black,
+    color: COLORS.white,
     fontWeight: '800',
     
   },
