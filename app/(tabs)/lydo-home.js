@@ -344,7 +344,7 @@ const styles = StyleSheet.create({
     width: 52, height: 52, borderRadius: 26,
     backgroundColor: COLORS.gold, alignItems: 'center', justifyContent: 'center',
   },
-  logoText: { fontSize: 15, fontWeight: '900', color: COLORS.maroon, letterSpacing: 0.5 },
+  logoText: { fontSize: 15, fontWeight: '900', color: '#133E75', letterSpacing: 0.5 },
   sidebarSpacer: { height: 28 },
   navItem: {
     width: '100%',
