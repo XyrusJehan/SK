@@ -112,6 +112,9 @@ export default function LYDOHomeScreen({ navigation }) {
     if (tab === 'Documents') {
       router.push('/(tabs)/lydo-document');
     }
+    else if (tab === 'Monitor') {
+      router.push('/(tabs)/lydo-monitor');
+    }
   };
 
   const handleSendReminder = () => {

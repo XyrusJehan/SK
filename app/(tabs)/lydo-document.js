@@ -302,7 +302,9 @@ export default function LYDODocumentsScreen({ navigation }) {
   const handleNavPress = (tab) => {
     setActiveTab(tab);
     setSidebarVisible(false);
-    if (tab === 'Home') router.push('/(tabs)/lydo-home');
+    if (tab === 'Home') router.push('/(tabs)/lydo-home')
+    else if (tab === 'Documents') router.push('/(tabs)/lydo-document');
+    else if (tab === 'Monitor') router.push('/(tabs)/lydo-monitor');
   };
 
   // ── Filtered data ──
