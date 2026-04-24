@@ -9,8 +9,6 @@ import {
   SafeAreaView,
   StatusBar,
   Dimensions,
-  Modal,
-  FlatList,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useNav } from './navContext';
@@ -19,413 +17,531 @@ const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const isMobile = SCREEN_WIDTH < 768;
 
 // ─── COLORS ───────────────────────────────────────────────────────────────────
-const C = {
+const COLORS = {
+  maroon:    '#8B0000',
   navy:      '#133E75',
   navyDark:  '#0D2E5A',
   gold:      '#E8C547',
   white:     '#FFFFFF',
-  offWhite:  '#F5F5F7',
-  lightGray: '#E5E5EA',
-  midGray:   '#AEAEB2',
-  darkText:  '#1C1C1E',
-  subText:   '#6D6D72',
+  offWhite:  '#F7F5F2',
+  lightGray: '#ECECEC',
+  midGray:   '#B0B0B0',
+  darkText:  '#1A1A1A',
+  subText:   '#666666',
   cardBg:    '#FFFFFF',
-  border:    '#D1D1D6',
-  folderBlue:'#1A8CFF',
-  folderTop: '#1075D8',
-  maroon:    '#8B0000',
-  teal:      '#2A7B7B',
+  shadow:    'rgba(0,0,0,0.08)',
+
+  planning: {
+    header:  '#5B8DD9',
+    bg:      '#EAF0FB',
+    btn:     '#5B8DD9',
+    text:    '#FFFFFF',
+    subText: '#2A4E8A',
+  },
+  financial: {
+    header:  '#3AAA5C',
+    bg:      '#E8F7EE',
+    btn:     '#3AAA5C',
+    text:    '#FFFFFF',
+    subText: '#1A6B38',
+  },
+  governance: {
+    header:  '#8B5BD9',
+    bg:      '#F0EAFB',
+    btn:     '#8B5BD9',
+    text:    '#FFFFFF',
+    subText: '#5A2EA0',
+  },
+  performance: {
+    header:  '#E87A30',
+    bg:      '#FDF0E6',
+    btn:     '#E87A30',
+    text:    '#FFFFFF',
+    subText: '#A04010',
+  },
 };
 
 // ─── BARANGAY DATA ─────────────────────────────────────────────────────────────
 const BARANGAYS = [
-  { id: '1', name: 'San Roque',  docs: 5 },
-  { id: '2', name: 'San Isidro', docs: 3 },
-  { id: '3', name: 'San Bueno',  docs: 8 },
-  { id: '4', name: 'Banot',      docs: 4 },
-  { id: '5', name: 'Mamala',     docs: 6 },
-  { id: '6', name: 'Taquico',    docs: 2 },
-  { id: '7', name: 'Bayongon',   docs: 7 },
-  { id: '8', name: 'Apasan',     docs: 5 },
+  { id: '1', name: 'San Roque'  },
+  { id: '2', name: 'San Isidro' },
+  { id: '3', name: 'San Bueno'  },
+  { id: '4', name: 'Banot'      },
+  { id: '5', name: 'Mamala'     },
+  { id: '6', name: 'Taquico'    },
+  { id: '7', name: 'Bayongon'   },
+  { id: '8', name: 'Apasan'     },
 ];
 
-// Sample documents per barangay
-const SAMPLE_DOCS = [
-  { id: '1', name: 'Resolution No. 2024-01.pdf',    type: 'pdf',   date: 'Jan 15, 2024', size: '1.2 MB' },
-  { id: '2', name: 'Budget Report Q1.pdf',          type: 'pdf',   date: 'Feb 3, 2024',  size: '3.4 MB' },
-  { id: '3', name: 'SK Members List.pdf',           type: 'pdf',   date: 'Mar 10, 2024', size: '0.8 MB' },
-  { id: '4', name: 'Activity Documentation.jpg',    type: 'image', date: 'Apr 1, 2024',  size: '5.1 MB' },
-  { id: '5', name: 'Minutes of Meeting.pdf',        type: 'pdf',   date: 'Apr 20, 2024', size: '0.5 MB' },
-  { id: '6', name: 'Work Plan 2024.pdf',            type: 'pdf',   date: 'Jan 5, 2024',  size: '2.1 MB' },
-  { id: '7', name: 'Project Proposal.pdf',          type: 'pdf',   date: 'Feb 18, 2024', size: '1.7 MB' },
-  { id: '8', name: 'Event Report - Linggo.pdf',     type: 'pdf',   date: 'Mar 22, 2024', size: '0.9 MB' },
+// ─── YEAR FOLDERS per barangay ────────────────────────────────────────────────
+const YEAR_FOLDERS = ['2022 Documents', '2023 Documents', '2024 Documents'];
+
+// ─── DOCUMENT GROUPS (shown after selecting a year) ───────────────────────────
+const DOCUMENT_GROUPS = [
+  {
+    id: 'planning',
+    title: 'PLANNING DOCUMENTS',
+    category: 'Planning',
+    icon: '📋',
+    colors: COLORS.planning,
+    items: ['LYDP', 'Work Plans', 'Project Proposals'],
+  },
+  {
+    id: 'financial',
+    title: 'FINANCIAL DOCUMENTS',
+    category: 'Financial',
+    icon: '💰',
+    colors: COLORS.financial,
+    items: [
+      'Financial Report Summary',
+      'Register of Cash Receipts',
+      'Disbursement Vouchers',
+      'Disbursement Vouchers',
+      'Liquidation Reports',
+    ],
+  },
+  {
+    id: 'governance',
+    title: 'GOVERNANCE DOCUMENTS',
+    category: 'Governance',
+    icon: '⚖️',
+    colors: COLORS.governance,
+    items: ['Resolutions', 'Ordinances'],
+  },
+  {
+    id: 'performance',
+    title: 'PERFORMANCE DOCUMENTS',
+    category: 'Activities',
+    icon: '📊',
+    colors: COLORS.performance,
+    items: [
+      'Accomplishment Reports',
+      'Activity Documentation',
+      'Event Reports',
+      'Minutes of the meetings',
+    ],
+  },
 ];
 
+// ─── NAV TABS ─────────────────────────────────────────────────────────────────
 const NAV_TABS = ['Home', 'Documents', 'Monitor'];
 
-// ─── MENU / BELL ICONS ────────────────────────────────────────────────────────
-const MenuIcon = () => (
-  <View style={{ width: 20, height: 14, justifyContent: 'space-between' }}>
-    {[0, 1, 2].map(i => (
-      <View key={i} style={{ height: 2, backgroundColor: C.white, borderRadius: 1 }} />
-    ))}
-  </View>
-);
-
+// ─── ICON COMPONENTS ──────────────────────────────────────────────────────────
 const BellIcon = ({ hasNotif }) => (
-  <View style={{ width: 20, height: 22, alignItems: 'center' }}>
-    <View style={{ width: 14, height: 12, borderRadius: 7, borderWidth: 2, borderColor: '#8B0000', marginTop: 4 }} />
-    <View style={{ width: 8, height: 4, borderBottomLeftRadius: 4, borderBottomRightRadius: 4, backgroundColor: '#8B0000', marginTop: -1 }} />
-    {hasNotif && (
-      <View style={{ position: 'absolute', top: 0, right: 1, width: 7, height: 7, borderRadius: 4, backgroundColor: C.gold, borderWidth: 1.5, borderColor: C.white }} />
-    )}
+  <View style={styles.bellWrapper}>
+    <View style={styles.bellBody} />
+    <View style={styles.bellBottom} />
+    {hasNotif && <View style={styles.bellDot} />}
   </View>
 );
 
-// ─── macOS-STYLE FOLDER SVG (drawn with Views) ───────────────────────────────
-const FolderIcon = ({ size = 72, selected = false }) => {
+const MenuIcon = () => (
+  <View style={styles.menuIconContainer}>
+    <View style={styles.menuLine} />
+    <View style={styles.menuLine} />
+    <View style={styles.menuLine} />
+  </View>
+);
+
+// ─── macOS-STYLE FOLDER ICON ──────────────────────────────────────────────────
+const FolderIcon = ({ size = 68 }) => {
   const w = size;
   const h = size * 0.82;
-  const tabW = w * 0.35;
-  const tabH = h * 0.1;
+  const tabH = h * 0.11;
   const bodyTop = tabH * 0.7;
   const bodyH = h - bodyTop;
-  const blue = selected ? '#0055CC' : C.folderBlue;
-  const blueTop = selected ? '#0044AA' : C.folderTop;
-  const highlight = 'rgba(255,255,255,0.18)';
 
   return (
-    <View style={{ width: w, height: h + 2 }}>
-      {/* Folder tab */}
+    <View style={{ width: w, height: h }}>
+      {/* Tab */}
       <View style={{
         position: 'absolute', top: 0, left: 0,
-        width: tabW, height: tabH + 4,
-        backgroundColor: blueTop,
+        width: w * 0.36, height: tabH + 4,
+        backgroundColor: '#0F68D0',
         borderTopLeftRadius: 4, borderTopRightRadius: 8,
       }} />
-      {/* Folder body */}
+      {/* Body */}
       <View style={{
         position: 'absolute', top: bodyTop, left: 0,
         width: w, height: bodyH,
-        backgroundColor: blue,
-        borderRadius: 6,
-        borderTopRightRadius: 6, borderTopLeftRadius: 2,
+        backgroundColor: '#1A8CFF',
+        borderRadius: 6, borderTopRightRadius: 6, borderTopLeftRadius: 2,
       }}>
-        {/* Inner highlight */}
+        {/* Highlight */}
         <View style={{
-          position: 'absolute', top: 4, left: 6, right: 6, height: bodyH * 0.3,
-          backgroundColor: highlight, borderRadius: 4,
+          position: 'absolute', top: 5, left: 8, right: 8, height: bodyH * 0.28,
+          backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 4,
         }} />
       </View>
     </View>
   );
 };
 
-// ─── BARANGAY FOLDER CARD ─────────────────────────────────────────────────────
-const FolderCard = ({ item, onPress, selected }) => (
-  <TouchableOpacity
-    style={[styles.folderCard, selected && styles.folderCardSelected]}
-    onPress={onPress}
-    activeOpacity={0.75}
-  >
-    <FolderIcon size={isMobile ? 64 : 72} selected={selected} />
-    <Text style={[styles.folderName, selected && styles.folderNameSelected]} numberOfLines={2}>
-      {item.name}
-    </Text>
-  </TouchableOpacity>
-);
+// ─── YEAR FOLDER ICON (smaller, slightly different shade) ────────────────────
+const YearFolderIcon = ({ size = 56 }) => {
+  const w = size;
+  const h = size * 0.82;
+  const tabH = h * 0.11;
+  const bodyTop = tabH * 0.7;
+  const bodyH = h - bodyTop;
 
-// ─── DOCUMENT ROW (inside a folder) ──────────────────────────────────────────
-const DocRow = ({ doc }) => {
-  const isPdf = doc.type === 'pdf';
   return (
-    <TouchableOpacity style={styles.docRow} activeOpacity={0.7}>
-      <View style={[styles.docIconWrap, { backgroundColor: isPdf ? '#FEE2E2' : '#DBEAFE' }]}>
-        <Text style={{ fontSize: 18 }}>{isPdf ? '📄' : '🖼️'}</Text>
+    <View style={{ width: w, height: h }}>
+      <View style={{
+        position: 'absolute', top: 0, left: 0,
+        width: w * 0.36, height: tabH + 4,
+        backgroundColor: '#2878D8',
+        borderTopLeftRadius: 4, borderTopRightRadius: 7,
+      }} />
+      <View style={{
+        position: 'absolute', top: bodyTop, left: 0,
+        width: w, height: bodyH,
+        backgroundColor: '#3A9EFF',
+        borderRadius: 5, borderTopRightRadius: 5, borderTopLeftRadius: 2,
+      }}>
+        <View style={{
+          position: 'absolute', top: 4, left: 6, right: 6, height: bodyH * 0.25,
+          backgroundColor: 'rgba(255,255,255,0.18)', borderRadius: 3,
+        }} />
       </View>
-      <View style={styles.docInfo}>
-        <Text style={styles.docName} numberOfLines={1}>{doc.name}</Text>
-        <Text style={styles.docMeta}>{doc.date} · {doc.size}</Text>
-      </View>
-      <Text style={styles.docChevron}>›</Text>
+    </View>
+  );
+};
+
+// ─── BREADCRUMB ───────────────────────────────────────────────────────────────
+const Breadcrumb = ({ barangay, year, onPressDocuments, onPressBarangay }) => (
+  <View style={styles.breadcrumb}>
+    <TouchableOpacity onPress={onPressDocuments}>
+      <Text style={styles.breadcrumbLink}>Documents</Text>
     </TouchableOpacity>
-  );
-};
-
-// ─── FOLDER CONTENTS MODAL ────────────────────────────────────────────────────
-const FolderModal = ({ visible, barangay, onClose }) => (
-  <Modal visible={visible} animationType="slide" transparent>
-    <View style={styles.modalOverlay}>
-      <View style={styles.modalSheet}>
-        {/* Handle */}
-        <View style={styles.modalHandle} />
-
-        {/* Header */}
-        <View style={styles.modalHeader}>
-          <FolderIcon size={36} />
-          <View style={{ flex: 1, marginLeft: 10 }}>
-            <Text style={styles.modalTitle}>{barangay?.name}</Text>
-            <Text style={styles.modalSubtitle}>{barangay?.docs} documents</Text>
-          </View>
-          <TouchableOpacity onPress={onClose} style={styles.modalCloseBtn}>
-            <Text style={{ color: C.navy, fontWeight: '700', fontSize: 13 }}>Done</Text>
-          </TouchableOpacity>
-        </View>
-
-        <View style={styles.modalDivider} />
-
-        {/* Documents */}
-        <FlatList
-          data={SAMPLE_DOCS.slice(0, barangay?.docs ?? 5)}
-          keyExtractor={i => i.id}
-          renderItem={({ item }) => <DocRow doc={item} />}
-          contentContainerStyle={{ paddingBottom: 32 }}
-          showsVerticalScrollIndicator={false}
-        />
-
-        {/* Upload FAB */}
-        <TouchableOpacity style={styles.modalFab}>
-          <Text style={{ color: C.white, fontSize: 26, lineHeight: 30 }}>+</Text>
+    {barangay && (
+      <>
+        <Text style={styles.breadcrumbSep}> › </Text>
+        <TouchableOpacity onPress={onPressBarangay}>
+          <Text style={[styles.breadcrumbLink, !year && styles.breadcrumbCurrent]}>
+            {barangay.name}
+          </Text>
         </TouchableOpacity>
-      </View>
-    </View>
-  </Modal>
-);
-
-// ─── SIDEBAR OVERLAY (mobile) ─────────────────────────────────────────────────
-const SidebarOverlay = ({ visible, activeTab, onNav, onClose, logoLabel }) => {
-  if (!visible) return null;
-  return (
-    <View style={StyleSheet.absoluteFill}>
-      <TouchableOpacity style={styles.sidebarBackdrop} activeOpacity={1} onPress={onClose} />
-      <View style={styles.sidebarDrawer}>
-        <SidebarContent activeTab={activeTab} onNav={onNav} logoLabel={logoLabel} />
-      </View>
-    </View>
-  );
-};
-
-// ─── SIDEBAR CONTENT ──────────────────────────────────────────────────────────
-const SidebarContent = ({ activeTab, onNav, logoLabel }) => (
-  <View style={styles.sidebar}>
-    {/* Logo */}
-    <View style={styles.logoPill}>
-      <View style={styles.logoCircle}>
-        <Text style={styles.logoText}>{logoLabel ?? 'LYDO'}</Text>
-      </View>
-    </View>
-    <View style={{ height: 28 }} />
-    {/* Nav items */}
-    {NAV_TABS.map(tab => {
-      const active = activeTab === tab;
-      return (
-        <TouchableOpacity
-          key={tab}
-          style={[styles.navItem, active && styles.navItemActive]}
-          onPress={() => onNav(tab)}
-          activeOpacity={0.8}
-        >
-          <Text style={[styles.navLabel, active && styles.navLabelActive]}>{tab}</Text>
-        </TouchableOpacity>
-      );
-    })}
+      </>
+    )}
+    {year && (
+      <>
+        <Text style={styles.breadcrumbSep}> › </Text>
+        <Text style={styles.breadcrumbCurrent}>{year}</Text>
+      </>
+    )}
   </View>
 );
 
+// ─── DOCUMENT CARD ────────────────────────────────────────────────────────────
+const DocumentCard = ({ group, onItemPress }) => {
+  const { colors, title, icon, items } = group;
+  return (
+    <View style={[styles.card, { backgroundColor: colors.bg }]}>
+      <View style={[styles.cardHeader, { backgroundColor: colors.header }]}>
+        <Text style={styles.cardHeaderIcon}>{icon}</Text>
+        <Text style={styles.cardHeaderTitle}>{title}</Text>
+      </View>
+      <View style={styles.cardBody}>
+        {items.map((item, idx) => (
+          <TouchableOpacity
+            key={idx}
+            style={styles.docItem}
+            onPress={() => onItemPress && onItemPress(item, group)}
+            activeOpacity={0.7}
+          >
+            <View style={[styles.docBullet, { backgroundColor: colors.header }]} />
+            <Text style={[styles.docItemText, { color: colors.subText }]}>{item}</Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+    </View>
+  );
+};
+
+// ─── VIEW STATES ──────────────────────────────────────────────────────────────
+// 'folders'  → barangay folder grid (root)
+// 'years'    → year folders inside a barangay
+// 'docs'     → document category cards for a year
+
 // ─── MAIN SCREEN ──────────────────────────────────────────────────────────────
-export default function SKDocumentsScreen() {
+export default function LYDODocumentsScreen({ navigation }) {
   const router = useRouter();
   const { activeTab, setActiveTab } = useNav();
 
-  const [search, setSearch]                 = useState('');
-  const [sidebarVisible, setSidebarVisible] = useState(false);
-  const [selectedFolder, setSelectedFolder] = useState(null);
-  const [modalVisible, setModalVisible]     = useState(false);
+  const [view, setView]                         = useState('folders'); // 'folders' | 'years' | 'docs'
+  const [selectedBarangay, setSelectedBarangay] = useState(null);
+  const [selectedYear, setSelectedYear]         = useState(null);
+  const [searchText, setSearchText]             = useState('');
+  const [notifCount]                            = useState(2);
+  const [sidebarVisible, setSidebarVisible]     = useState(false);
 
   useEffect(() => { setActiveTab('Documents'); }, []);
 
-  const filtered = BARANGAYS.filter(b =>
-    b.name.toLowerCase().includes(search.toLowerCase())
-  );
+  // ── Navigation helpers ──
+  const goToFolders = () => {
+    setView('folders');
+    setSelectedBarangay(null);
+    setSelectedYear(null);
+    setSearchText('');
+  };
 
-  const handleNav = (tab) => {
+  const goToYears = (barangay) => {
+    setSelectedBarangay(barangay);
+    setSelectedYear(null);
+    setView('years');
+    setSearchText('');
+  };
+
+  const goToDocs = (year) => {
+    setSelectedYear(year);
+    setView('docs');
+    setSearchText('');
+  };
+
+  const handleNavPress = (tab) => {
     setActiveTab(tab);
     setSidebarVisible(false);
-    if (tab === 'Home') router.push('/(tabs)/lydo-home');
+    if (tab === 'Home') router.push('/(tabs)/lydo-home')
+    else if (tab === 'Documents') router.push('/(tabs)/lydo-document');
+    else if (tab === 'Monitor') router.push('/(tabs)/lydo-monitor');
   };
 
-  const openFolder = (item) => {
-    setSelectedFolder(item);
-    setModalVisible(true);
-  };
+  // ── Filtered data ──
+  const filteredBarangays = BARANGAYS.filter(b =>
+    b.name.toLowerCase().includes(searchText.toLowerCase())
+  );
 
-  // ── DESKTOP layout ──────────────────────────────────────────────────────────
-  if (!isMobile) {
-    return (
-      <SafeAreaView style={styles.safe}>
-        <StatusBar barStyle="light-content" backgroundColor={C.navy} />
-        <View style={styles.layout}>
+  const filteredYears = YEAR_FOLDERS.filter(y =>
+    y.toLowerCase().includes(searchText.toLowerCase())
+  );
 
-          {/* Sidebar */}
-          <SidebarContent activeTab={activeTab} onNav={handleNav} logoLabel="LYDO" />
+  const filteredGroups = DOCUMENT_GROUPS.filter(g =>
+    searchText === '' ||
+    g.title.toLowerCase().includes(searchText.toLowerCase()) ||
+    g.items.some(i => i.toLowerCase().includes(searchText.toLowerCase()))
+  );
 
-          {/* Main */}
-          <ScrollView style={styles.main} contentContainerStyle={styles.mainContent} showsVerticalScrollIndicator={false}>
-            {/* Desktop header */}
-            <View style={styles.desktopHeader}>
-              <View>
-                <Text style={styles.headerSub}>SANGGUNIANG KABATAAN FEDERATION</Text>
-                <Text style={styles.headerTitle}>RIZAL, LAGUNA</Text>
-              </View>
-              <TouchableOpacity style={styles.bellBtn}>
-                <BellIcon hasNotif />
-              </TouchableOpacity>
-            </View>
-
-            <View style={styles.divider} />
-
-            {/* Search */}
-            <View style={styles.searchWrap}>
-              <View style={styles.searchBox}>
-                <Text style={styles.searchIcon}>🔍</Text>
-                <TextInput
-                  style={styles.searchInput}
-                  placeholder="Search"
-                  placeholderTextColor={C.midGray}
-                  value={search}
-                  onChangeText={setSearch}
-                />
-                {search.length > 0 && (
-                  <TouchableOpacity onPress={() => setSearch('')}>
-                    <Text style={{ color: C.midGray, fontSize: 13 }}>✕</Text>
-                  </TouchableOpacity>
-                )}
-              </View>
-            </View>
-
-            {/* Section label */}
-            <Text style={styles.sectionLabel}>All Documents</Text>
-
-            {/* Folder Grid */}
-            <View style={styles.folderGrid}>
-              {filtered.map(item => (
-                <FolderCard
-                  key={item.id}
-                  item={item}
-                  selected={selectedFolder?.id === item.id}
-                  onPress={() => openFolder(item)}
-                />
-              ))}
-            </View>
-          </ScrollView>
+  // ── Sidebar ──
+  const renderSidebar = () => (
+    <View style={styles.sidebar}>
+      <View style={styles.logoPill}>
+        <View style={styles.logoCircle}>
+          <Text style={styles.logoText}>LYDO</Text>
         </View>
-
-        <FolderModal
-          visible={modalVisible}
-          barangay={selectedFolder}
-          onClose={() => { setModalVisible(false); setSelectedFolder(null); }}
-        />
-      </SafeAreaView>
-    );
-  }
-
-  // ── MOBILE layout ───────────────────────────────────────────────────────────
-  return (
-    <SafeAreaView style={styles.safe}>
-      <StatusBar barStyle="light-content" backgroundColor={C.navy} />
-
-      {/* Mobile sidebar overlay */}
-      <SidebarOverlay
-        visible={sidebarVisible}
-        activeTab={activeTab}
-        onNav={handleNav}
-        onClose={() => setSidebarVisible(false)}
-        logoLabel="LYDO"
-      />
-
-      {/* White content area */}
-      <View style={[styles.main, { borderTopLeftRadius: 0, flex: 1 }]}>
-        {/* Mobile top bar */}
-        <View style={styles.mobileTopBar}>
-          <TouchableOpacity style={styles.mobileMenuBtn} onPress={() => setSidebarVisible(true)}>
-            <View style={styles.mobileMenuBg}>
-              <MenuIcon />
-            </View>
+      </View>
+      <View style={{ height: 28 }} />
+      {NAV_TABS.map(tab => {
+        const active = activeTab === tab;
+        return (
+          <TouchableOpacity
+            key={tab}
+            style={[styles.navItem, active && styles.navItemActive]}
+            onPress={() => handleNavPress(tab)}
+            activeOpacity={0.8}
+          >
+            <Text style={[styles.navLabel, active && styles.navLabelActive]}>{tab}</Text>
           </TouchableOpacity>
-          <View style={{ flex: 1, alignItems: 'center' }}>
-            <Text style={styles.mobileOrgSub}>SANGGUNIANG KABATAAN FEDERATION</Text>
-            <Text style={styles.mobileOrgTitle}>RIZAL, LAGUNA</Text>
-          </View>
+        );
+      })}
+    </View>
+  );
+
+  // ── Content body (shared between mobile/desktop) ──
+  const renderContent = () => (
+    <ScrollView
+      style={[styles.main, isMobile && styles.mainMobile]}
+      contentContainerStyle={styles.mainContent}
+      showsVerticalScrollIndicator={false}
+    >
+      {/* Mobile Header */}
+      {isMobile && (
+        <View style={styles.mobileHeader}>
+          <TouchableOpacity style={styles.menuBtn} onPress={() => setSidebarVisible(true)}>
+            <MenuIcon />
+          </TouchableOpacity>
+          <Text style={styles.mobileTitle}>Documents</Text>
           <TouchableOpacity style={styles.bellBtn}>
-            <BellIcon hasNotif />
+            <BellIcon hasNotif={notifCount > 0} />
           </TouchableOpacity>
         </View>
+      )}
 
-        <ScrollView contentContainerStyle={styles.mainContent} showsVerticalScrollIndicator={false}>
-          <View style={styles.divider} />
+      {/* Desktop Header */}
+      {!isMobile && (
+        <View style={styles.header}>
+          <View>
+            <Text style={styles.headerSub}>SANGGUNIANG KABATAAN FEDERATION</Text>
+            <Text style={styles.headerTitle}>RIZAL, LAGUNA</Text>
+          </View>
+          <TouchableOpacity style={styles.bellBtn} activeOpacity={0.7}>
+            <BellIcon hasNotif={notifCount > 0} />
+            {notifCount > 0 && (
+              <View style={styles.notifBadge}>
+                <Text style={styles.notifBadgeText}>{notifCount}</Text>
+              </View>
+            )}
+          </TouchableOpacity>
+        </View>
+      )}
 
+      {/* Page title */}
+      <Text style={styles.sectionTitle}>Document Management</Text>
+
+      {/* ── VIEW: ROOT FOLDERS (barangays) ── */}
+      {view === 'folders' && (
+        <>
           {/* Search */}
-          <View style={styles.searchWrap}>
+          <View style={styles.searchRow}>
             <View style={styles.searchBox}>
-              <Text style={styles.searchIcon}>🔍</Text>
+              <Text style={{ fontSize: 13, marginRight: 6 }}>🔍</Text>
               <TextInput
                 style={styles.searchInput}
-                placeholder="Search"
-                placeholderTextColor={C.midGray}
-                value={search}
-                onChangeText={setSearch}
+                placeholder="Search barangay…"
+                placeholderTextColor={COLORS.midGray}
+                value={searchText}
+                onChangeText={setSearchText}
               />
-              {search.length > 0 && (
-                <TouchableOpacity onPress={() => setSearch('')}>
-                  <Text style={{ color: C.midGray, fontSize: 13 }}>✕</Text>
+              {searchText.length > 0 && (
+                <TouchableOpacity onPress={() => setSearchText('')}>
+                  <Text style={{ color: COLORS.midGray, fontSize: 13 }}>✕</Text>
                 </TouchableOpacity>
               )}
             </View>
           </View>
 
-          <Text style={styles.sectionLabel}>All Documents</Text>
+          <Text style={styles.allDocsLabel}>All Documents</Text>
 
-          {/* Mobile folder grid — 3 columns */}
-          <View style={styles.folderGridMobile}>
-            {filtered.map(item => (
-              <FolderCard
+          <View style={isMobile ? styles.folderGridMobile : styles.folderGrid}>
+            {filteredBarangays.map(item => (
+              <TouchableOpacity
                 key={item.id}
-                item={item}
-                selected={selectedFolder?.id === item.id}
-                onPress={() => openFolder(item)}
-              />
+                style={styles.folderCard}
+                onPress={() => goToYears(item)}
+                activeOpacity={0.75}
+              >
+                <FolderIcon size={isMobile ? 60 : 68} />
+                <Text style={styles.folderName} numberOfLines={2}>{item.name}</Text>
+              </TouchableOpacity>
             ))}
           </View>
-        </ScrollView>
-      </View>
+        </>
+      )}
 
-      <FolderModal
-        visible={modalVisible}
-        barangay={selectedFolder}
-        onClose={() => { setModalVisible(false); setSelectedFolder(null); }}
-      />
+      {/* ── VIEW: YEAR FOLDERS inside a barangay ── */}
+      {view === 'years' && (
+        <>
+          {/* Subtitle */}
+          <Text style={styles.barangaySubtitle}>
+            Barangay {selectedBarangay?.name} Documents
+          </Text>
+
+          {/* Breadcrumb */}
+          <Breadcrumb
+            barangay={selectedBarangay}
+            year={null}
+            onPressDocuments={goToFolders}
+            onPressBarangay={() => {}}
+          />
+
+          {/* Year folder grid */}
+          <View style={[isMobile ? styles.folderGridMobile : styles.folderGrid, { marginTop: 24 }]}>
+            {filteredYears.map((year, idx) => (
+              <TouchableOpacity
+                key={idx}
+                style={styles.folderCard}
+                onPress={() => goToDocs(year)}
+                activeOpacity={0.75}
+              >
+                <YearFolderIcon size={isMobile ? 54 : 62} />
+                <Text style={styles.folderName}>{year}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </>
+      )}
+
+      {/* ── VIEW: DOCUMENT CATEGORY CARDS ── */}
+      {view === 'docs' && (
+        <>
+          {/* Subtitle */}
+          <Text style={styles.barangaySubtitle}>
+            Barangay {selectedBarangay?.name} Documents
+          </Text>
+
+          {/* Breadcrumb */}
+          <Breadcrumb
+            barangay={selectedBarangay}
+            year={selectedYear}
+            onPressDocuments={goToFolders}
+            onPressBarangay={() => goToYears(selectedBarangay)}
+          />
+
+          {/* 4 category cards grid */}
+          <View style={[isMobile ? styles.gridMobile : styles.gridInner, { marginTop: 20 }]}>
+            {filteredGroups.map(group => (
+              <View
+                key={group.id}
+                style={isMobile ? styles.cardWrapperMobile : styles.cardWrapper}
+              >
+                <DocumentCard
+                  group={group}
+                  onItemPress={(item, g) => {
+                    if (navigation) navigation.navigate('DocumentList', { category: g.category });
+                  }}
+                />
+              </View>
+            ))}
+          </View>
+        </>
+      )}
+    </ScrollView>
+  );
+
+  return (
+    <SafeAreaView style={styles.safe}>
+      <StatusBar barStyle="light-content" backgroundColor={COLORS.navy} />
+
+      <View style={styles.layout}>
+        {/* Sidebar — always visible on desktop */}
+        {!isMobile && renderSidebar()}
+
+        {/* Mobile sidebar overlay */}
+        {isMobile && sidebarVisible && (
+          <View style={StyleSheet.absoluteFill}>
+            <TouchableOpacity
+              style={styles.sidebarOverlay}
+              activeOpacity={1}
+              onPress={() => setSidebarVisible(false)}
+            />
+            <View style={{ position: 'absolute', left: 0, top: 0, bottom: 0 }}>
+              {renderSidebar()}
+            </View>
+          </View>
+        )}
+
+        {renderContent()}
+      </View>
     </SafeAreaView>
   );
 }
 
 // ─── STYLES ────────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
-  safe:   { flex: 1, backgroundColor: C.navy },
+  safe:   { flex: 1, backgroundColor: '#133E75' },
   layout: { flex: 1, flexDirection: 'row' },
 
   // ── Sidebar ──
   sidebar: {
-    width: 250, backgroundColor: C.navy,
-    alignItems: 'center', paddingTop: 20, paddingBottom: 24, paddingHorizontal: 10,
+    width: 250,
+    backgroundColor: '#133E75',
+    alignItems: 'center',
+    paddingTop: 20, paddingBottom: 24, paddingHorizontal: 10,
     zIndex: 10,
   },
-  sidebarBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)' },
-  sidebarDrawer: { position: 'absolute', left: 0, top: 0, bottom: 0, width: 200, zIndex: 20 },
   sidebarOverlay: {
-    position: 'absolute',
-    left: 0, top: 0, bottom: 0, right: 0,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    zIndex: 5,
+    position: 'absolute', left: 0, top: 0, bottom: 0, right: 0,
+    backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 5,
   },
   logoPill: {
     width: 70, height: 70, borderRadius: 35,
@@ -435,167 +551,157 @@ const styles = StyleSheet.create({
   },
   logoCircle: {
     width: 52, height: 52, borderRadius: 26,
-    backgroundColor: C.gold, alignItems: 'center', justifyContent: 'center',
+    backgroundColor: COLORS.gold, alignItems: 'center', justifyContent: 'center',
   },
-  logoText: { fontSize: 15, fontWeight: '900', color: C.maroon, letterSpacing: 0.5 },
-  sidebarSpacer: { height: 28 },
+  logoText: { fontSize: 15, fontWeight: '900', color: '#133E75', letterSpacing: 0.5 },
   navItem: {
-    width: '100%',
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-    borderRadius: 24,
-    marginBottom: 8,
-    alignItems: 'center',
-    borderWidth: 1.5,
-    borderColor: C.white,
-    backgroundColor: '#133E75',
+    width: '100%', paddingVertical: 12, paddingHorizontal: 12,
+    borderRadius: 24, marginBottom: 8, alignItems: 'center',
+    borderWidth: 1.5, borderColor: COLORS.white, backgroundColor: '#133E75',
   },
-  navItemActive: {
-    backgroundColor: '#ffffff',
-    borderWidth: 1.5,
-    borderColor: '#000000',
-  },
-  navLabel: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#ffffff',
-    letterSpacing: 0.3,
-  },
-  navLabelActive: {
-    color: '#000000',
-    fontWeight: '800',
-  },
+  navItemActive: { backgroundColor: COLORS.white, borderColor: COLORS.white },
+  navLabel: { fontSize: 13, fontWeight: '600', color: 'rgba(255,255,255,0.8)', letterSpacing: 0.3 },
+  navLabelActive: { color: '#000', fontWeight: '800' },
 
   // ── Main ──
-  main: { flex: 1, backgroundColor: C.white, borderTopLeftRadius: 20 },
-  mainContent: { paddingHorizontal: 20, paddingBottom: 40 },
+  main: { flex: 1, backgroundColor: COLORS.offWhite, borderTopLeftRadius: 20 },
+  mainMobile: { borderTopLeftRadius: 0 },
+  mainContent: { padding: 20, paddingBottom: 40 },
 
-  // Desktop header
-  desktopHeader: {
+  // Mobile Header
+  mobileHeader: {
+    flexDirection: 'row', alignItems: 'center',
+    justifyContent: 'space-between', marginBottom: 16,
+    paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: COLORS.lightGray,
+  },
+  menuBtn: {
+    width: 40, height: 40, borderRadius: 20,
+    backgroundColor: COLORS.cardBg, alignItems: 'center', justifyContent: 'center',
+  },
+  menuIconContainer: { width: 20, height: 16, justifyContent: 'space-between' },
+  menuLine: { width: 20, height: 2, backgroundColor: '#133E75', borderRadius: 1 },
+  mobileTitle: { fontSize: 18, fontWeight: '800', color: COLORS.darkText },
+
+  // Desktop Header
+  header: {
     flexDirection: 'row', alignItems: 'flex-start',
-    justifyContent: 'space-between', paddingTop: 22, paddingBottom: 10,
+    justifyContent: 'space-between', marginBottom: 16,
   },
   headerSub: {
-    fontSize: 10, fontWeight: '600', color: C.subText,
-    letterSpacing: 1.8, textTransform: 'uppercase', marginBottom: 2,
+    fontSize: 10, fontWeight: '600', color: COLORS.subText,
+    letterSpacing: 2, textTransform: 'uppercase', marginBottom: 2,
   },
-  headerTitle: { fontSize: 20, fontWeight: '900', color: C.darkText, letterSpacing: 0.4 },
-
-  // Mobile top bar
-  mobileTopBar: {
-    flexDirection: 'row', alignItems: 'center',
-    paddingHorizontal: 16, paddingTop: 14, paddingBottom: 10,
-    backgroundColor: C.white,
-  },
-  mobileMenuBtn: { marginRight: 8 },
-  mobileMenuBg: {
-    width: 36, height: 36, borderRadius: 10,
-    backgroundColor: C.navy, alignItems: 'center', justifyContent: 'center',
-  },
-  mobileOrgSub: {
-    fontSize: 8, fontWeight: '700', color: C.subText,
-    letterSpacing: 1.2, textTransform: 'uppercase',
-  },
-  mobileOrgTitle: { fontSize: 14, fontWeight: '900', color: C.darkText, letterSpacing: 0.3 },
+  headerTitle: { fontSize: 20, fontWeight: '900', color: COLORS.darkText, letterSpacing: 0.5 },
 
   // Bell
   bellBtn: {
-    width: 38, height: 38, borderRadius: 19,
-    backgroundColor: C.cardBg, alignItems: 'center', justifyContent: 'center',
-    shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 5, elevation: 3,
+    width: 40, height: 40, borderRadius: 20,
+    backgroundColor: COLORS.cardBg, alignItems: 'center', justifyContent: 'center',
+    shadowColor: COLORS.shadow, shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 1, shadowRadius: 6, elevation: 3,
   },
+  bellWrapper: { width: 20, height: 22, alignItems: 'center' },
+  bellBody: {
+    width: 14, height: 12, borderRadius: 7,
+    borderWidth: 2, borderColor: COLORS.maroon, marginTop: 4,
+  },
+  bellBottom: {
+    width: 8, height: 4,
+    borderBottomLeftRadius: 4, borderBottomRightRadius: 4,
+    backgroundColor: '#8B0000', marginTop: -1,
+  },
+  bellDot: {
+    position: 'absolute', top: 0, right: 1,
+    width: 7, height: 7, borderRadius: 4,
+    backgroundColor: COLORS.gold, borderWidth: 1.5, borderColor: COLORS.cardBg,
+  },
+  notifBadge: {
+    position: 'absolute', top: -2, right: -2,
+    width: 16, height: 16, borderRadius: 8,
+    backgroundColor: COLORS.gold, alignItems: 'center', justifyContent: 'center',
+    borderWidth: 1.5, borderColor: COLORS.white,
+  },
+  notifBadgeText: { fontSize: 8, fontWeight: '900', color: '#133E75' },
 
-  // Divider
-  divider: { height: 1, backgroundColor: C.lightGray, marginBottom: 14 },
+  // Section Title
+  sectionTitle: {
+    fontSize: 22, fontWeight: '800', color: COLORS.darkText,
+    marginBottom: 6, letterSpacing: 0.3,
+  },
+  barangaySubtitle: {
+    fontSize: 14, fontWeight: '700', color: COLORS.darkText, marginBottom: 8,
+  },
 
   // Search
-  searchWrap: { marginBottom: 14 },
+  searchRow: { marginBottom: 14 },
   searchBox: {
-    flexDirection: 'row', alignItems: 'center', gap: 8,
-    backgroundColor: C.offWhite, borderRadius: 10,
-    borderWidth: 1, borderColor: C.border,
-    paddingHorizontal: 12, paddingVertical: 9,
-    width: isMobile ? '60%' : 220,   // matches screenshot — left-aligned, not full-width
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: COLORS.white, borderRadius: 20,
+    borderWidth: 1, borderColor: COLORS.lightGray,
+    paddingHorizontal: 12, paddingVertical: 8,
+    width: isMobile ? '100%' : 240,
   },
-  searchIcon: { fontSize: 14 },
-  searchInput: { flex: 1, fontSize: 14, color: C.darkText },
+  searchInput: { flex: 1, fontSize: 13, color: COLORS.darkText },
 
-  // Section label
-  sectionLabel: {
-    fontSize: 13, fontWeight: '600', color: C.darkText,
-    marginBottom: 16, letterSpacing: 0.2,
+  allDocsLabel: {
+    fontSize: 13, fontWeight: '700', color: COLORS.darkText, marginBottom: 16,
   },
 
-  // ── Folder grid (desktop — 5 cols) ──
+  // Breadcrumb
+  breadcrumb: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: COLORS.white,
+    borderRadius: 20, borderWidth: 1, borderColor: COLORS.lightGray,
+    paddingHorizontal: 14, paddingVertical: 7,
+    alignSelf: 'flex-start',
+  },
+  breadcrumbLink: { fontSize: 12, color: '#133E75', fontWeight: '600' },
+  breadcrumbSep:  { fontSize: 12, color: COLORS.midGray, marginHorizontal: 2 },
+  breadcrumbCurrent: { fontSize: 12, color: COLORS.darkText, fontWeight: '700' },
+
+  // ── Folder grids ──
   folderGrid: {
-    flexDirection: 'row', flexWrap: 'wrap',
-    gap: 4,
+    flexDirection: 'row', flexWrap: 'wrap', gap: 4,
   },
-
-  // ── Folder grid (mobile — 3 cols) ──
   folderGridMobile: {
-    flexDirection: 'row', flexWrap: 'wrap',
-    gap: 4,
+    flexDirection: 'row', flexWrap: 'wrap', gap: 12,
   },
-
-  // Folder card
   folderCard: {
-    width: isMobile ? (SCREEN_WIDTH - 40 - 8) / 3 : 130,
-    alignItems: 'center', padding: 10, borderRadius: 10,
-    marginBottom: 4,
+    width: isMobile ? '28%' : 110,
+    alignItems: 'center', paddingVertical: 10, paddingHorizontal: 6,
+    borderRadius: 10, marginBottom: 4,
   },
-  folderCardSelected: { backgroundColor: '#D6E4FF' },
   folderName: {
     marginTop: 6, fontSize: 11, fontWeight: '500',
-    color: C.darkText, textAlign: 'center', lineHeight: 14,
+    color: COLORS.darkText, textAlign: 'center', lineHeight: 14,
   },
-  folderNameSelected: { color: C.navy, fontWeight: '700' },
 
-  // ── Document row (inside folder modal) ──
-  docRow: {
-    flexDirection: 'row', alignItems: 'center',
-    paddingVertical: 11, paddingHorizontal: 16,
-    borderBottomWidth: 1, borderBottomColor: C.lightGray,
-  },
-  docIconWrap: {
-    width: 38, height: 38, borderRadius: 9,
-    alignItems: 'center', justifyContent: 'center', marginRight: 12,
-  },
-  docInfo: { flex: 1 },
-  docName: { fontSize: 13, fontWeight: '600', color: C.darkText },
-  docMeta: { fontSize: 11, color: C.subText, marginTop: 2 },
-  docChevron: { color: C.midGray, fontSize: 22 },
+  // ── Document category card grid ──
+  gridInner: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, paddingBottom: 24 },
+  gridMobile: { flexDirection: 'column', gap: 12, paddingBottom: 24 },
+  cardWrapper: { width: '47%', minWidth: 150 },
+  cardWrapperMobile: { width: '100%' },
 
-  // ── Folder Modal ──
-  modalOverlay: {
-    flex: 1, justifyContent: 'flex-end',
-    backgroundColor: 'rgba(0,0,0,0.35)',
+  // Card
+  card: {
+    borderRadius: 16, overflow: 'hidden', elevation: 3,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.1, shadowRadius: 8,
   },
-  modalSheet: {
-    backgroundColor: C.white,
-    borderTopLeftRadius: 20, borderTopRightRadius: 20,
-    height: '72%',
-    paddingTop: 12,
-  },
-  modalHandle: {
-    alignSelf: 'center', width: 36, height: 4,
-    borderRadius: 2, backgroundColor: C.border, marginBottom: 10,
-  },
-  modalHeader: {
+  cardHeader: {
     flexDirection: 'row', alignItems: 'center',
-    paddingHorizontal: 16, paddingBottom: 12,
+    paddingHorizontal: 12, paddingVertical: 12, gap: 8,
   },
-  modalTitle: { fontSize: 16, fontWeight: '800', color: C.darkText },
-  modalSubtitle: { fontSize: 12, color: C.subText, marginTop: 2 },
-  modalCloseBtn: {
-    paddingHorizontal: 12, paddingVertical: 6,
-    backgroundColor: '#EAF0FF', borderRadius: 8,
+  cardHeaderIcon: { fontSize: isMobile ? 16 : 18 },
+  cardHeaderTitle: {
+    fontSize: isMobile ? 8 : 10, fontWeight: '900', color: COLORS.white,
+    letterSpacing: 0.8, flex: 1, flexWrap: 'wrap',
   },
-  modalDivider: { height: 1, backgroundColor: C.lightGray },
-  modalFab: {
-    position: 'absolute', bottom: 24, right: 20,
-    width: 52, height: 52, borderRadius: 26,
-    backgroundColor: C.navy, alignItems: 'center', justifyContent: 'center',
-    shadowColor: C.navy, shadowOpacity: 0.35, shadowRadius: 10, elevation: 8,
-  },
+  cardBody: { padding: isMobile ? 10 : 14 },
+  docItem: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, marginBottom: 6 },
+  docBullet: { width: 5, height: 5, borderRadius: 3, marginTop: 5, flexShrink: 0 },
+  docItemText: { fontSize: isMobile ? 11 : 12, lineHeight: 18, flex: 1 },
+
+  emptyState: { flex: 1, alignItems: 'center', marginTop: 60 },
+  emptyText: { fontSize: 14, color: COLORS.midGray },
 });
