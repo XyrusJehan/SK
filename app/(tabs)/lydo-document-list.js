@@ -461,7 +461,7 @@ const styles = StyleSheet.create({
 
   // Grid
   gridInner: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, paddingBottom: 24 },
-  gridMobile: { flexDirection: 'column', gap: 12, paddingBottom: 24 },
+  gridMobile: { flexDirection: 'column', gap: 14, paddingBottom: 24 },
   cardWrapper: { width: '47%', minWidth: 150 },
   cardWrapperMobile: { width: '100%' },
 
@@ -472,12 +472,12 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1, shadowRadius: 8,
   },
   cardHeader: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 12, gap: 8 },
-  cardHeaderIcon: { fontSize: 18 },
-  cardHeaderTitle: { fontSize: 10, fontWeight: '900', color: COLORS.white, letterSpacing: 0.8, flex: 1, flexWrap: 'wrap' },
-  cardBody: { padding: 14 },
-  docItem: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, marginBottom: 7 },
+  cardHeaderIcon: { fontSize: 16 },
+  cardHeaderTitle: { fontSize: 9, fontWeight: '900', color: COLORS.white, letterSpacing: 0.8, flex: 1, flexWrap: 'wrap' },
+  cardBody: { padding: 12 },
+  docItem: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, marginBottom: 6 },
   docBullet: { width: 5, height: 5, borderRadius: 3, marginTop: 5, flexShrink: 0 },
-  docItemText: { fontSize: 12, lineHeight: 18, flex: 1 },
+  docItemText: { fontSize: 11, lineHeight: 16, flex: 1 },
 
   emptyState: { flex: 1, alignItems: 'center', marginTop: 60 },
   emptyText: { fontSize: 14, color: COLORS.midGray },

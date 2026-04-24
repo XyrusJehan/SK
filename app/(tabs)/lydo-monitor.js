@@ -324,7 +324,7 @@ const CommentMode = ({ item, onClose }) => {
     Alert.alert('Edit', 'Edit mode: tap any highlighted section to revise its comment.');
   };
 
-  const panelWidth = isMobile ? SCREEN_WIDTH * 0.55 : 220;
+  const panelWidth = isMobile ? SCREEN_WIDTH * 0.4 : 220;
 
   return (
     <Modal visible animationType="slide" statusBarTranslucent>
@@ -477,14 +477,14 @@ const cmStyles = StyleSheet.create({
   topMid:   { flex: 1 },
   topTitle: { fontSize: 13, fontWeight: '800', color: COLORS.darkText },
   topSub:   { fontSize: 10, color: COLORS.navy },
-  body:     { flex: 1, flexDirection: 'row' },
+  body:     { flex: 1, flexDirection: isMobile ? 'column' : 'row' },
 
   // Doc scroll
-  docScroll:  { flex: 1 },
-  docWrap:    { padding: 12, alignItems: 'center' },
+  docScroll:  { flex: isMobile ? 1 : 1 },
+  docWrap:    { padding: isMobile ? 8 : 12, alignItems: 'center' },
   docPage:    {
     backgroundColor: COLORS.white, width: '100%',
-    borderRadius: 6, padding: 18,
+    borderRadius: 6, padding: isMobile ? 12 : 18,
     elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.07, shadowRadius: 6,
     marginBottom: 12,
   },
@@ -497,7 +497,7 @@ const cmStyles = StyleSheet.create({
   },
   sectionHighlight:  { backgroundColor: COLORS.highlight, borderColor: COLORS.highlightBorder },
   sectionCommented:  { borderColor: COLORS.commentDot + '60', borderWidth: 1 },
-  sectionText:       { fontSize: 12, color: COLORS.darkText, lineHeight: 18 },
+  sectionText:       { fontSize: isMobile ? 11 : 12, color: COLORS.darkText, lineHeight: 18 },
   boldText:          { fontWeight: '700' },
   centerText:        { textAlign: 'center' },
   commentIndicator:  { position: 'absolute', top: 2, right: 4 },
@@ -507,8 +507,10 @@ const cmStyles = StyleSheet.create({
   // Side Panel
   panel: {
     backgroundColor: COLORS.white,
-    borderLeftWidth: 1, borderLeftColor: COLORS.lightGray,
+    borderLeftWidth: isMobile ? 0 : 1, borderTopWidth: isMobile ? 1 : 0,
+    borderLeftColor: COLORS.lightGray, borderTopColor: COLORS.lightGray,
     flexShrink: 0,
+    maxHeight: isMobile ? 150 : undefined,
   },
   panelHeader: {
     paddingHorizontal: 12, paddingTop: 14, paddingBottom: 10,
@@ -791,35 +793,35 @@ const styles = StyleSheet.create({
   bellDot: { position: 'absolute', top: 0, right: 1, width: 7, height: 7, borderRadius: 4, backgroundColor: COLORS.gold, borderWidth: 1.5, borderColor: COLORS.cardBg },
   notifBadge: { position: 'absolute', top: -2, right: -2, width: 16, height: 16, borderRadius: 8, backgroundColor: COLORS.gold, alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: COLORS.white },
   notifBadgeText: { fontSize: 8, fontWeight: '900', color: COLORS.navy },
-  monitorTabBar: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: COLORS.lightGray, marginBottom: 14 },
-  monitorTab: { paddingHorizontal: isMobile ? 10 : 18, paddingVertical: 10, borderBottomWidth: 2, borderBottomColor: 'transparent', marginBottom: -1 },
+  monitorTabBar: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: COLORS.lightGray, marginBottom: 14, overflowX: 'auto' },
+  monitorTab: { paddingHorizontal: isMobile ? 8 : 18, paddingVertical: 10, borderBottomWidth: 2, borderBottomColor: 'transparent', marginBottom: -1 },
   monitorTabActive: { backgroundColor: COLORS.gold, borderRadius: 4, borderBottomColor: COLORS.gold },
-  monitorTabText: { fontSize: isMobile ? 11 : 13, fontWeight: '600', color: COLORS.subText },
+  monitorTabText: { fontSize: isMobile ? 10 : 13, fontWeight: '600', color: COLORS.subText },
   monitorTabTextActive: { color: COLORS.darkText, fontWeight: '800' },
   monitorTabFiller: { flex: 1 },
-  filterRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 14, flexWrap: isMobile ? 'wrap' : 'nowrap' },
-  searchBox: { flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.white, borderRadius: 20, borderWidth: 1, borderColor: COLORS.lightGray, paddingHorizontal: 12, paddingVertical: 7, minWidth: 120, maxWidth: 190 },
+  filterRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 14, flexWrap: 'wrap' },
+  searchBox: { flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.white, borderRadius: 20, borderWidth: 1, borderColor: COLORS.lightGray, paddingHorizontal: 12, paddingVertical: 7, minWidth: 120, maxWidth: isMobile ? 140 : 190 },
   searchInput: { flex: 1, fontSize: 12, color: COLORS.darkText },
-  filterToggleBtn: { borderRadius: 20, paddingHorizontal: 14, paddingVertical: 8 },
+  filterToggleBtn: { borderRadius: 20, paddingHorizontal: isMobile ? 10 : 14, paddingVertical: 8 },
   filterToggleRevisionOn: { backgroundColor: COLORS.gold },
   filterToggleApprovedOn: { backgroundColor: COLORS.navy },
   filterToggleOff: { backgroundColor: COLORS.lightGray, borderWidth: 1, borderColor: '#D0D0D0' },
-  filterToggleText: { fontSize: 11, fontWeight: '700' },
+  filterToggleText: { fontSize: isMobile ? 10 : 11, fontWeight: '700' },
   tableContainer: { backgroundColor: COLORS.white, borderRadius: 12, overflow: 'hidden', borderWidth: 1, borderColor: COLORS.lightGray, elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 6 },
   tableHeader: { flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.white, paddingVertical: 11, paddingHorizontal: 14, borderBottomWidth: 1, borderBottomColor: COLORS.lightGray },
-  tableHeaderText: { fontSize: 12, fontWeight: '700', color: COLORS.darkText, letterSpacing: 0.2 },
+  tableHeaderText: { fontSize: isMobile ? 10 : 12, fontWeight: '700', color: COLORS.darkText, letterSpacing: 0.2 },
   tableRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, paddingHorizontal: 14, borderBottomWidth: 1, borderBottomColor: COLORS.lightGray, backgroundColor: COLORS.white },
   tableRowEven: { backgroundColor: '#FAFAFA' },
-  colBarangay: { width: isMobile ? 100 : 160, paddingRight: 8 },
+  colBarangay: { width: isMobile ? 75 : 160, paddingRight: 8 },
   colDocument: { flex: 1, paddingRight: 8 },
-  colDateTime: { width: isMobile ? 80 : 110, alignItems: 'flex-end', paddingRight: 8 },
+  colDateTime: { width: isMobile ? 65 : 110, alignItems: 'flex-end', paddingRight: 8 },
   colAction:   { width: 50, alignItems: 'center' },
-  cellBarangay: { fontSize: 12, fontWeight: '600', color: COLORS.darkText },
-  cellDocument: { fontSize: 11, color: COLORS.subText, lineHeight: 16 },
-  cellTime:     { fontSize: 10, color: COLORS.subText, textAlign: 'right' },
-  cellDate:     { fontSize: 10, color: COLORS.subText, textAlign: 'right' },
-  viewBtn: { backgroundColor: COLORS.navy, borderRadius: 6, paddingHorizontal: 10, paddingVertical: 5 },
-  viewBtnText: { fontSize: 10, fontWeight: '700', color: COLORS.white },
+  cellBarangay: { fontSize: isMobile ? 10 : 12, fontWeight: '600', color: COLORS.darkText },
+  cellDocument: { fontSize: isMobile ? 10 : 11, color: COLORS.subText, lineHeight: 16 },
+  cellTime:     { fontSize: 9, color: COLORS.subText, textAlign: 'right' },
+  cellDate:     { fontSize: 9, color: COLORS.subText, textAlign: 'right' },
+  viewBtn: { backgroundColor: COLORS.navy, borderRadius: 6, paddingHorizontal: isMobile ? 6 : 10, paddingVertical: 5 },
+  viewBtnText: { fontSize: 9, fontWeight: '700', color: COLORS.white },
   emptyState: { alignItems: 'center', paddingVertical: 40 },
   emptyText:  { fontSize: 14, color: COLORS.midGray },
 });

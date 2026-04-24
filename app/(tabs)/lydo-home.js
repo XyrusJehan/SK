@@ -436,7 +436,7 @@ const styles = StyleSheet.create({
 
   searchBar: {
     flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.cardBg,
-    borderRadius: 14, paddingHorizontal: 14, paddingVertical: 10, marginBottom: 20,
+    borderRadius: 14, paddingHorizontal: isMobile ? 10 : 14, paddingVertical: 10, marginBottom: 20,
     borderWidth: 1.5, borderColor: COLORS.maroon + '33',
     shadowColor: 'rgba(0,0,0,0.08)', shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 1, shadowRadius: 6, elevation: 2,
@@ -489,8 +489,8 @@ const styles = StyleSheet.create({
   taskDescRow: { flex: 1, flexDirection: 'row', alignItems: 'flex-start', gap: 8, paddingRight: 8 },
   urgentDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: COLORS.maroon, marginTop: 5 },
   taskDesc: { flex: 1, fontSize: 13, color: COLORS.darkText, lineHeight: 19 },
-  reminderBtn: { width: 100, paddingVertical: 7, borderRadius: 20, alignItems: 'center', backgroundColor: COLORS.maroon },
-  actionBtnText: { fontSize: 12, fontWeight: '700', color: COLORS.white, letterSpacing: 0.3 },
+  reminderBtn: { width: isMobile ? 90 : 100, paddingVertical: 7, borderRadius: 20, alignItems: 'center', backgroundColor: COLORS.maroon },
+  actionBtnText: { fontSize: 11, fontWeight: '700', color: COLORS.white, letterSpacing: 0.3 },
 
   // Sort
   sortRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
