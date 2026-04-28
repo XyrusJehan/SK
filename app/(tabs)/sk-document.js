@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useNav } from './navContext';
+import { useAuth } from './authContext';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const isMobile = SCREEN_WIDTH < 768;
@@ -188,6 +189,7 @@ const DocumentCard = ({ group, onItemPress }) => {
 export default function DocumentsScreen({ navigation }) {
   const router = useRouter();
   const { activeTab, setActiveTab } = useNav();
+  const { logout } = useAuth();
   const [searchText, setSearchText] = useState('');
   const [activeCategory, setActiveCategory] = useState('All');
   const [notifCount] = useState(2);
@@ -227,6 +229,11 @@ export default function DocumentsScreen({ navigation }) {
     setSidebarVisible(false);
   };
 
+  const handleLogout = () => {
+    logout();
+    router.replace('/');
+  };
+
   const filteredGroups = DOCUMENT_GROUPS.filter((g) => {
     const matchCategory = activeCategory === 'All' || g.category === activeCategory;
     const matchSearch =
@@ -259,6 +266,14 @@ export default function DocumentsScreen({ navigation }) {
           </TouchableOpacity>
         );
       })}
+      <View style={styles.sidebarSpacer} />
+      <TouchableOpacity
+        style={styles.logoutBtn}
+        onPress={handleLogout}
+        activeOpacity={0.8}
+      >
+        <Text style={styles.logoutText}>Logout</Text>
+      </TouchableOpacity>
     </View>
   );
 
@@ -479,6 +494,23 @@ const styles = StyleSheet.create({
   navItemActive: { backgroundColor: '#ffffff', borderWidth: 1.5, borderColor: '#000000' },
   navLabel: { fontSize: 13, fontWeight: '600', color: 'rgba(255, 255, 255, 0.8)', letterSpacing: 0.3 },
   navLabelActive: { color: '#000000', fontWeight: '800' },
+  logoutBtn: {
+    width: '100%',
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderRadius: 24,
+    marginTop: 8,
+    alignItems: 'center',
+    borderWidth: 1.5,
+    borderColor: COLORS.white,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+  },
+  logoutText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#ffffff',
+    letterSpacing: 0.3,
+  },
 
   main: {
     flex: 1,

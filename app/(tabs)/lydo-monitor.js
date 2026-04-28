@@ -6,6 +6,7 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useNav } from './navContext';
+import { useAuth } from './authContext';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const isMobile = SCREEN_WIDTH < 768;
@@ -579,6 +580,7 @@ const TableRow = ({ item, isEven, viewFilter, onView }) => {
 export default function LYDOMonitorScreen() {
   const router = useRouter();
   const { activeTab, setActiveTab } = useNav();
+  const { logout } = useAuth();
 
   const [activeMonitorTab, setActiveMonitorTab] = useState('Consultation');
   const [viewFilter, setViewFilter]             = useState('revision');
@@ -597,6 +599,11 @@ export default function LYDOMonitorScreen() {
     if (tab === 'Documents') router.push('/(tabs)/lydo-document');
   };
 
+  const handleLogout = () => {
+    logout();
+    router.replace('/');
+  };
+
   const rows = (TABLE_DATA[activeMonitorTab] || [])
     .filter(r => viewFilter === 'approved' ? r.approvedDate !== null : true)
     .filter(r =>
@@ -610,7 +617,7 @@ export default function LYDOMonitorScreen() {
     <View style={styles.sidebar}>
       <View style={styles.logoPill}>
         <View style={styles.logoCircle}>
-          <Text style={styles.logoText}>SKF</Text>
+          <Text style={styles.logoText}>LYDO</Text>
         </View>
       </View>
       <View style={{ height: 28 }} />
@@ -623,6 +630,14 @@ export default function LYDOMonitorScreen() {
           </TouchableOpacity>
         );
       })}
+      <View style={{ height: 28 }} />
+      <TouchableOpacity
+        style={styles.logoutBtn}
+        onPress={handleLogout}
+        activeOpacity={0.8}
+      >
+        <Text style={styles.logoutText}>Logout</Text>
+      </TouchableOpacity>
     </View>
   );
 
@@ -775,6 +790,23 @@ const styles = StyleSheet.create({
   navItemActive: { backgroundColor: COLORS.white, borderColor: COLORS.white },
   navLabel: { fontSize: 13, fontWeight: '600', color: 'rgba(255,255,255,0.8)', letterSpacing: 0.3 },
   navLabelActive: { color: '#000', fontWeight: '800' },
+  logoutBtn: {
+    width: '100%',
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderRadius: 24,
+    marginTop: 8,
+    alignItems: 'center',
+    borderWidth: 1.5,
+    borderColor: COLORS.white,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+  },
+  logoutText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#ffffff',
+    letterSpacing: 0.3,
+  },
   main: { flex: 1, backgroundColor: COLORS.offWhite, borderTopLeftRadius: 20 },
   mainMobile: { borderTopLeftRadius: 0 },
   mainContent: { padding: 20, paddingBottom: 40 },
