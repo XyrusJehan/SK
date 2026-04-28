@@ -621,13 +621,18 @@ export default function LYDOMonitorBudgetScreen() {
 
       <View style={S.layout}>
         {isMobile && sidebarVisible && (
-          <TouchableOpacity
-            style={S.sidebarOverlay}
-            onPress={() => setSidebarVisible(false)}
-            activeOpacity={1}
-          />
+          <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
+            <TouchableOpacity
+              style={S.sidebarOverlay}
+              onPress={() => setSidebarVisible(false)}
+              activeOpacity={1}
+            />
+            <View style={{ position: 'absolute', left: 0, top: 0, bottom: 0, zIndex: 10 }}>
+              {renderSidebar()}
+            </View>
+          </View>
         )}
-        {(!isMobile || sidebarVisible) && renderSidebar()}
+        {!isMobile && renderSidebar()}
         {renderContent()}
       </View>
 

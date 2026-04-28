@@ -629,13 +629,13 @@ export default function LYDODocumentListScreen({ navigation }) {
 
         {/* Mobile sidebar overlay */}
         {isMobile && sidebarVisible && (
-          <View style={StyleSheet.absoluteFill}>
+          <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
             <TouchableOpacity
               style={styles.sidebarOverlay}
               activeOpacity={1}
               onPress={() => setSidebarVisible(false)}
             />
-            <View style={{ position: 'absolute', left: 0, top: 0, bottom: 0 }}>
+            <View style={{ position: 'absolute', left: 0, top: 0, bottom: 0, zIndex: 10 }}>
               {renderSidebar()}
             </View>
           </View>
