@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useNav } from './navContext';
+import { useAuth } from './authContext';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const isMobile = SCREEN_WIDTH < 768;
@@ -173,6 +174,7 @@ const DocumentRow = ({ doc, accentColor, onMenu, isMobile }) => (
 export default function DocumentListScreen({ route, navigation }) {
   const router = useRouter();
   const { activeTab, setActiveTab } = useNav();
+  const { logout } = useAuth();
 
   const initialCategory = route?.params?.category ?? 'All';
   const [searchText, setSearchText] = useState('');
@@ -196,6 +198,11 @@ export default function DocumentListScreen({ route, navigation }) {
     }
     setActiveTab(tab);
     setSidebarVisible(false);
+  };
+
+  const handleLogout = () => {
+    logout();
+    router.replace('/');
   };
 
   const filtered = ALL_DOCUMENTS.filter((d) => {
@@ -238,6 +245,14 @@ export default function DocumentListScreen({ route, navigation }) {
           </TouchableOpacity>
         );
       })}
+      <View style={styles.sidebarSpacer} />
+      <TouchableOpacity
+        style={styles.logoutBtn}
+        onPress={handleLogout}
+        activeOpacity={0.8}
+      >
+        <Text style={styles.logoutText}>Logout</Text>
+      </TouchableOpacity>
     </View>
   );
 
@@ -503,6 +518,23 @@ const styles = StyleSheet.create({
   navItemActive: { backgroundColor: '#ffffff', borderWidth: 1.5, borderColor: '#000000' },
   navLabel: { fontSize: 13, fontWeight: '600', color: 'rgba(255, 255, 255, 0.8)', letterSpacing: 0.3 },
   navLabelActive: { color: '#000000', fontWeight: '800' },
+  logoutBtn: {
+    width: '100%',
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderRadius: 24,
+    marginTop: 8,
+    alignItems: 'center',
+    borderWidth: 1.5,
+    borderColor: COLORS.white,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+  },
+  logoutText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#ffffff',
+    letterSpacing: 0.3,
+  },
 
   // Main
   main: {

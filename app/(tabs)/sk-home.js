@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useNav } from './navContext';
+import { useAuth } from './authContext';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const isMobile = SCREEN_WIDTH < 768;
@@ -104,6 +105,7 @@ const COLORS = {
 export default function HomeScreen({ navigation }) {
   const router = useRouter();
   const { activeTab, setActiveTab } = useNav();
+  const { logout } = useAuth();
   const [searchText, setSearchText] = useState('');
   const [sortBy, setSortBy] = useState('Newest');
   const [notifCount] = useState(2);
@@ -117,6 +119,11 @@ export default function HomeScreen({ navigation }) {
     }
     setActiveTab(tab);
     setSidebarVisible(false);
+  };
+
+  const handleLogout = () => {
+    logout();
+    router.replace('/');
   };
 
   const sortedActivities =
@@ -147,6 +154,14 @@ export default function HomeScreen({ navigation }) {
           </TouchableOpacity>
         );
       })}
+      <View style={styles.sidebarSpacer} />
+      <TouchableOpacity
+        style={styles.logoutBtn}
+        onPress={handleLogout}
+        activeOpacity={0.8}
+      >
+        <Text style={styles.logoutText}>Logout</Text>
+      </TouchableOpacity>
     </View>
   );
 
@@ -373,6 +388,23 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
   },
   sidebarSpacer: { height: 28 },
+  logoutBtn: {
+    width: '100%',
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderRadius: 24,
+    marginTop: 8,
+    alignItems: 'center',
+    borderWidth: 1.5,
+    borderColor: COLORS.white,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+  },
+  logoutText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#ffffff',
+    letterSpacing: 0.3,
+  },
   navItem: {
     width: '100%',
     paddingVertical: 12,
