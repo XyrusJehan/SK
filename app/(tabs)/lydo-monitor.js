@@ -681,7 +681,7 @@ export default function LYDOMonitorScreen() {
           return (
             <TouchableOpacity key={tab}
               style={[styles.monitorTab, active && styles.monitorTabActive]}
-              onPress={() => setActiveMonitorTab(tab)} activeOpacity={0.8}>
+              onPress={() => tab === 'Budget' ? router.push('/(tabs)/lydo-monitor-budget') : setActiveMonitorTab(tab)} activeOpacity={0.8}>
               <Text style={[styles.monitorTabText, active && styles.monitorTabTextActive]}>{tab}</Text>
             </TouchableOpacity>
           );
