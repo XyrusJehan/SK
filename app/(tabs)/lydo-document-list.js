@@ -10,7 +10,6 @@ import {
   StatusBar,
   Dimensions,
   Alert,
-  Modal,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useNav } from './navContext';
@@ -624,28 +623,21 @@ export default function LYDODocumentListScreen({ navigation }) {
     <SafeAreaView style={styles.safe}>
       <StatusBar barStyle="light-content" backgroundColor={COLORS.navy} />
 
-      {/* Mobile Sidebar Modal */}
-      <Modal
-        visible={isMobile && sidebarVisible}
-        animationType="slide"
-        transparent
-        onRequestClose={() => setSidebarVisible(false)}
-      >
-        <View style={styles.mobileSidebarContainer}>
+      <View style={styles.layout}>
+        {/* Mobile: Sidebar as overlay */}
+        {isMobile && sidebarVisible && (
           <TouchableOpacity
             style={styles.sidebarOverlay}
             activeOpacity={1}
             onPress={() => setSidebarVisible(false)}
           />
-          <View style={styles.mobileSidebar}>
-            {renderSidebar()}
-          </View>
-        </View>
-      </Modal>
+        )}
 
-      <View style={styles.layout}>
-        {/* Desktop sidebar — always visible */}
-        {!isMobile && renderSidebar()}
+        {isMobile ? (
+          sidebarVisible && renderSidebar()
+        ) : (
+          renderSidebar()
+        )}
 
         {/* View toggle */}
         {view === 'cards' ? renderCardsView() : renderListView()}
@@ -671,16 +663,19 @@ const styles = StyleSheet.create({
     width: 250, backgroundColor: COLORS.navy,
     alignItems: 'center', paddingTop: 20, paddingBottom: 24, paddingHorizontal: 10, zIndex: 10,
   },
-  sidebarOverlay: { position: 'absolute', left: 0, top: 0, bottom: 0, right: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 5 },
-  mobileSidebarContainer: { flex: 1 },
-  mobileSidebar: { position: 'absolute', left: 0, top: 0, bottom: 0, width: '75%', maxWidth: 280, zIndex: 10 },
+  sidebarOverlay: {
+    position: 'absolute',
+    left: 0, top: 0, bottom: 0, right: 0,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    zIndex: 5,
+  },
   logoPill: { width: 70, height: 70, borderRadius: 35, backgroundColor: 'rgba(255,255,255,0.15)', alignItems: 'center', justifyContent: 'center', marginBottom: 8, borderWidth: 2, borderColor: 'rgba(255,255,255,0.3)' },
   logoCircle: { width: 52, height: 52, borderRadius: 26, backgroundColor: COLORS.gold, alignItems: 'center', justifyContent: 'center' },
   logoText: { fontSize: 14, fontWeight: '900', color: COLORS.navy, letterSpacing: 0.5 },
   navItem: { width: '100%', paddingVertical: 12, paddingHorizontal: 12, borderRadius: 24, marginBottom: 8, alignItems: 'center', borderWidth: 1.5, borderColor: COLORS.white, backgroundColor: COLORS.navy },
-  navItemActive: { backgroundColor: COLORS.white, borderColor: COLORS.white },
-  navLabel: { fontSize: 13, fontWeight: '600', color: 'rgba(255,255,255,0.8)', letterSpacing: 0.3 },
-  navLabelActive: { color: '#000', fontWeight: '800' },
+  navItemActive: { backgroundColor: '#ffffff', borderColor: '#000000' },
+  navLabel: { fontSize: 13, fontWeight: '600', color: '#ffffff', letterSpacing: 0.3 },
+  navLabelActive: { color: '#000000', fontWeight: '800' },
   logoutBtn: {
     width: '100%',
     paddingVertical: 12,
