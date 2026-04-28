@@ -142,14 +142,15 @@ const ThreeDotMenu = ({ onSave, onEdit, onReturn }) => {
   );
 };
 const TD = StyleSheet.create({
-  wrap: { position: 'relative', zIndex: 99 },
+  wrap: { position: 'relative', zIndex: 9999, elevation: 9999 },
   btn:  { width: 36, height: 36, borderRadius: 18, backgroundColor: COLORS.lightGray, alignItems: 'center', justifyContent: 'center' },
   dots: { fontSize: 14, fontWeight: '900', color: COLORS.darkText, letterSpacing: 2 },
   menu: {
     position: 'absolute', top: 42, right: 0,
-    backgroundColor: COLORS.white, borderRadius: 10, width: 140, elevation: 8,
+    backgroundColor: COLORS.white, borderRadius: 10, width: 140, elevation: 9999,
     shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.15, shadowRadius: 8,
     borderWidth: 1, borderColor: COLORS.lightGray,
+    zIndex: 9999,
   },
   item:       { paddingHorizontal: 16, paddingVertical: 13 },
   itemBorder: { borderBottomWidth: 1, borderBottomColor: COLORS.lightGray },
@@ -338,7 +339,7 @@ const BudgetDocumentViewer = ({ item, onClose }) => {
 };
 const DV = StyleSheet.create({
   overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.35)', justifyContent: 'flex-end' },
-  sheet:   { backgroundColor: COLORS.offWhite, borderTopLeftRadius: 20, borderTopRightRadius: 20, height: SCREEN_HEIGHT * 0.92, overflow: 'hidden' },
+  sheet:   { backgroundColor: COLORS.offWhite, borderTopLeftRadius: 20, borderTopRightRadius: 20, height: SCREEN_HEIGHT * 0.92, zIndex: 1 },
   topBar:  { flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.white, paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: COLORS.lightGray, gap: 10 },
   backBtn: { paddingHorizontal: 4 },
   backText:{ fontSize: 13, color: COLORS.navy, fontWeight: '700' },

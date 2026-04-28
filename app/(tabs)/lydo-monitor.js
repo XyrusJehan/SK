@@ -699,7 +699,7 @@ export default function LYDOMonitorScreen() {
           style={[styles.filterToggleBtn, viewFilter === 'revision' ? styles.filterToggleRevisionOn : styles.filterToggleOff]}
           onPress={() => setViewFilter('revision')} activeOpacity={0.8}>
           <Text style={[styles.filterToggleText, { color: viewFilter === 'revision' ? COLORS.darkText : COLORS.subText }]}>
-            Term for revisions
+            Revisions
           </Text>
         </TouchableOpacity>
         <TouchableOpacity

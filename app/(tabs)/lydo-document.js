@@ -502,7 +502,10 @@ export default function LYDODocumentsScreen({ navigation }) {
                 <DocumentCard
                   group={group}
                   onItemPress={(item, g) => {
-                    if (navigation) navigation.navigate('DocumentList', { category: g.category });
+                    router.push({
+                      pathname: '/(tabs)/lydo-document-list',
+                      params: { category: g.category, subType: item }
+                    });
                   }}
                 />
               </View>
