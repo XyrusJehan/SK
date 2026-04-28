@@ -9,6 +9,7 @@ import {
   SafeAreaView,
   StatusBar,
   Dimensions,
+  Modal,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useNav } from './navContext';
@@ -520,23 +521,28 @@ export default function LYDODocumentsScreen({ navigation }) {
     <SafeAreaView style={styles.safe}>
       <StatusBar barStyle="light-content" backgroundColor={COLORS.navy} />
 
+      {/* Mobile Sidebar Modal */}
+      <Modal
+        visible={isMobile && sidebarVisible}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setSidebarVisible(false)}
+      >
+        <View style={styles.mobileSidebarContainer}>
+          <TouchableOpacity
+            style={styles.sidebarOverlay}
+            activeOpacity={1}
+            onPress={() => setSidebarVisible(false)}
+          />
+          <View style={styles.mobileSidebar}>
+            {renderSidebar()}
+          </View>
+        </View>
+      </Modal>
+
       <View style={styles.layout}>
         {/* Sidebar — always visible on desktop */}
         {!isMobile && renderSidebar()}
-
-        {/* Mobile sidebar overlay */}
-        {isMobile && sidebarVisible && (
-          <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
-            <TouchableOpacity
-              style={styles.sidebarOverlay}
-              activeOpacity={1}
-              onPress={() => setSidebarVisible(false)}
-            />
-            <View style={{ position: 'absolute', left: 0, top: 0, bottom: 0, zIndex: 10 }}>
-              {renderSidebar()}
-            </View>
-          </View>
-        )}
 
         {renderContent()}
       </View>
@@ -560,6 +566,18 @@ const styles = StyleSheet.create({
   sidebarOverlay: {
     position: 'absolute', left: 0, top: 0, bottom: 0, right: 0,
     backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 5,
+  },
+  mobileSidebarContainer: {
+    flex: 1,
+  },
+  mobileSidebar: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
+    width: '75%',
+    maxWidth: 280,
+    zIndex: 10,
   },
   logoPill: {
     width: 70, height: 70, borderRadius: 35,
