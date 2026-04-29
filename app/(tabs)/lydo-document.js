@@ -502,7 +502,10 @@ export default function LYDODocumentsScreen({ navigation }) {
                 <DocumentCard
                   group={group}
                   onItemPress={(item, g) => {
-                    if (navigation) navigation.navigate('DocumentList', { category: g.category });
+                    router.push({
+                      pathname: '/(tabs)/lydo-document-list',
+                      params: { category: g.category, subType: item }
+                    });
                   }}
                 />
               </View>
@@ -518,21 +521,19 @@ export default function LYDODocumentsScreen({ navigation }) {
       <StatusBar barStyle="light-content" backgroundColor={COLORS.navy} />
 
       <View style={styles.layout}>
-        {/* Sidebar — always visible on desktop */}
-        {!isMobile && renderSidebar()}
-
-        {/* Mobile sidebar overlay */}
+        {/* Mobile: Sidebar as overlay */}
         {isMobile && sidebarVisible && (
-          <View style={StyleSheet.absoluteFill}>
-            <TouchableOpacity
-              style={styles.sidebarOverlay}
-              activeOpacity={1}
-              onPress={() => setSidebarVisible(false)}
-            />
-            <View style={{ position: 'absolute', left: 0, top: 0, bottom: 0 }}>
-              {renderSidebar()}
-            </View>
-          </View>
+          <TouchableOpacity
+            style={styles.sidebarOverlay}
+            activeOpacity={1}
+            onPress={() => setSidebarVisible(false)}
+          />
+        )}
+
+        {isMobile ? (
+          sidebarVisible && renderSidebar()
+        ) : (
+          renderSidebar()
         )}
 
         {renderContent()}
@@ -555,8 +556,10 @@ const styles = StyleSheet.create({
     zIndex: 10,
   },
   sidebarOverlay: {
-    position: 'absolute', left: 0, top: 0, bottom: 0, right: 0,
-    backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 5,
+    position: 'absolute',
+    left: 0, top: 0, bottom: 0, right: 0,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    zIndex: 5,
   },
   logoPill: {
     width: 70, height: 70, borderRadius: 35,
@@ -574,9 +577,9 @@ const styles = StyleSheet.create({
     borderRadius: 24, marginBottom: 8, alignItems: 'center',
     borderWidth: 1.5, borderColor: COLORS.white, backgroundColor: '#133E75',
   },
-  navItemActive: { backgroundColor: COLORS.white, borderColor: COLORS.white },
-  navLabel: { fontSize: 13, fontWeight: '600', color: 'rgba(255,255,255,0.8)', letterSpacing: 0.3 },
-  navLabelActive: { color: '#000', fontWeight: '800' },
+  navItemActive: { backgroundColor: '#ffffff', borderColor: '#000000' },
+  navLabel: { fontSize: 13, fontWeight: '600', color: '#ffffff', letterSpacing: 0.3 },
+  navLabelActive: { color: '#000000', fontWeight: '800' },
   logoutBtn: {
     width: '100%',
     paddingVertical: 12,
