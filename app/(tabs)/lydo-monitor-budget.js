@@ -529,28 +529,11 @@ export default function LYDOMonitorBudgetScreen() {
     <SafeAreaView style={S.safe}>
       <StatusBar barStyle="light-content" backgroundColor={COLORS.navy} />
 
-      {/* Mobile Sidebar Modal */}
-      <Modal
-        visible={isMobile && sidebarVisible}
-        animationType="slide"
-        transparent
-        onRequestClose={() => setSidebarVisible(false)}
-      >
-        <View style={S.mobileSidebarContainer}>
-          <TouchableOpacity
-            style={S.sidebarOverlay}
-            activeOpacity={1}
-            onPress={() => setSidebarVisible(false)}
-          />
-          <View style={S.mobileSidebar}>
-            {renderSidebar()}
-          </View>
-        </View>
-      </Modal>
-
       <View style={S.layout}>
-        {/* Desktop sidebar — always visible */}
-        {!isMobile && renderSidebar()}
+        {isMobile && sidebarVisible && (
+          <TouchableOpacity style={S.sidebarOverlay} onPress={() => setSidebarVisible(false)} activeOpacity={1} />
+        )}
+        {(!isMobile || sidebarVisible) && renderSidebar()}
         {renderContent()}
       </View>
 
@@ -579,8 +562,6 @@ const S = StyleSheet.create({
     position: 'absolute', left: 0, top: 0, bottom: 0, right: 0,
     backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 5,
   },
-  mobileSidebarContainer: { flex: 1 },
-  mobileSidebar: { position: 'absolute', left: 0, top: 0, bottom: 0, width: '75%', maxWidth: 280, zIndex: 10 },
   logoPill: {
     width: 70, height: 70, borderRadius: 35,
     backgroundColor: 'rgba(255,255,255,0.15)',
