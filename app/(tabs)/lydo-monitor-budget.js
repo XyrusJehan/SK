@@ -296,10 +296,17 @@ export default function LYDOMonitorBudgetScreen() {
   };
 
   const handleMonitorTabPress = (tab) => {
-    if (tab !== 'Budget') { handleNavPress('Monitor'); return; }
-    setActiveMonitorTab(tab);
-    setCurrentStep(1);
-    setSearchText('');
+    if (tab === 'Budget') {
+      setActiveMonitorTab(tab);
+      setCurrentStep(1);
+      setSearchText('');
+    } else if (tab === 'Report') {
+      router.push('/(tabs)/lydo-monitor-report');
+    } else if (tab === 'Submitted') {
+      router.push('/(tabs)/lydo-monitor-submitted');
+    } else {
+      router.push('/(tabs)/lydo-monitor');
+    }
   };
 
   // Filtered rows (search only on step 1)
@@ -529,28 +536,11 @@ export default function LYDOMonitorBudgetScreen() {
     <SafeAreaView style={S.safe}>
       <StatusBar barStyle="light-content" backgroundColor={COLORS.navy} />
 
-      {/* Mobile Sidebar Modal */}
-      <Modal
-        visible={isMobile && sidebarVisible}
-        animationType="slide"
-        transparent
-        onRequestClose={() => setSidebarVisible(false)}
-      >
-        <View style={S.mobileSidebarContainer}>
-          <TouchableOpacity
-            style={S.sidebarOverlay}
-            activeOpacity={1}
-            onPress={() => setSidebarVisible(false)}
-          />
-          <View style={S.mobileSidebar}>
-            {renderSidebar()}
-          </View>
-        </View>
-      </Modal>
-
       <View style={S.layout}>
-        {/* Desktop sidebar — always visible */}
-        {!isMobile && renderSidebar()}
+        {isMobile && sidebarVisible && (
+          <TouchableOpacity style={S.sidebarOverlay} onPress={() => setSidebarVisible(false)} activeOpacity={1} />
+        )}
+        {(!isMobile || sidebarVisible) && renderSidebar()}
         {renderContent()}
       </View>
 
@@ -579,8 +569,6 @@ const S = StyleSheet.create({
     position: 'absolute', left: 0, top: 0, bottom: 0, right: 0,
     backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 5,
   },
-  mobileSidebarContainer: { flex: 1 },
-  mobileSidebar: { position: 'absolute', left: 0, top: 0, bottom: 0, width: '75%', maxWidth: 280, zIndex: 10 },
   logoPill: {
     width: 70, height: 70, borderRadius: 35,
     backgroundColor: 'rgba(255,255,255,0.15)',
@@ -630,8 +618,8 @@ const S = StyleSheet.create({
   notifBadgeText:{ fontSize: 8, fontWeight: '900', color: COLORS.navy },
 
   // Monitor Tabs
-  monitorTabBar:     { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: COLORS.lightGray, marginBottom: 14 },
-  monitorTab:        { paddingHorizontal: isMobile ? 8 : 18, paddingVertical: 10, borderBottomWidth: 2, borderBottomColor: 'transparent', marginBottom: -1 },
+  monitorTabBar:     { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: COLORS.lightGray, marginBottom: 14, overflowX: 'auto' },
+  monitorTab:        { paddingHorizontal: isMobile ? 10 : 18, paddingVertical: 10, borderBottomWidth: 2, borderBottomColor: 'transparent', marginBottom: -1 },
   monitorTabActive:  { backgroundColor: COLORS.gold, borderRadius: 4, borderBottomColor: COLORS.gold },
   monitorTabText:    { fontSize: isMobile ? 10 : 13, fontWeight: '600', color: COLORS.subText },
   monitorTabTextActive: { color: COLORS.darkText, fontWeight: '800' },
@@ -640,18 +628,18 @@ const S = StyleSheet.create({
   // Top control row
   topControlRow: {
     flexDirection: 'row', alignItems: 'center',
-    marginBottom: 12, gap: 10, flexWrap: 'wrap',
+    marginBottom: 14, gap: 8, flexWrap: 'wrap',
   },
   searchBox: {
     flexDirection: 'row', alignItems: 'center',
     backgroundColor: COLORS.white, borderRadius: 20,
     borderWidth: 1, borderColor: COLORS.lightGray,
     paddingHorizontal: 12, paddingVertical: 7,
-    width: isMobile ? 130 : 180,
+    minWidth: 120, maxWidth: isMobile ? 140 : 190,
   },
   searchInput: { flex: 1, fontSize: 12, color: COLORS.darkText },
   sectionLabel: {
-    fontSize: isMobile ? 12 : 14, fontWeight: '700', color: COLORS.darkText,
+    fontSize: isMobile ? 13 : 14, fontWeight: '700', color: COLORS.darkText,
   },
 
   // Step 3 inline actions
@@ -659,14 +647,14 @@ const S = StyleSheet.create({
     flexDirection: 'row', gap: 8, marginLeft: 'auto',
   },
   saveBtn: {
-    paddingHorizontal: 12, paddingVertical: 7,
-    borderRadius: 8, borderWidth: 1.5, borderColor: COLORS.navy,
-    backgroundColor: COLORS.white,
+    paddingHorizontal: 14, paddingVertical: 8,
+    borderRadius: 20, borderWidth: 1, borderColor: '#D0D0D0',
+    backgroundColor: COLORS.lightGray,
   },
-  saveBtnText: { fontSize: 11, fontWeight: '700', color: COLORS.navy },
+  saveBtnText: { fontSize: 11, fontWeight: '700', color: COLORS.darkText },
   forwardBtn: {
-    paddingHorizontal: 12, paddingVertical: 7,
-    borderRadius: 8, backgroundColor: COLORS.navy,
+    paddingHorizontal: 14, paddingVertical: 8,
+    borderRadius: 20, backgroundColor: COLORS.navy,
   },
   forwardBtnText: { fontSize: 11, fontWeight: '700', color: COLORS.white },
 
@@ -674,32 +662,33 @@ const S = StyleSheet.create({
   stepWrap: {
     marginBottom: 16,
     backgroundColor: COLORS.white, borderRadius: 12,
-    paddingHorizontal: 16, paddingVertical: 14,
+    paddingHorizontal: isMobile ? 8 : 16, paddingVertical: 14,
     borderWidth: 1, borderColor: COLORS.lightGray, elevation: 1,
   },
   stepRow:     { flexDirection: 'row', alignItems: 'center' },
   stepItem:    { flexDirection: 'row', alignItems: 'center', flex: 1 },
-  stepLabelRow:{ flexDirection: 'row', alignItems: 'center', gap: 6 },
+  stepLabelRow:{ flexDirection: 'row', alignItems: 'center', gap: isMobile ? 4 : 6 },
   stepCircle:  {
-    width: 22, height: 22, borderRadius: 11,
+    width: isMobile ? 20 : 22, height: isMobile ? 20 : 22, borderRadius: isMobile ? 10 : 11,
     borderWidth: 2, borderColor: COLORS.midGray,
     backgroundColor: COLORS.white, alignItems: 'center', justifyContent: 'center',
   },
   stepCircleActive:  { borderColor: COLORS.navy, backgroundColor: COLORS.navy },
   stepCircleComplete:{ borderColor: COLORS.navy, backgroundColor: COLORS.navy },
-  stepNum:        { fontSize: 10, fontWeight: '700', color: COLORS.midGray },
+  stepNum:        { fontSize: isMobile ? 9 : 10, fontWeight: '700', color: COLORS.midGray },
   stepNumActive:  { color: COLORS.white },
-  stepCheckmark:  { fontSize: 10, color: COLORS.white, fontWeight: '900' },
-  stepLabel:      { fontSize: isMobile ? 9 : 11, color: COLORS.midGray, fontWeight: '500' },
+  stepCheckmark:  { fontSize: isMobile ? 9 : 10, color: COLORS.white, fontWeight: '900' },
+  stepLabel:      { fontSize: isMobile ? 8 : 11, color: COLORS.midGray, fontWeight: '500' },
   stepLabelActive:   { color: COLORS.navy, fontWeight: '800' },
   stepLabelComplete: { color: COLORS.navy, fontWeight: '700' },
-  stepLineWrap: { flex: 1, paddingHorizontal: 6 },
+  stepLineWrap: { flex: 1, paddingHorizontal: isMobile ? 3 : 6 },
   stepLine:       { height: 1.5, backgroundColor: COLORS.midGray, flex: 1 },
   stepLineFilled: { backgroundColor: COLORS.navy },
 
   // Next button
   nextBtn: {
-    marginTop: 16, alignSelf: 'flex-end',
+    marginTop: 16,
+    alignSelf: 'flex-end',
     backgroundColor: COLORS.navy,
     borderRadius: 10, paddingHorizontal: 18, paddingVertical: 11,
   },
@@ -708,27 +697,27 @@ const S = StyleSheet.create({
   // Table
   tableContainer: { backgroundColor: COLORS.white, borderRadius: 12, overflow: 'hidden', borderWidth: 1, borderColor: COLORS.lightGray, elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 6 },
   tableHeader:    { flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.white, paddingVertical: 11, paddingHorizontal: 14, borderBottomWidth: 1, borderBottomColor: COLORS.lightGray },
-  tableHeaderText:{ fontSize: isMobile ? 10 : 12, fontWeight: '700', color: COLORS.darkText },
-  tableRow:       { flexDirection: 'row', alignItems: 'center', paddingVertical: 11, paddingHorizontal: 14, borderBottomWidth: 1, borderBottomColor: COLORS.lightGray, backgroundColor: COLORS.white },
+  tableHeaderText:{ fontSize: isMobile ? 10 : 12, fontWeight: '700', color: COLORS.darkText, letterSpacing: 0.2 },
+  tableRow:       { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, paddingHorizontal: 14, borderBottomWidth: 1, borderBottomColor: COLORS.lightGray, backgroundColor: COLORS.white },
   tableRowEven:   { backgroundColor: '#FAFAFA' },
 
   // Step 1 columns
-  colBarangay: { width: isMobile ? 100 : 180, paddingRight: 8 },
+  colBarangay: { width: isMobile ? 75 : 160, paddingRight: 8 },
   colDocument: { flex: 1, paddingRight: 8 },
-  colDateTime: { width: isMobile ? 70 : 110, alignItems: 'flex-end', paddingRight: 8 },
-  colAction:   { width: 52, alignItems: 'center' },
+  colDateTime: { width: isMobile ? 65 : 110, alignItems: 'flex-end', paddingRight: 8 },
+  colAction:   { width: 50, alignItems: 'center' },
 
   // Step 2/3 columns
   colBudget: { flex: 1, alignItems: 'flex-end', paddingRight: 8 },
 
-  cellBarangay: { fontSize: isMobile ? 11 : 13, fontWeight: '600', color: COLORS.darkText },
-  cellDocument: { fontSize: isMobile ? 10 : 12, color: COLORS.subText },
-  cellTime:     { fontSize: 10, color: COLORS.subText, textAlign: 'right' },
-  cellDate:     { fontSize: 10, color: COLORS.subText, textAlign: 'right' },
-  cellBudget:   { fontSize: isMobile ? 11 : 13, color: COLORS.darkText, fontWeight: '500', textAlign: 'right' },
+  cellBarangay: { fontSize: isMobile ? 10 : 12, fontWeight: '600', color: COLORS.darkText },
+  cellDocument: { fontSize: isMobile ? 10 : 11, color: COLORS.subText, lineHeight: 16 },
+  cellTime:     { fontSize: 9, color: COLORS.subText, textAlign: 'right' },
+  cellDate:     { fontSize: 9, color: COLORS.subText, textAlign: 'right' },
+  cellBudget:   { fontSize: isMobile ? 10 : 12, color: COLORS.darkText, fontWeight: '500', textAlign: 'right' },
 
-  viewBtn:     { backgroundColor: COLORS.navy, borderRadius: 6, paddingHorizontal: 10, paddingVertical: 5 },
-  viewBtnText: { fontSize: 10, fontWeight: '700', color: COLORS.white },
+  viewBtn:     { backgroundColor: COLORS.navy, borderRadius: 6, paddingHorizontal: isMobile ? 6 : 10, paddingVertical: 5 },
+  viewBtnText: { fontSize: 9, fontWeight: '700', color: COLORS.white },
 
   emptyState: { alignItems: 'center', paddingVertical: 40 },
   emptyText:  { fontSize: 14, color: COLORS.midGray },
