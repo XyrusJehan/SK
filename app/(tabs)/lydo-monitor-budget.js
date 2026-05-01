@@ -296,17 +296,10 @@ export default function LYDOMonitorBudgetScreen() {
   };
 
   const handleMonitorTabPress = (tab) => {
-    if (tab === 'Budget') {
-      setActiveMonitorTab(tab);
-      setCurrentStep(1);
-      setSearchText('');
-    } else if (tab === 'Report') {
-      router.push('/(tabs)/lydo-monitor-report');
-    } else if (tab === 'Submitted') {
-      router.push('/(tabs)/lydo-monitor-submitted');
-    } else {
-      router.push('/(tabs)/lydo-monitor');
-    }
+    if (tab !== 'Budget') { handleNavPress('Monitor'); return; }
+    setActiveMonitorTab(tab);
+    setCurrentStep(1);
+    setSearchText('');
   };
 
   // Filtered rows (search only on step 1)
