@@ -296,6 +296,8 @@ export default function LYDOMonitorBudgetScreen() {
   };
 
   const handleMonitorTabPress = (tab) => {
+    if (tab === 'Report') { router.push('/(tabs)/lydo-monitor-report'); return; }
+    if (tab === 'Consultation') { router.push('/(tabs)/lydo-monitor'); return; }
     if (tab !== 'Budget') { handleNavPress('Monitor'); return; }
     setActiveMonitorTab(tab);
     setCurrentStep(1);
