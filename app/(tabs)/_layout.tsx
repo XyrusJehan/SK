@@ -11,6 +11,9 @@ export default function TabLayout() {
         <Tabs.Screen name="sk-document" />
         <Tabs.Screen name="sk-document-list" />
         <Tabs.Screen name="lydo-home" />
+        <Tabs.Screen name="lydo-document" />
+        <Tabs.Screen name="lydo-monitor" />
+        <Tabs.Screen name="lydo-monitor-budget" />
       </Tabs>
     </NavProvider>
   );

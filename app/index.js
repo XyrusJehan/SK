@@ -3,9 +3,13 @@ import {
   View, Text, TextInput, TouchableOpacity,
   StyleSheet, SafeAreaView, StatusBar,
   KeyboardAvoidingView, Platform, ScrollView,
+  Dimensions,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuth } from './(tabs)/authContext';
+
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
+const isMobile = SCREEN_WIDTH < 400;
 
 const COLORS = {
   navy: '#1E3A6E',
@@ -42,7 +46,6 @@ export default function LoginScreen() {
     const result = login(email, password);
     if (result.success) {
       setError('');
-      // Redirect based on user role
       if (result.user.role === 'lydo') {
         router.replace('/(tabs)/lydo-home');
       } else {
@@ -109,7 +112,7 @@ export default function LoginScreen() {
                 onBlur={() => setPassFocused(false)}
               />
               <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={styles.eyeBtn}>
-                <Text style={styles.eyeIcon}>{showPassword ? '🙈' : '👁'}</Text>
+                <Text style={styles.eyeIcon}>{showPassword ? '⌣' : '👁'}</Text>
               </TouchableOpacity>
             </View>
 
@@ -165,8 +168,8 @@ const styles = StyleSheet.create({
     maxWidth: 420,
     backgroundColor: COLORS.navy,
     borderRadius: 20,
-    padding: 32,
-    paddingTop: 40,
+    padding: isMobile ? 20 : 32,
+    paddingTop: isMobile ? 24 : 40,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.3,
@@ -175,16 +178,17 @@ const styles = StyleSheet.create({
   },
 
   // Seal
-  sealWrap: { alignItems: 'center', marginBottom: 36 },
+  sealWrap: { alignItems: 'center', marginBottom: isMobile ? 24 : 36 },
   sealPlaceholder: {
-    width: 96, height: 96, borderRadius: 48,
+    width: isMobile ? 72 : 96, height: isMobile ? 72 : 96,
+    borderRadius: isMobile ? 36 : 48,
     backgroundColor: COLORS.navyLight,
     borderWidth: 3, borderColor: COLORS.gold,
     alignItems: 'center', justifyContent: 'center',
   },
   sealInner: { alignItems: 'center' },
-  sealText: { fontSize: 22, fontWeight: '900', color: COLORS.white },
-  sealSub: { fontSize: 9, fontWeight: '700', color: COLORS.gold, letterSpacing: 2 },
+  sealText: { fontSize: isMobile ? 18 : 22, fontWeight: '900', color: COLORS.white },
+  sealSub: { fontSize: isMobile ? 7 : 9, fontWeight: '700', color: COLORS.gold, letterSpacing: 2 },
 
   // Labels & Inputs
   label: {

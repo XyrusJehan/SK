@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -9,7 +9,14 @@ import {
   SafeAreaView,
   StatusBar,
   Alert,
+  Dimensions,
 } from 'react-native';
+import { useRouter } from 'expo-router';
+import { useNav } from './navContext';
+import { useAuth } from './authContext';
+
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
+const isMobile = SCREEN_WIDTH < 768;
 
 // ─── MOCK DATA ────────────────────────────────────────────────────────────────
 const TASKS = [
@@ -33,10 +40,11 @@ const STATS = [
 ];
 
 // ─── ICON COMPONENTS ──────────────────────────────────────────────────────────
-const BellIcon = () => (
+const BellIcon = ({ hasNotif }) => (
   <View style={styles.bellWrapper}>
     <View style={styles.bellBody} />
     <View style={styles.bellBottom} />
+    {hasNotif && <View style={styles.bellDot} />}
   </View>
 );
 
@@ -52,7 +60,15 @@ const ActivityDot = ({ type }) => {
   return <View style={[styles.activityDot, { backgroundColor: colors[type] ?? COLORS.midGray }]} />;
 };
 
-// ─── COLORS — identical to SK HomeScreen ─────────────────────────────────────
+const MenuIcon = () => (
+  <View style={styles.menuIconContainer}>
+    <View style={styles.menuLine} />
+    <View style={styles.menuLine} />
+    <View style={styles.menuLine} />
+  </View>
+);
+
+// ─── COLORS ───────────────────────────────────────────────────────────────────
 const COLORS = {
   maroon:     '#8B0000',
   maroonDark: '#6B0000',
@@ -70,11 +86,18 @@ const COLORS = {
 
 // ─── MAIN COMPONENT ───────────────────────────────────────────────────────────
 export default function LYDOHomeScreen({ navigation }) {
+  const router = useRouter();
+  const { activeTab, setActiveTab } = useNav();
+  const { logout } = useAuth();
   const [searchText, setSearchText]   = useState('');
-  const [activeTab, setActiveTab]     = useState('Home');
+
+  useEffect(() => {
+    setActiveTab('Home');
+  }, []);
   const [sortBy, setSortBy]           = useState('Newest');
   const [notifCount]                  = useState(3);
   const [pendingCount, setPendingCount] = useState(14);
+  const [sidebarVisible, setSidebarVisible] = useState(false);
 
   const today = new Date().toLocaleDateString('en-US', {
     month: 'long', day: 'numeric', year: 'numeric',
@@ -87,9 +110,12 @@ export default function LYDOHomeScreen({ navigation }) {
 
   const handleNav = (tab) => {
     setActiveTab(tab);
-    if (navigation) {
-      if (tab === 'Documents') navigation.navigate('Documents');
-      else if (tab === 'Barangay') navigation.navigate('Barangay');
+    setSidebarVisible(false);
+    if (tab === 'Documents') {
+      router.push('/(tabs)/lydo-document');
+    }
+    else if (tab === 'Monitor') {
+      router.push('/(tabs)/lydo-monitor');
     }
   };
 
@@ -98,63 +124,105 @@ export default function LYDOHomeScreen({ navigation }) {
     if (pendingCount > 0) setPendingCount((p) => p - 1);
   };
 
+  const handleLogout = () => {
+    logout();
+    router.replace('/');
+  };
+
+  const renderSidebar = () => (
+    <View style={styles.sidebar}>
+      <View style={styles.logoPill}>
+        <View style={styles.logoCircle}>
+          <Text style={styles.logoText}>LYDO</Text>
+        </View>
+      </View>
+      <View style={styles.sidebarSpacer} />
+      {['Home', 'Documents', 'Monitor'].map((tab) => {
+        const active = activeTab === tab;
+        return (
+          <TouchableOpacity
+            key={tab}
+            style={[styles.navItem, active && styles.navItemActive]}
+            onPress={() => handleNav(tab)}
+            activeOpacity={0.8}
+          >
+            <Text style={[styles.navLabel, active && styles.navLabelActive]}>
+              {tab}
+            </Text>
+          </TouchableOpacity>
+        );
+      })}
+      <View style={styles.sidebarSpacer} />
+      <TouchableOpacity
+        style={styles.logoutBtn}
+        onPress={handleLogout}
+        activeOpacity={0.8}
+      >
+        <Text style={styles.logoutText}>Logout</Text>
+      </TouchableOpacity>
+    </View>
+  );
+
   return (
     <SafeAreaView style={styles.safe}>
       <StatusBar barStyle="light-content" backgroundColor={COLORS.maroon} />
 
       <View style={styles.layout}>
+        {/* Mobile: Sidebar as overlay */}
+        {isMobile && sidebarVisible && (
+          <TouchableOpacity
+            style={styles.sidebarOverlay}
+            activeOpacity={1}
+            onPress={() => setSidebarVisible(false)}
+          />
+        )}
 
-        {/* ── SIDEBAR ── */}
-        <View style={styles.sidebar}>
-          <View style={styles.logoPill}>
-            <View style={styles.logoCircle}>
-              <Text style={styles.logoText}>SKF</Text>
-            </View>
-          </View>
-
-          <View style={styles.sidebarSpacer} />
-
-          {['Home', 'Documents', 'Barangay'].map((tab) => {
-            const active = activeTab === tab;
-            return (
-              <TouchableOpacity
-                key={tab}
-                style={[styles.navItem, active && styles.navItemActive]}
-                onPress={() => handleNav(tab)}
-                activeOpacity={0.8}
-              >
-                <Text style={[styles.navLabel, active && styles.navLabelActive]}>
-                  {tab}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </View>
+        {isMobile ? (
+          sidebarVisible && renderSidebar()
+        ) : (
+          renderSidebar()
+        )}
 
         {/* ── MAIN CONTENT ── */}
         <ScrollView
-          style={styles.main}
+          style={[styles.main, isMobile && styles.mainMobile]}
           contentContainerStyle={styles.mainContent}
           showsVerticalScrollIndicator={false}
         >
+          {/* Mobile Header */}
+          {isMobile && (
+            <View style={styles.mobileHeader}>
+              <TouchableOpacity
+                style={styles.menuBtn}
+                onPress={() => setSidebarVisible(!sidebarVisible)}
+              >
+                <MenuIcon />
+              </TouchableOpacity>
+              <Text style={styles.mobileTitle}>LYDO Home</Text>
+              <View style={{ width: 40 }} />
+            </View>
+          )}
+
           {/* Header */}
           <View style={styles.header}>
             <View>
               <Text style={styles.headerSub}>SANGGUNIANG KABATAAN FEDERATION</Text>
               <Text style={styles.headerTitle}>RIZAL, LAGUNA</Text>
             </View>
-            <TouchableOpacity style={styles.bellBtn} activeOpacity={0.7}>
-              <BellIcon />
-              {notifCount > 0 && (
-                <View style={styles.notifBadge}>
-                  <Text style={styles.notifBadgeText}>{notifCount}</Text>
-                </View>
-              )}
-            </TouchableOpacity>
+            {!isMobile && (
+              <TouchableOpacity style={styles.bellBtn} activeOpacity={0.7}>
+                <BellIcon hasNotif={notifCount > 0} />
+                {notifCount > 0 && (
+                  <View style={styles.notifBadge}>
+                    <Text style={styles.notifBadgeText}>{notifCount}</Text>
+                  </View>
+                )}
+              </TouchableOpacity>
+            )}
           </View>
 
           {/* ── STAT CARDS ── */}
-          <View style={styles.statsRow}>
+          <View style={isMobile ? styles.statsColumn : styles.statsRow}>
             {STATS.map((s) => (
               <View key={s.id} style={styles.statCard}>
                 <Text style={styles.statLabel}>{s.label}</Text>
@@ -213,11 +281,6 @@ export default function LYDOHomeScreen({ navigation }) {
                 </TouchableOpacity>
               </View>
             ))}
-
-            {/* Empty placeholder rows */}
-            {[0, 1, 2].map((i) => (
-              <View key={`empty-${i}`} style={[styles.tableRow, { minHeight: 38 }]} />
-            ))}
           </View>
 
           {/* ── RECENT ACTIVITY CARD ── */}
@@ -267,22 +330,27 @@ export default function LYDOHomeScreen({ navigation }) {
               </View>
             ))}
           </View>
-
         </ScrollView>
       </View>
     </SafeAreaView>
   );
 }
 
-// ─── STYLES — same as SK HomeScreen ──────────────────────────────────────────
+// ─── STYLES ───────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: '#133E75' },
   layout: { flex: 1, flexDirection: 'row' },
 
-  // Sidebar
   sidebar: {
     width: 250, backgroundColor: '#133E75',
     alignItems: 'center', paddingTop: 20, paddingBottom: 24, paddingHorizontal: 10,
+    zIndex: 10,
+  },
+  sidebarOverlay: {
+    position: 'absolute',
+    left: 0, top: 0, bottom: 0, right: 0,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    zIndex: 5,
   },
   logoPill: {
     width: 70, height: 70, borderRadius: 35,
@@ -294,9 +362,26 @@ const styles = StyleSheet.create({
     width: 52, height: 52, borderRadius: 26,
     backgroundColor: COLORS.gold, alignItems: 'center', justifyContent: 'center',
   },
-  logoText: { fontSize: 15, fontWeight: '900', color: COLORS.maroon, letterSpacing: 0.5 },
+  logoText: { fontSize: 15, fontWeight: '900', color: '#133E75', letterSpacing: 0.5 },
   sidebarSpacer: { height: 28 },
- navItem: {
+  logoutBtn: {
+    width: '100%',
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderRadius: 24,
+    marginTop: 8,
+    alignItems: 'center',
+    borderWidth: 1.5,
+    borderColor: COLORS.white,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+  },
+  logoutText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#ffffff',
+    letterSpacing: 0.3,
+  },
+  navItem: {
     width: '100%',
     paddingVertical: 12,
     paddingHorizontal: 12,
@@ -306,7 +391,6 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderColor: COLORS.white,
     backgroundColor: '#133E75',
-    color: 'rgba(0, 0, 0, 0.7)',
   },
   navItemActive: {
     backgroundColor: '#ffffff',
@@ -316,19 +400,40 @@ const styles = StyleSheet.create({
   navLabel: {
     fontSize: 13,
     fontWeight: '600',
-    color: 'rgba(0, 0, 0, 0.7)',
+    color: '#ffffff',
     letterSpacing: 0.3,
   },
   navLabelActive: {
-    color: COLORS.black,
+    color: '#000000',
     fontWeight: '800',
-    
   },
-  // Main
+
   main: { flex: 1, backgroundColor: COLORS.offWhite, borderTopLeftRadius: 20 },
+  mainMobile: { borderTopLeftRadius: 0 },
   mainContent: { padding: 20 },
 
-  // Header
+  // Mobile Header
+  mobileHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 16,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.lightGray,
+  },
+  menuBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: COLORS.cardBg,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  menuIconContainer: { width: 20, height: 16, justifyContent: 'space-between' },
+  menuLine: { width: 20, height: 2, backgroundColor: COLORS.maroon, borderRadius: 1 },
+  mobileTitle: { fontSize: 18, fontWeight: '800', color: COLORS.darkText },
+
   header: {
     flexDirection: 'row', alignItems: 'flex-start',
     justifyContent: 'space-between', marginBottom: 16,
@@ -338,31 +443,16 @@ const styles = StyleSheet.create({
     letterSpacing: 2, marginBottom: 2, textTransform: 'uppercase',
   },
   headerTitle: { fontSize: 20, fontWeight: '900', color: COLORS.darkText, letterSpacing: 0.5 },
-  bellBtn: {
-    width: 40, height: 40, borderRadius: 20, backgroundColor: COLORS.cardBg,
-    alignItems: 'center', justifyContent: 'center',
-    shadowColor: 'rgba(0,0,0,0.08)', shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 1, shadowRadius: 6, elevation: 3,
-  },
   bellWrapper: { width: 20, height: 22, alignItems: 'center' },
-  bellBody: {
-    width: 14, height: 12, borderRadius: 7,
-    borderWidth: 2, borderColor: COLORS.maroon, marginTop: 4,
-  },
-  bellBottom: {
-    width: 8, height: 4, borderBottomLeftRadius: 4, borderBottomRightRadius: 4,
-    backgroundColor: COLORS.maroon, marginTop: -1,
-  },
-  notifBadge: {
-    position: 'absolute', top: -2, right: -2,
-    width: 16, height: 16, borderRadius: 8,
-    backgroundColor: COLORS.gold, alignItems: 'center', justifyContent: 'center',
-    borderWidth: 1.5, borderColor: COLORS.white,
-  },
+  bellBody: { width: 14, height: 12, borderRadius: 7, borderWidth: 2, borderColor: COLORS.maroon, marginTop: 4 },
+  bellBottom: { width: 8, height: 4, borderBottomLeftRadius: 4, borderBottomRightRadius: 4, backgroundColor: COLORS.maroon, marginTop: -1 },
+  bellDot: { position: 'absolute', top: 0, right: 1, width: 7, height: 7, borderRadius: 4, backgroundColor: COLORS.gold, borderWidth: 1.5, borderColor: COLORS.cardBg },
+  notifBadge: { position: 'absolute', top: -2, right: -2, width: 16, height: 16, borderRadius: 8, backgroundColor: COLORS.gold, alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: COLORS.white },
   notifBadgeText: { fontSize: 8, fontWeight: '900', color: COLORS.maroon },
 
   // Stat Cards
   statsRow: { flexDirection: 'row', gap: 10, marginBottom: 8 },
+  statsColumn: { flexDirection: 'column', gap: 10, marginBottom: 8 },
   statCard: {
     flex: 1, backgroundColor: '#133E75',
     borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12,
@@ -376,10 +466,9 @@ const styles = StyleSheet.create({
     textAlign: 'right', marginBottom: 14,
   },
 
-  // Search
   searchBar: {
     flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.cardBg,
-    borderRadius: 14, paddingHorizontal: 14, paddingVertical: 10, marginBottom: 20,
+    borderRadius: 14, paddingHorizontal: isMobile ? 10 : 14, paddingVertical: 10, marginBottom: 20,
     borderWidth: 1.5, borderColor: COLORS.maroon + '33',
     shadowColor: 'rgba(0,0,0,0.08)', shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 1, shadowRadius: 6, elevation: 2,
@@ -432,8 +521,8 @@ const styles = StyleSheet.create({
   taskDescRow: { flex: 1, flexDirection: 'row', alignItems: 'flex-start', gap: 8, paddingRight: 8 },
   urgentDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: COLORS.maroon, marginTop: 5 },
   taskDesc: { flex: 1, fontSize: 13, color: COLORS.darkText, lineHeight: 19 },
-  reminderBtn: { width: 100, paddingVertical: 7, borderRadius: 20, alignItems: 'center', backgroundColor: COLORS.maroon },
-  actionBtnText: { fontSize: 12, fontWeight: '700', color: COLORS.white, letterSpacing: 0.3 },
+  reminderBtn: { width: isMobile ? 90 : 100, paddingVertical: 7, borderRadius: 20, alignItems: 'center', backgroundColor: COLORS.maroon },
+  actionBtnText: { fontSize: 11, fontWeight: '700', color: COLORS.white, letterSpacing: 0.3 },
 
   // Sort
   sortRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
