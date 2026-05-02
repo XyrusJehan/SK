@@ -152,7 +152,7 @@ export default function LYDOHomeScreen({ navigation }) {
           </TouchableOpacity>
         );
       })}
-      <View style={styles.sidebarSpacer} />
+      <View style={ { flex: 1 } } />
       <TouchableOpacity
         style={styles.logoutBtn}
         onPress={handleLogout}

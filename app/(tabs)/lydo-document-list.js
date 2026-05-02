@@ -393,7 +393,7 @@ export default function LYDODocumentListScreen({ navigation }) {
           </TouchableOpacity>
         );
       })}
-      <View style={{ height: 28 }} />
+      <View style={{ flex: 1 }} />
       <TouchableOpacity
         style={styles.logoutBtn}
         onPress={handleLogout}

@@ -454,7 +454,6 @@ export default function LYDOMonitorBudgetScreen() {
             </TouchableOpacity>
           );
         })}
-        <View style={S.monitorTabFiller} />
       </View>
 
       {/* ── Top Control Row: Search (step 1) + Section Title + Step 3 actions ── */}
@@ -531,28 +530,22 @@ export default function LYDOMonitorBudgetScreen() {
     <SafeAreaView style={S.safe}>
       <StatusBar barStyle="light-content" backgroundColor={COLORS.navy} />
 
-      {/* Mobile Sidebar Modal */}
-      <Modal
-        visible={isMobile && sidebarVisible}
-        animationType="slide"
-        transparent
-        onRequestClose={() => setSidebarVisible(false)}
-      >
-        <View style={S.mobileSidebarContainer}>
+      <View style={S.layout}>
+        {/* Mobile: Sidebar as overlay */}
+        {isMobile && sidebarVisible && (
           <TouchableOpacity
             style={S.sidebarOverlay}
             activeOpacity={1}
             onPress={() => setSidebarVisible(false)}
           />
-          <View style={S.mobileSidebar}>
-            {renderSidebar()}
-          </View>
-        </View>
-      </Modal>
+        )}
 
-      <View style={S.layout}>
-        {/* Desktop sidebar — always visible */}
-        {!isMobile && renderSidebar()}
+        {isMobile ? (
+          sidebarVisible && renderSidebar()
+        ) : (
+          renderSidebar()
+        )}
+
         {renderContent()}
       </View>
 
@@ -581,8 +574,6 @@ const S = StyleSheet.create({
     position: 'absolute', left: 0, top: 0, bottom: 0, right: 0,
     backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 5,
   },
-  mobileSidebarContainer: { flex: 1 },
-  mobileSidebar: { position: 'absolute', left: 0, top: 0, bottom: 0, width: '75%', maxWidth: 280, zIndex: 10 },
   logoPill: {
     width: 70, height: 70, borderRadius: 35,
     backgroundColor: 'rgba(255,255,255,0.15)',
@@ -632,12 +623,11 @@ const S = StyleSheet.create({
   notifBadgeText:{ fontSize: 8, fontWeight: '900', color: COLORS.navy },
 
   // Monitor Tabs
-  monitorTabBar: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: COLORS.lightGray, marginBottom: 14, overflowX: 'auto', overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.30, shadowRadius: 3, elevation: 6,},
-  monitorTab: { flex: 'auto', paddingHorizontal: isMobile ? 8 : 175, backgroundColor: COLORS.navy, paddingVertical: 10, borderBottomWidth: 0, borderBottomColor: 'transparent', marginBottom: -1, borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)', alignItems: 'center' },
+  monitorTabBar: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: COLORS.lightGray, marginBottom: 14, overflowX: 'hidden', overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.30, shadowRadius: 3, elevation: 6,},
+  monitorTab: { flex: 1, paddingHorizontal: isMobile ? 8 : 40, backgroundColor: COLORS.navy, paddingVertical: 10, borderBottomWidth: 0, borderBottomColor: 'transparent', marginBottom: -1, borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)', alignItems: 'center' },
   monitorTabActive: { backgroundColor: COLORS.gold, borderRadius: 4, borderBottomColor: COLORS.gold, borderColor: COLORS.gold, shadowColor: COLORS.gold, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.4, shadowRadius: 4, elevation: 3 },
   monitorTabText: { fontSize: isMobile ? 10 : 13, fontWeight: '600', color: COLORS.white },
   monitorTabTextActive: { color: COLORS.darkText, fontWeight: '800' },
-  monitorTabFiller: { flex: 1 },
 
   // Top control row
   topControlRow: {
