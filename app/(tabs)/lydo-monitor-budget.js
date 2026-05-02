@@ -454,7 +454,6 @@ export default function LYDOMonitorBudgetScreen() {
             </TouchableOpacity>
           );
         })}
-        <View style={S.monitorTabFiller} />
       </View>
 
       {/* ── Top Control Row: Search (step 1) + Section Title + Step 3 actions ── */}
@@ -625,11 +624,10 @@ const S = StyleSheet.create({
 
   // Monitor Tabs
   monitorTabBar: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: COLORS.lightGray, marginBottom: 14, overflowX: 'hidden', overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.30, shadowRadius: 3, elevation: 6,},
-  monitorTab: { flex: 'auto', paddingHorizontal: isMobile ? 8 : 175, backgroundColor: COLORS.navy, paddingVertical: 10, borderBottomWidth: 0, borderBottomColor: 'transparent', marginBottom: -1, borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)', alignItems: 'center' },
+  monitorTab: { flex: 1, paddingHorizontal: isMobile ? 8 : 40, backgroundColor: COLORS.navy, paddingVertical: 10, borderBottomWidth: 0, borderBottomColor: 'transparent', marginBottom: -1, borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)', alignItems: 'center' },
   monitorTabActive: { backgroundColor: COLORS.gold, borderRadius: 4, borderBottomColor: COLORS.gold, borderColor: COLORS.gold, shadowColor: COLORS.gold, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.4, shadowRadius: 4, elevation: 3 },
   monitorTabText: { fontSize: isMobile ? 10 : 13, fontWeight: '600', color: COLORS.white },
   monitorTabTextActive: { color: COLORS.darkText, fontWeight: '800' },
-  monitorTabFiller: { flex: 1 },
 
   // Top control row
   topControlRow: {
