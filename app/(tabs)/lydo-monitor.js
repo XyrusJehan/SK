@@ -738,12 +738,8 @@ export default function LYDOMonitorScreen() {
           </TouchableOpacity>
         );
       })}
-      <View style={{ height: 28 }} />
-      <TouchableOpacity
-        style={styles.logoutBtn}
-        onPress={handleLogout}
-        activeOpacity={0.8}
-      >
+      <View style={{ flex: 1 }} />
+      <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout} activeOpacity={0.8}>
         <Text style={styles.logoutText}>Logout</Text>
       </TouchableOpacity>
     </View>
