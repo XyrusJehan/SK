@@ -244,15 +244,16 @@ const BarangayGroup = ({ group, index }) => {
         activeOpacity={0.75}
       >
         <View style={styles.colBarangay}>
-          <Text style={styles.barangayHeaderText}>{group.barangay}</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            <Text style={styles.barangayHeaderText}>{group.barangay}</Text>
+            <Text style={styles.chevron}>∨</Text>
+          </View>
           <Text style={styles.expandedLabel}>{expanded ? '(Expanded)' : '(Collapsed)'}</Text>
         </View>
         <View style={styles.colDocument} />
         <View style={styles.colDeadline} />
         <View style={styles.colDateTime} />
-        <View style={styles.colStatus}>
-          <Text style={styles.chevron}>{expanded ? '∧' : '∨'}</Text>
-        </View>
+        <View style={styles.colStatus} />
       </TouchableOpacity>
 
       {/* Expanded doc rows */}
@@ -761,10 +762,10 @@ const styles = StyleSheet.create({
   notifBadgeText: { fontSize: 8, fontWeight: '900', color: COLORS.navy },
 
   // ── Monitor tabs ─────────────────────────────────────────────────────────────
-  monitorTabBar:        { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: COLORS.lightGray, marginBottom: 14 },
-  monitorTab:           { paddingHorizontal: isMobile ? 8 : 18, paddingVertical: 10, borderBottomWidth: 2, borderBottomColor: 'transparent', marginBottom: -1 },
-  monitorTabActive:     { backgroundColor: COLORS.gold, borderRadius: 4, borderBottomColor: COLORS.gold },
-  monitorTabText:       { fontSize: isMobile ? 10 : 13, fontWeight: '600', color: COLORS.subText },
+ monitorTabBar: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: COLORS.lightGray, marginBottom: 14, overflowX: 'auto', overflow: 'hidden', },
+  monitorTab: { paddingHorizontal: isMobile ? 8 : 18, backgroundColor: COLORS.navy, paddingVertical: 10, borderBottomWidth: 2, borderBottomColor: 'transparent', marginBottom: -1 },
+  monitorTabActive: { backgroundColor: COLORS.gold, borderRadius: 4, borderBottomColor: COLORS.gold },
+  monitorTabText: { fontSize: isMobile ? 10 : 13, fontWeight: '600', color: COLORS.white },
   monitorTabTextActive: { color: COLORS.darkText, fontWeight: '800' },
   monitorTabFiller:     { flex: 1 },
 
@@ -793,11 +794,11 @@ const styles = StyleSheet.create({
   indentedRow:     { paddingLeft: 14 },
 
   // Barangay group header row (consolidated view)
-  barangayHeaderRow:    { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, paddingHorizontal: 14, borderBottomWidth: 1, borderBottomColor: COLORS.lightGray, backgroundColor: '#EEF3FB' },
-  barangayHeaderRowAlt: { backgroundColor: '#E8F0FA' },
-  barangayHeaderText:   { fontSize: isMobile ? 11 : 13, fontWeight: '800', color: COLORS.navy },
-  expandedLabel:        { fontSize: 9, color: COLORS.subText, fontStyle: 'italic', marginTop: 1 },
-  chevron:              { fontSize: 12, color: COLORS.navy, fontWeight: '700' },
+  barangayHeaderRow:    { flexDirection: 'row', alignItems: 'flex-start', paddingVertical: 10, paddingHorizontal: 14, borderBottomWidth: 1, borderBottomColor: COLORS.lightGray, backgroundColor: COLORS.white },
+  barangayHeaderRowAlt: { backgroundColor: '#FAFAFA' },
+  barangayHeaderText:   { fontSize: isMobile ? 11 : 13, fontWeight: '800', color: COLORS.darkText },
+  expandedLabel:        { fontSize: 9, color: COLORS.subText, fontStyle: 'italic', marginTop: 2 },
+  chevron:              { fontSize: isMobile ? 11 : 13, color: COLORS.darkText, fontWeight: '700', marginLeft: 6 },
 
   colBarangay: { width: isMobile ? 80 : 150, paddingRight: 8 },
   colDocument: { flex: 1, paddingRight: 8 },

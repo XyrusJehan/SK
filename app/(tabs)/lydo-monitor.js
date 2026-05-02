@@ -48,9 +48,9 @@ const DOC_SECTIONS = [
 
 const TABLE_DATA = {
   Consultation: [
-    { id: '1', barangay: 'Barangay San Jose',     document: 'Comprehensive Barangay Youth Development Program', time: '3:00 PM',  feedbackDate: '1/02/2026', approvedDate: null },
-    { id: '2', barangay: 'Barangay San Roque',    document: 'Comprehensive Barangay Youth Development Program', time: '3:00 PM',  feedbackDate: '1/02/2026', approvedDate: '1/05/2026' },
-    { id: '3', barangay: 'Barangay Santo Cristo', document: 'Comprehensive Barangay Youth Development Program', time: '3:00 PM',  feedbackDate: '1/02/2026', approvedDate: null },
+    { id: '1', barangay: 'Barangay San Jose',     document: 'Comprehensive Barangay Youth Development Program', time: '3:00 PM',  feedbackDate: '1/02/2026', submittedDate: '1/02/2026', approvedDate: null,        status: 'returned',    commentCount: 5 },
+    { id: '2', barangay: 'Barangay San Roque',    document: 'Comprehensive Barangay Youth Development Program', time: '3:00 PM',  feedbackDate: '1/02/2026', submittedDate: '1/02/2026', approvedDate: '1/05/2026', status: 'awaiting',    commentCount: 5 },
+    { id: '3', barangay: 'Barangay Santo Cristo', document: 'Comprehensive Barangay Youth Development Program', time: '3:00 PM',  feedbackDate: '1/02/2026', submittedDate: '1/02/2026', approvedDate: null,        status: 'resubmitted', commentCount: 5 },
   ],
   Budget: [
     { id: '1', barangay: 'Barangay Antipolo',   document: 'Annual Budget Proposal 2026',    time: '9:00 AM',  feedbackDate: '1/05/2026', approvedDate: '1/08/2026' },
@@ -552,9 +552,101 @@ const cmStyles = StyleSheet.create({
   addTxt:      { fontSize: 12, fontWeight: '700', color: COLORS.white },
 });
 
+// ─── DROPDOWN (ported from lydo-monitor-report) ───────────────────────────────
+const Dropdown = ({ label, value, options, onSelect }) => {
+  const [open, setOpen] = useState(false);
+  return (
+    <View style={DD.wrap}>
+      <TouchableOpacity
+        style={DD.btn}
+        onPress={() => setOpen(o => !o)}
+        activeOpacity={0.8}
+      >
+        <Text style={DD.label}>{label}</Text>
+        <Text style={DD.value}>{value}</Text>
+        <Text style={DD.arrow}>▾</Text>
+      </TouchableOpacity>
+      {open && (
+        <View style={DD.menu}>
+          {options.map(opt => (
+            <TouchableOpacity
+              key={opt}
+              style={[DD.item, opt === value && DD.itemActive]}
+              onPress={() => { onSelect(opt); setOpen(false); }}
+              activeOpacity={0.75}
+            >
+              <Text style={[DD.itemText, opt === value && DD.itemTextActive]}>{opt}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      )}
+    </View>
+  );
+};
+
+const DD = StyleSheet.create({
+  wrap:           { position: 'relative', zIndex: 100 },
+  btn:            { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: COLORS.white, borderRadius: 8, borderWidth: 1, borderColor: COLORS.lightGray, paddingHorizontal: 10, paddingVertical: 7 },
+  label:          { fontSize: 10, color: COLORS.subText, fontWeight: '600' },
+  value:          { fontSize: 11, fontWeight: '700', color: COLORS.darkText },
+  arrow:          { fontSize: 9, color: COLORS.subText, marginLeft: 2 },
+  menu:           { position: 'absolute', top: 36, left: 0, backgroundColor: COLORS.white, borderRadius: 8, borderWidth: 1, borderColor: COLORS.lightGray, minWidth: 110, elevation: 8, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.12, shadowRadius: 8, zIndex: 200 },
+  item:           { paddingHorizontal: 14, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: COLORS.lightGray },
+  itemActive:     { backgroundColor: COLORS.offWhite },
+  itemText:       { fontSize: 12, color: COLORS.darkText },
+  itemTextActive: { fontWeight: '700', color: COLORS.navy },
+});
+const STATUS_CONFIG = {
+  returned:    { dot: '#E53E3E', label: 'Returned for revision' },
+  awaiting:    { dot: '#E8C547', label: 'Awaiting Resubmission' },
+  resubmitted: { dot: '#38A169', label: 'Resubmitted' },
+  approved:    { dot: '#1E4D8C', label: 'Approved' },
+};
+
 // ─── TABLE ROW ────────────────────────────────────────────────────────────────
 const TableRow = ({ item, isEven, viewFilter, onView }) => {
-  const dateVal = viewFilter === 'approved' ? item.approvedDate : item.feedbackDate;
+  const statusCfg = STATUS_CONFIG[item.status] ?? { dot: COLORS.midGray, label: item.status ?? '—' };
+
+  if (viewFilter === 'submitted') {
+    return (
+      <View style={[styles.tableRow, isEven && styles.tableRowEven]}>
+        <View style={styles.colBarangaySubmitted}>
+          <Text style={styles.cellBarangay}>{item.barangay}</Text>
+        </View>
+        <View style={styles.colDocumentSubmitted}>
+          <Text style={styles.cellDocument} numberOfLines={isMobile ? 2 : 1}>{item.document}</Text>
+        </View>
+        <View style={styles.colDateTimeSubmitted}>
+          <Text style={styles.cellTime}>{item.time}</Text>
+          <Text style={styles.cellDate}>{item.submittedDate ?? item.feedbackDate ?? '—'}</Text>
+        </View>
+        <View style={styles.colActionSubmitted}>
+          <TouchableOpacity style={styles.viewBtn} onPress={() => onView(item)} activeOpacity={0.75}>
+            <Text style={styles.viewBtnText}>View</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
+
+  if (viewFilter === 'approved') {
+    return (
+      <View style={[styles.tableRow, isEven && styles.tableRowEven]}>
+        <View style={styles.colBarangayApproved}>
+          <Text style={styles.cellBarangay}>{item.barangay}</Text>
+        </View>
+        <View style={styles.colDocumentApproved}>
+          <Text style={styles.cellDocument} numberOfLines={isMobile ? 2 : 1}>{item.document}</Text>
+        </View>
+        <View style={styles.colDateTimeApproved}>
+          <Text style={styles.cellTime}>{item.time}</Text>
+          <Text style={styles.cellDate}>{item.approvedDate ?? '—'}</Text>
+        </View>
+      </View>
+    );
+  }
+
+  // 'revision' view
   return (
     <View style={[styles.tableRow, isEven && styles.tableRowEven]}>
       <View style={styles.colBarangay}>
@@ -563,13 +655,21 @@ const TableRow = ({ item, isEven, viewFilter, onView }) => {
       <View style={styles.colDocument}>
         <Text style={styles.cellDocument} numberOfLines={isMobile ? 2 : 1}>{item.document}</Text>
       </View>
+      <View style={styles.colStatus}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+          <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: statusCfg.dot }} />
+          <Text style={styles.cellStatus} numberOfLines={2}>{statusCfg.label}</Text>
+        </View>
+      </View>
       <View style={styles.colDateTime}>
         <Text style={styles.cellTime}>{item.time}</Text>
-        <Text style={styles.cellDate}>{dateVal ?? '—'}</Text>
+        <Text style={styles.cellDate}>{item.feedbackDate ?? '—'}</Text>
       </View>
       <View style={styles.colAction}>
-        <TouchableOpacity style={styles.viewBtn} onPress={() => onView(item)} activeOpacity={0.75}>
-          <Text style={styles.viewBtnText}>View</Text>
+        <TouchableOpacity onPress={() => onView(item)} activeOpacity={0.75}>
+          <Text style={styles.viewCommentsLink}>
+            View Comments{item.commentCount != null ? ` (${item.commentCount})` : ''}
+          </Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -583,8 +683,10 @@ export default function LYDOMonitorScreen() {
   const { logout } = useAuth();
 
   const [activeMonitorTab, setActiveMonitorTab] = useState('Consultation');
-  const [viewFilter, setViewFilter]             = useState('revision');
+  const [viewFilter, setViewFilter]             = useState('submitted');
   const [searchText, setSearchText]             = useState('');
+  const [barangayFilter, setBarangayFilter]         = useState('');
+  const [documentFilter, setDocumentFilter]         = useState('');
   const [notifCount]                            = useState(2);
   const [sidebarVisible, setSidebarVisible]     = useState(false);
 
@@ -605,11 +707,17 @@ export default function LYDOMonitorScreen() {
   };
 
   const rows = (TABLE_DATA[activeMonitorTab] || [])
-    .filter(r => viewFilter === 'approved' ? r.approvedDate !== null : true)
+    .filter(r => {
+      if (viewFilter === 'approved') return r.approvedDate !== null;
+      if (viewFilter === 'revision') return r.status === 'returned' || r.status === 'awaiting';
+      return true;
+    })
     .filter(r =>
       r.barangay.toLowerCase().includes(searchText.toLowerCase()) ||
       r.document.toLowerCase().includes(searchText.toLowerCase())
-    );
+    )
+    .filter(r => barangayFilter === '' || r.barangay.toLowerCase().includes(barangayFilter.toLowerCase()))
+    .filter(r => documentFilter === '' || r.document.toLowerCase().includes(documentFilter.toLowerCase()));
 
   const dateColLabel = viewFilter === 'approved' ? 'Approved Date' : 'Date of Feedback';
 
@@ -659,9 +767,12 @@ export default function LYDOMonitorScreen() {
 
       {!isMobile && (
         <View style={styles.header}>
-          <View>
+          <View style={{ flex: 1 }}>
             <Text style={styles.headerSub}>SANGGUNIANG KABATAAN FEDERATION</Text>
             <Text style={styles.headerTitle}>RIZAL, LAGUNA</Text>
+            <Text style={styles.headerDesc}>
+                SK Full Disclosure Policy Compliance Portal for the Submission and Validation{'\n'}of Statutory Financial Reports and Developmental Plans
+              </Text>
           </View>
           <TouchableOpacity style={styles.bellBtn} activeOpacity={0.7}>
             <BellIcon hasNotif={notifCount > 0} />
@@ -696,29 +807,77 @@ export default function LYDOMonitorScreen() {
             placeholderTextColor={COLORS.midGray} value={searchText} onChangeText={setSearchText} />
         </View>
         <TouchableOpacity
-          style={[styles.filterToggleBtn, viewFilter === 'revision' ? styles.filterToggleRevisionOn : styles.filterToggleOff]}
-          onPress={() => setViewFilter('revision')} activeOpacity={0.8}>
-          <Text style={[styles.filterToggleText, { color: viewFilter === 'revision' ? COLORS.darkText : COLORS.subText }]}>
-            Revisions
+          style={[styles.filterToggleBtn, viewFilter === 'submitted' ? styles.filterToggleSubmittedOn : styles.filterToggleOff]}
+          onPress={() => setViewFilter('submitted')} activeOpacity={0.8}>
+          <Text style={[styles.filterToggleText, { color: viewFilter === 'submitted' ? COLORS.darkText : COLORS.subText }]}>
+            Submitted Proposal
           </Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.filterToggleBtn, viewFilter === 'approved' ? styles.filterToggleApprovedOn : styles.filterToggleOff]}
           onPress={() => setViewFilter('approved')} activeOpacity={0.8}>
-          <Text style={[styles.filterToggleText, { color: viewFilter === 'approved' ? COLORS.white : COLORS.subText }]}>
+          <Text style={[styles.filterToggleText, { color: viewFilter === 'approved' ? COLORS.black : COLORS.subText }]}>
             Approved
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.filterToggleBtn, viewFilter === 'revision' ? styles.filterToggleRevisionOn : styles.filterToggleOff]}
+          onPress={() => setViewFilter('revision')} activeOpacity={0.8}>
+          <Text style={[styles.filterToggleText, { color: viewFilter === 'revision' ? COLORS.darkText : COLORS.subText }]}>
+            For Revision
           </Text>
         </TouchableOpacity>
       </View>
 
+      {/* Dropdown filter row — Submitted Proposal only */}
+      {viewFilter === 'submitted' && (
+        <View style={styles.dropdownRow}>
+          <Dropdown
+            label="Barangay"
+            value={barangayFilter || 'All'}
+            options={['All', ...new Set((TABLE_DATA[activeMonitorTab] || []).map(r => r.barangay))]}
+            onSelect={v => setBarangayFilter(v === 'All' ? '' : v)}
+          />
+          <Dropdown
+            label="Document"
+            value={documentFilter || 'All'}
+            options={['All', ...new Set((TABLE_DATA[activeMonitorTab] || []).map(r => r.document))]}
+            onSelect={v => setDocumentFilter(v === 'All' ? '' : v)}
+          />
+        </View>
+      )}
+
+      {/* Approved portfolio heading */}
+      {viewFilter === 'approved' && (
+        <Text style={styles.approvedPortfolioTitle}>Federation  Portfolio of Approved Plans</Text>
+      )}
+
       {/* Table */}
       <View style={styles.tableContainer}>
-        <View style={styles.tableHeader}>
-          <View style={styles.colBarangay}><Text style={styles.tableHeaderText}>Barangay</Text></View>
-          <View style={styles.colDocument}><Text style={styles.tableHeaderText}>Document</Text></View>
-          <View style={styles.colDateTime}><Text style={[styles.tableHeaderText, { textAlign: 'right' }]}>{dateColLabel}</Text></View>
-          <View style={styles.colAction}><Text style={[styles.tableHeaderText, { textAlign: 'center' }]}>Action</Text></View>
-        </View>
+        {viewFilter === 'submitted' && (
+          <View style={styles.tableHeader}>
+            <View style={styles.colBarangaySubmitted}><Text style={styles.tableHeaderText}>Barangay</Text></View>
+            <View style={styles.colDocumentSubmitted}><Text style={styles.tableHeaderText}>Document</Text></View>
+            <View style={styles.colDateTimeSubmitted}><Text style={[styles.tableHeaderText, { textAlign: 'right' }]}>Date Submitted</Text></View>
+            <View style={styles.colActionSubmitted}><Text style={[styles.tableHeaderText, { textAlign: 'center' }]}>Action</Text></View>
+          </View>
+        )}
+        {viewFilter === 'approved' && (
+          <View style={styles.tableHeader}>
+            <View style={styles.colBarangayApproved}><Text style={styles.tableHeaderText}>Barangay</Text></View>
+            <View style={styles.colDocumentApproved}><Text style={styles.tableHeaderText}>Document</Text></View>
+            <View style={styles.colDateTimeApproved}><Text style={[styles.tableHeaderText, { textAlign: 'right' }]}>Approved Date</Text></View>
+          </View>
+        )}
+        {viewFilter === 'revision' && (
+          <View style={styles.tableHeader}>
+            <View style={styles.colBarangay}><Text style={styles.tableHeaderText}>Barangay</Text></View>
+            <View style={styles.colDocument}><Text style={styles.tableHeaderText}>Document</Text></View>
+            <View style={styles.colStatus}><Text style={styles.tableHeaderText}>Status</Text></View>
+            <View style={styles.colDateTime}><Text style={[styles.tableHeaderText, { textAlign: 'right' }]}>Date of Feedback</Text></View>
+            <View style={styles.colAction}><Text style={[styles.tableHeaderText, { textAlign: 'center' }]}>Action</Text></View>
+          </View>
+        )}
         {rows.length === 0 ? (
           <View style={styles.emptyState}><Text style={styles.emptyText}>No results found.</Text></View>
         ) : (
@@ -818,6 +977,7 @@ const styles = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 20 },
   headerSub: { fontSize: 10, fontWeight: '600', color: COLORS.subText, letterSpacing: 2, textTransform: 'uppercase', marginBottom: 2 },
   headerTitle: { fontSize: 20, fontWeight: '900', color: COLORS.darkText, letterSpacing: 0.5 },
+  headerDesc: { fontSize: 15, fontWeight: '700', color: COLORS.darkText, marginTop: 6, lineHeight: 17 },
   bellBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: COLORS.cardBg, alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 6, elevation: 3 },
   bellWrapper: { width: 20, height: 22, alignItems: 'center' },
   bellBody: { width: 14, height: 12, borderRadius: 7, borderWidth: 2, borderColor: '#8B0000', marginTop: 4 },
@@ -825,18 +985,19 @@ const styles = StyleSheet.create({
   bellDot: { position: 'absolute', top: 0, right: 1, width: 7, height: 7, borderRadius: 4, backgroundColor: COLORS.gold, borderWidth: 1.5, borderColor: COLORS.cardBg },
   notifBadge: { position: 'absolute', top: -2, right: -2, width: 16, height: 16, borderRadius: 8, backgroundColor: COLORS.gold, alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: COLORS.white },
   notifBadgeText: { fontSize: 8, fontWeight: '900', color: COLORS.navy },
-  monitorTabBar: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: COLORS.lightGray, marginBottom: 14, overflowX: 'auto' },
-  monitorTab: { paddingHorizontal: isMobile ? 8 : 18, paddingVertical: 10, borderBottomWidth: 2, borderBottomColor: 'transparent', marginBottom: -1 },
+  monitorTabBar: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: COLORS.lightGray, marginBottom: 14, overflowX: 'auto', overflow: 'hidden',},
+  monitorTab: { paddingHorizontal: isMobile ? 8 : 18, backgroundColor: COLORS.navy, paddingVertical: 10, borderBottomWidth: 2, borderBottomColor: 'transparent', marginBottom: -1 },
   monitorTabActive: { backgroundColor: COLORS.gold, borderRadius: 4, borderBottomColor: COLORS.gold },
-  monitorTabText: { fontSize: isMobile ? 10 : 13, fontWeight: '600', color: COLORS.subText },
+  monitorTabText: { fontSize: isMobile ? 10 : 13, fontWeight: '600', color: COLORS.white },
   monitorTabTextActive: { color: COLORS.darkText, fontWeight: '800' },
   monitorTabFiller: { flex: 1 },
   filterRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 14, flexWrap: 'wrap' },
   searchBox: { flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.white, borderRadius: 20, borderWidth: 1, borderColor: COLORS.lightGray, paddingHorizontal: 12, paddingVertical: 7, minWidth: 120, maxWidth: isMobile ? 140 : 190 },
   searchInput: { flex: 1, fontSize: 12, color: COLORS.darkText },
   filterToggleBtn: { borderRadius: 20, paddingHorizontal: isMobile ? 10 : 14, paddingVertical: 8 },
-  filterToggleRevisionOn: { backgroundColor: COLORS.gold },
-  filterToggleApprovedOn: { backgroundColor: COLORS.navy },
+  filterToggleSubmittedOn: { backgroundColor: COLORS.gold, borderWidth: 1, borderColor: COLORS.midGray },
+  filterToggleRevisionOn: { backgroundColor: COLORS.gold, borderWidth: 1, borderColor: COLORS.midGray },
+  filterToggleApprovedOn: { backgroundColor: COLORS.gold, borderWidth: 1, borderColor: COLORS.midGray },
   filterToggleOff: { backgroundColor: COLORS.lightGray, borderWidth: 1, borderColor: '#D0D0D0' },
   filterToggleText: { fontSize: isMobile ? 10 : 11, fontWeight: '700' },
   tableContainer: { backgroundColor: COLORS.white, borderRadius: 12, overflow: 'hidden', borderWidth: 1, borderColor: COLORS.lightGray, elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 6 },
@@ -844,14 +1005,28 @@ const styles = StyleSheet.create({
   tableHeaderText: { fontSize: isMobile ? 10 : 12, fontWeight: '700', color: COLORS.darkText, letterSpacing: 0.2 },
   tableRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, paddingHorizontal: 14, borderBottomWidth: 1, borderBottomColor: COLORS.lightGray, backgroundColor: COLORS.white },
   tableRowEven: { backgroundColor: '#FAFAFA' },
-  colBarangay: { width: isMobile ? 75 : 160, paddingRight: 8 },
-  colDocument: { flex: 1, paddingRight: 8 },
+  colBarangay: { width: isMobile ? 75 : 140, paddingRight: 8 },
+  colDocument: { width: isMobile ? 50 : 80, paddingRight: 8 },
+  colStatus:   { flex: 1, paddingRight: 8 },
   colDateTime: { width: isMobile ? 65 : 110, alignItems: 'flex-end', paddingRight: 8 },
-  colAction:   { width: 50, alignItems: 'center' },
+  colAction:   { width: isMobile ? 80 : 120, alignItems: 'flex-start' },
+  // Approved view columns
+  colBarangayApproved:  { width: isMobile ? 90 : 180, paddingRight: 8 },
+  colDocumentApproved:  { flex: 1, paddingRight: 8 },
+  colDateTimeApproved:  { width: isMobile ? 80 : 130, alignItems: 'flex-end' },
+  // Submitted view columns
+  colBarangaySubmitted: { width: isMobile ? 90 : 160, paddingRight: 8 },
+  colDocumentSubmitted: { flex: 1, paddingRight: 8 },
+  colDateTimeSubmitted: { width: isMobile ? 70 : 120, alignItems: 'flex-end', paddingRight: 8 },
+  colActionSubmitted:   { width: isMobile ? 44 : 56, alignItems: 'center' },
+  approvedPortfolioTitle: { fontSize: isMobile ? 13 : 15, fontWeight: '700', color: COLORS.darkText, marginBottom: 10 },
+  dropdownRow: { flexDirection: 'row', gap: 10, marginBottom: 12, zIndex: 50 },
   cellBarangay: { fontSize: isMobile ? 10 : 12, fontWeight: '600', color: COLORS.darkText },
   cellDocument: { fontSize: isMobile ? 10 : 11, color: COLORS.subText, lineHeight: 16 },
+  cellStatus:   { fontSize: isMobile ? 9 : 11, color: COLORS.darkText, lineHeight: 14, flexShrink: 1 },
   cellTime:     { fontSize: 9, color: COLORS.subText, textAlign: 'right' },
   cellDate:     { fontSize: 9, color: COLORS.subText, textAlign: 'right' },
+  viewCommentsLink: { fontSize: isMobile ? 9 : 11, color: COLORS.navyLight, fontWeight: '600', textDecorationLine: 'underline' },
   viewBtn: { backgroundColor: COLORS.navy, borderRadius: 6, paddingHorizontal: isMobile ? 6 : 10, paddingVertical: 5 },
   viewBtnText: { fontSize: 9, fontWeight: '700', color: COLORS.white },
   emptyState: { alignItems: 'center', paddingVertical: 40 },

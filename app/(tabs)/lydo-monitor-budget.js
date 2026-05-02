@@ -632,10 +632,10 @@ const S = StyleSheet.create({
   notifBadgeText:{ fontSize: 8, fontWeight: '900', color: COLORS.navy },
 
   // Monitor Tabs
-  monitorTabBar:     { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: COLORS.lightGray, marginBottom: 14 },
-  monitorTab:        { paddingHorizontal: isMobile ? 12 : 18, paddingVertical: 10, borderBottomWidth: 2, borderBottomColor: 'transparent', marginBottom: -1 },
-  monitorTabActive:  { backgroundColor: COLORS.gold, borderRadius: 4, borderBottomColor: COLORS.gold },
-  monitorTabText:    { fontSize: isMobile ? 12 : 13, fontWeight: '600', color: COLORS.subText },
+ monitorTabBar: { flexDirection: 'row', borderRadius: 4, borderBottomWidth: 1, borderBottomColor: COLORS.lightGray, marginBottom: 14, overflowX: 'auto', overflow: 'hidden',},
+  monitorTab: { paddingHorizontal: isMobile ? 8 : 18, backgroundColor: COLORS.navy, paddingVertical: 10, borderBottomWidth: 2, borderBottomColor: 'transparent', marginBottom: -1 },
+  monitorTabActive: { backgroundColor: COLORS.gold, borderRadius: 4, borderBottomColor: COLORS.gold },
+  monitorTabText: { fontSize: isMobile ? 10 : 13, fontWeight: '600', color: COLORS.white },
   monitorTabTextActive: { color: COLORS.darkText, fontWeight: '800' },
   monitorTabFiller:  { flex: isMobile ? 0 : 1, minWidth: isMobile ? 8 : 0 },
 
