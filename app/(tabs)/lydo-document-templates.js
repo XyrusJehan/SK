@@ -145,7 +145,13 @@ export default function LYDODocumentTemplatesScreen() {
   const [dropdownPos, setDropdownPos]                   = useState({ top: 0, left: 0 });
   const dropdownBtnRef                                  = useRef(null);
   const [showAddModal, setShowAddModal]         = useState(false);
+  const [addDocType, setAddDocType]             = useState('');
+  const [addDocTypeOpen, setAddDocTypeOpen]     = useState(false);
+  const [addEntries, setAddEntries]             = useState([{ id: 1, name: '', file: null }]);
   const [selectedTemplate, setSelectedTemplate] = useState(null);
+  const [showReplaceModal, setShowReplaceModal] = useState(false);
+  const [checkedTemplates, setCheckedTemplates] = useState({});
+  const [uploadedFiles, setUploadedFiles]       = useState({});
 
   useEffect(() => { setActiveTab('Documents'); }, []);
 
@@ -240,41 +246,159 @@ export default function LYDODocumentTemplatesScreen() {
   );
 
   // ── Add Template Modal ──
+  const DOC_TYPE_OPTIONS = TEMPLATES.map(t => t.name);
+
+  const resetAddModal = () => {
+    setAddDocType('');
+    setAddDocTypeOpen(false);
+    setAddEntries([{ id: Date.now(), name: '', file: null }]);
+  };
+
   const renderAddModal = () => (
     <Modal
       visible={showAddModal}
       transparent
       animationType="fade"
-      onRequestClose={() => setShowAddModal(false)}
+      onRequestClose={() => { setShowAddModal(false); resetAddModal(); }}
     >
-      <TouchableOpacity
-        style={styles.modalOverlay}
-        activeOpacity={1}
-        onPress={() => setShowAddModal(false)}
-      >
-        <View style={styles.modalCard} onStartShouldSetResponder={() => true}>
-          <Text style={styles.modalTitle}>Add New Template</Text>
-          <TextInput
-            style={styles.modalInput}
-            placeholder="Template name…"
-            placeholderTextColor={COLORS.midGray}
-          />
-          <View style={styles.modalRow}>
+      <View style={styles.modalOverlay}>
+        <View
+          style={[styles.modalCard, { maxHeight: '92%' }]}
+          onStartShouldSetResponder={() => true}
+          onTouchStart={(e) => e.stopPropagation()}
+        >
+
+          {/* Header */}
+          <View style={styles.replaceModalHeader}>
+            <Text style={styles.modalTitle}>Add New Template to System</Text>
+            <TouchableOpacity onPress={() => { setShowAddModal(false); resetAddModal(); }}>
+              <Text style={styles.replaceCloseX}>✕</Text>
+            </TouchableOpacity>
+          </View>
+
+          <ScrollView
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+            onStartShouldSetResponder={() => true}
+          >
+
+            {/* Document Type Dropdown */}
+            <Text style={styles.replaceLabel}>Document Type</Text>
             <TouchableOpacity
-              style={[styles.modalBtn, { backgroundColor: COLORS.lightGray }]}
-              onPress={() => setShowAddModal(false)}
+              style={[styles.dropdownTrigger, addDocTypeOpen && styles.dropdownTriggerOpen]}
+              onPress={() => setAddDocTypeOpen(v => !v)}
+              activeOpacity={0.8}
+            >
+              <Text style={[styles.dropdownTriggerText, !addDocType && { color: COLORS.midGray }]} numberOfLines={1}>
+                {addDocType || 'Select document type…'}
+              </Text>
+              <Text style={styles.dropdownCaret}>{addDocTypeOpen ? '▲' : '▼'}</Text>
+            </TouchableOpacity>
+
+            {addDocTypeOpen && (
+              <View style={styles.checklistPanel}>
+                {DOC_TYPE_OPTIONS.map((opt, idx) => (
+                  <View key={opt}>
+                    <TouchableOpacity
+                      style={styles.checklistRow}
+                      onPress={() => {
+                        setAddDocType(opt);
+                        setAddDocTypeOpen(false);
+                        // auto-fill the first entry name if empty
+                        setAddEntries(prev => prev.map((e, i) =>
+                          i === 0 && !e.name ? { ...e, name: opt } : e
+                        ));
+                      }}
+                      activeOpacity={0.7}
+                    >
+                      <View style={[styles.checkbox, addDocType === opt && styles.checkboxChecked]}>
+                        {addDocType === opt && <Text style={styles.checkmark}>✓</Text>}
+                      </View>
+                      <Text style={styles.checklistText} numberOfLines={2}>{opt}</Text>
+                    </TouchableOpacity>
+                    {idx < DOC_TYPE_OPTIONS.length - 1 && <View style={styles.checklistDivider} />}
+                  </View>
+                ))}
+              </View>
+            )}
+
+            {/* Entries */}
+            {addEntries.map((entry, idx) => (
+              <View key={entry.id} style={idx > 0 ? { marginTop: 16 } : { marginTop: 14 }}>
+                {/* Template Name */}
+                <Text style={styles.replaceLabel}>Template Name</Text>
+                <TextInput
+                  style={styles.addNameInput}
+                  placeholder={addDocType || 'Template name…'}
+                  placeholderTextColor={COLORS.midGray}
+                  value={entry.name}
+                  onChangeText={text =>
+                    setAddEntries(prev => prev.map(e => e.id === entry.id ? { ...e, name: text } : e))
+                  }
+                />
+
+                {/* Upload Box */}
+                <TouchableOpacity
+                  style={[styles.uploadBox, entry.file && styles.uploadBoxDone, { marginTop: 8 }]}
+                  activeOpacity={0.75}
+                  onPress={() =>
+                    setAddEntries(prev => prev.map(e =>
+                      e.id === entry.id ? { ...e, file: `${entry.name || addDocType || 'template'}.docx` } : e
+                    ))
+                  }
+                >
+                  {entry.file ? (
+                    <>
+                      <Text style={styles.uploadDoneIcon}>✓</Text>
+                      <Text style={styles.uploadDoneText} numberOfLines={1}>{entry.file}</Text>
+                      <TouchableOpacity onPress={() =>
+                        setAddEntries(prev => prev.map(e => e.id === entry.id ? { ...e, file: null } : e))
+                      }>
+                        <Text style={styles.uploadRemove}>✕</Text>
+                      </TouchableOpacity>
+                    </>
+                  ) : (
+                    <>
+                      <Text style={styles.uploadIcon}>⬆</Text>
+                      <Text style={styles.uploadText}>Upload  Here</Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+              </View>
+            ))}
+
+            {/* + Add another entry button */}
+            <View style={{ alignItems: 'flex-end', marginTop: 12 }}>
+              <TouchableOpacity
+                style={styles.addEntryBtn}
+                onPress={() => setAddEntries(prev => [...prev, { id: Date.now(), name: addDocType, file: null }])}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.addEntryBtnText}>＋</Text>
+              </TouchableOpacity>
+            </View>
+
+          </ScrollView>
+
+          {/* Footer */}
+          <View style={[styles.modalRow, { marginTop: 16 }]}>
+            <TouchableOpacity
+              style={[styles.modalBtn, { backgroundColor: COLORS.lightGray, flex: 1 }]}
+              onPress={() => { setShowAddModal(false); resetAddModal(); }}
             >
               <Text style={{ color: COLORS.darkText, fontWeight: '600' }}>Cancel</Text>
             </TouchableOpacity>
             <TouchableOpacity
-              style={[styles.modalBtn, { backgroundColor: COLORS.navy }]}
-              onPress={() => setShowAddModal(false)}
+              style={[styles.modalBtn, { backgroundColor: addDocType ? COLORS.navy : COLORS.midGray, flex: 1.4 }]}
+              disabled={!addDocType}
+              onPress={() => { setShowAddModal(false); resetAddModal(); }}
             >
-              <Text style={{ color: COLORS.white, fontWeight: '700' }}>Add</Text>
+              <Text style={{ color: COLORS.white, fontWeight: '700' }}>Upload as Draft</Text>
             </TouchableOpacity>
           </View>
+
         </View>
-      </TouchableOpacity>
+      </View>
     </Modal>
   );
 
@@ -320,6 +444,170 @@ export default function LYDODocumentTemplatesScreen() {
       </TouchableOpacity>
     </Modal>
   );
+
+  // ── Replace Template Modal ──
+  const [dropdownOpen, setDropdownOpen] = useState(false);
+
+  const toggleTemplateCheck = (id) => {
+    setCheckedTemplates(prev => ({ ...prev, [id]: !prev[id] }));
+  };
+
+  const checkedCount = Object.values(checkedTemplates).filter(Boolean).length;
+
+  const renderReplaceModal = () => {
+    const checkedItems = TEMPLATES.filter(t => checkedTemplates[t.id]);
+
+    // Build the dropdown trigger label
+    const dropdownLabel = checkedCount === 0
+      ? 'Select templates…'
+      : checkedItems.map(t => t.name).join(', ');
+
+    return (
+      <Modal
+        visible={showReplaceModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowReplaceModal(false)}
+      >
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => { setShowReplaceModal(false); setDropdownOpen(false); }}
+        >
+          <View style={[styles.modalCard, { maxHeight: '90%' }]} onStartShouldSetResponder={() => true}>
+            {/* Header */}
+            <View style={styles.replaceModalHeader}>
+              <Text style={styles.modalTitle}>Replace Template</Text>
+              <TouchableOpacity onPress={() => { setShowReplaceModal(false); setDropdownOpen(false); }}>
+                <Text style={styles.replaceCloseX}>✕</Text>
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+              {/* Document Type — Dropdown Checklist */}
+              <Text style={styles.replaceLabel}>Document Type</Text>
+
+              {/* Trigger button */}
+              <TouchableOpacity
+                style={[styles.dropdownTrigger, dropdownOpen && styles.dropdownTriggerOpen]}
+                onPress={() => setDropdownOpen(v => !v)}
+                activeOpacity={0.8}
+              >
+                <Text
+                  style={[styles.dropdownTriggerText, checkedCount === 0 && { color: COLORS.midGray }]}
+                  numberOfLines={1}
+                >
+                  {dropdownLabel}
+                </Text>
+                <Text style={styles.dropdownCaret}>{dropdownOpen ? '▲' : '▼'}</Text>
+              </TouchableOpacity>
+
+              {/* Checklist panel */}
+              {dropdownOpen && (
+                <View style={styles.checklistPanel}>
+                  {TEMPLATES.map((t, idx) => (
+                    <View key={t.id}>
+                      <TouchableOpacity
+                        style={styles.checklistRow}
+                        onPress={() => toggleTemplateCheck(t.id)}
+                        activeOpacity={0.7}
+                      >
+                        <View style={[styles.checkbox, checkedTemplates[t.id] && styles.checkboxChecked]}>
+                          {checkedTemplates[t.id] && <Text style={styles.checkmark}>✓</Text>}
+                        </View>
+                        <Text style={styles.checklistText} numberOfLines={2}>{t.name}</Text>
+                      </TouchableOpacity>
+                      {idx < TEMPLATES.length - 1 && <View style={styles.checklistDivider} />}
+                    </View>
+                  ))}
+                </View>
+              )}
+
+              {/* Selected count badge */}
+              {checkedCount > 0 && !dropdownOpen && (
+                <Text style={styles.selectedCountText}>{checkedCount} template{checkedCount > 1 ? 's' : ''} selected</Text>
+              )}
+
+              {/* Upload slots — only shown for checked templates */}
+              {checkedItems.length > 0 && (
+                <View style={{ marginTop: 16 }}>
+                  {checkedItems.map(t => (
+                    <View key={t.id} style={{ marginBottom: 14 }}>
+                      <Text style={styles.replaceLabel}>{t.name}</Text>
+                      <TouchableOpacity
+                        style={[
+                          styles.uploadBox,
+                          uploadedFiles[t.id] && styles.uploadBoxDone,
+                        ]}
+                        activeOpacity={0.75}
+                        onPress={() => {
+                          // Simulate file pick: mark as uploaded
+                          setUploadedFiles(prev => ({ ...prev, [t.id]: `${t.name}.docx` }));
+                        }}
+                      >
+                        {uploadedFiles[t.id] ? (
+                          <>
+                            <Text style={styles.uploadDoneIcon}>✓</Text>
+                            <Text style={styles.uploadDoneText} numberOfLines={1}>
+                              {uploadedFiles[t.id]}
+                            </Text>
+                            <TouchableOpacity
+                              onPress={() => setUploadedFiles(prev => { const n = {...prev}; delete n[t.id]; return n; })}
+                            >
+                              <Text style={styles.uploadRemove}>✕</Text>
+                            </TouchableOpacity>
+                          </>
+                        ) : (
+                          <>
+                            <Text style={styles.uploadIcon}>⬆</Text>
+                            <Text style={styles.uploadText}>Upload Here</Text>
+                          </>
+                        )}
+                      </TouchableOpacity>
+                    </View>
+                  ))}
+                </View>
+              )}
+
+              {checkedItems.length === 0 && (
+                <Text style={styles.replaceHint}>Select templates above to upload replacements.</Text>
+              )}
+            </ScrollView>
+
+            {/* Footer Buttons */}
+            <View style={[styles.modalRow, { marginTop: 16 }]}>
+              <TouchableOpacity
+                style={[styles.modalBtn, { backgroundColor: COLORS.lightGray, flex: 1 }]}
+                onPress={() => {
+                  setShowReplaceModal(false);
+                  setCheckedTemplates({});
+                  setUploadedFiles({});
+                  setDropdownOpen(false);
+                }}
+              >
+                <Text style={{ color: COLORS.darkText, fontWeight: '600' }}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.modalBtn,
+                  { backgroundColor: checkedCount > 0 ? COLORS.navy : COLORS.midGray, flex: 1 },
+                ]}
+                disabled={checkedCount === 0}
+                onPress={() => {
+                  setShowReplaceModal(false);
+                  setCheckedTemplates({});
+                  setUploadedFiles({});
+                  setDropdownOpen(false);
+                }}
+              >
+                <Text style={{ color: COLORS.white, fontWeight: '700' }}>Replace</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+    );
+  };
 
   // ── Main Content ──
   const renderContent = () => (
@@ -439,7 +727,7 @@ export default function LYDODocumentTemplatesScreen() {
           <TouchableOpacity style={styles.addBtn} onPress={() => setShowAddModal(true)} activeOpacity={0.8}>
             <Text style={styles.addBtnText}>+ Add</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.replaceBtn} activeOpacity={0.8}>
+          <TouchableOpacity style={styles.replaceBtn} activeOpacity={0.8} onPress={() => setShowReplaceModal(true)}>
             <Text style={styles.replaceBtnText}>↔ Replace</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.forwardBtn} activeOpacity={0.8}>
@@ -492,6 +780,7 @@ export default function LYDODocumentTemplatesScreen() {
       {renderCategoryDropdown()}
       {renderAddModal()}
       {renderDetailModal()}
+      {renderReplaceModal()}
 
       <View style={styles.layout}>
         {/* Mobile Sidebar Overlay */}
@@ -843,4 +1132,89 @@ const styles = StyleSheet.create({
     borderRadius: 10, flex: 1, alignItems: 'center',
   },
   actionBtnText: { fontSize: 13, fontWeight: '700' },
+
+  // Replace Modal
+  replaceModalHeader: {
+    flexDirection: 'row', justifyContent: 'space-between',
+    alignItems: 'center', marginBottom: 16,
+  },
+  replaceCloseX: { fontSize: 18, color: COLORS.subText, padding: 4 },
+  replaceLabel: {
+    fontSize: 12, fontWeight: '700', color: COLORS.subText,
+    textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6,
+  },
+  replaceHint: {
+    fontSize: 13, color: COLORS.midGray, textAlign: 'center',
+    marginTop: 12, fontStyle: 'italic',
+  },
+  // Dropdown trigger
+  dropdownTrigger: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    borderWidth: 1.5, borderColor: COLORS.lightGray, borderRadius: 10,
+    backgroundColor: COLORS.white, paddingHorizontal: 14, paddingVertical: 12,
+  },
+  dropdownTriggerOpen: {
+    borderColor: COLORS.navy,
+    borderBottomLeftRadius: 0, borderBottomRightRadius: 0,
+    borderBottomWidth: 0,
+  },
+  dropdownTriggerText: { flex: 1, fontSize: 13, color: COLORS.darkText, marginRight: 8 },
+  dropdownCaret: { fontSize: 11, color: COLORS.subText },
+  selectedCountText: {
+    fontSize: 12, color: COLORS.navy, fontWeight: '600',
+    marginTop: 6, marginBottom: 2,
+  },
+  // Checklist panel (dropdown body)
+  checklistPanel: {
+    borderWidth: 1.5, borderTopWidth: 0, borderColor: COLORS.navy,
+    borderBottomLeftRadius: 10, borderBottomRightRadius: 10,
+    backgroundColor: COLORS.white, marginBottom: 4,
+    overflow: 'hidden',
+  },
+  checklistRow: {
+    flexDirection: 'row', alignItems: 'center',
+    paddingHorizontal: 14, paddingVertical: 12, gap: 12,
+  },
+  checklistDivider: { height: 1, backgroundColor: COLORS.lightGray, marginHorizontal: 14 },
+  checklistText: { flex: 1, fontSize: 13, color: COLORS.darkText, lineHeight: 18 },
+  checkbox: {
+    width: 20, height: 20, borderRadius: 5,
+    borderWidth: 2, borderColor: COLORS.midGray,
+    alignItems: 'center', justifyContent: 'center',
+    backgroundColor: COLORS.white,
+  },
+  checkboxChecked: { backgroundColor: COLORS.navy, borderColor: COLORS.navy },
+  checkmark: { fontSize: 12, color: COLORS.white, fontWeight: '900' },
+  uploadBox: {
+    borderWidth: 1.5, borderColor: '#BBC8E6', borderStyle: 'dashed',
+    borderRadius: 10, backgroundColor: '#EEF2FB',
+    paddingVertical: 18, paddingHorizontal: 14,
+    alignItems: 'center', justifyContent: 'center',
+    flexDirection: 'column', gap: 6,
+  },
+  uploadBoxDone: {
+    borderStyle: 'solid', borderColor: '#3AAA5C',
+    backgroundColor: '#E8F7EE', flexDirection: 'row',
+    gap: 10, paddingVertical: 14,
+  },
+  uploadIcon: { fontSize: 22, color: COLORS.navy },
+  uploadText: { fontSize: 14, color: COLORS.navy, fontWeight: '600' },
+  uploadDoneIcon: { fontSize: 16, color: '#3AAA5C', fontWeight: '900' },
+  uploadDoneText: { flex: 1, fontSize: 13, color: '#2E7D32', fontWeight: '600' },
+  uploadRemove: { fontSize: 14, color: COLORS.subText, paddingHorizontal: 4 },
+
+  // Add Modal specific
+  addNameInput: {
+    borderWidth: 1.5, borderColor: COLORS.lightGray, borderRadius: 10,
+    paddingHorizontal: 14, paddingVertical: 11,
+    fontSize: 13, color: COLORS.darkText,
+    backgroundColor: COLORS.white,
+  },
+  addEntryBtn: {
+    width: 36, height: 36, borderRadius: 8,
+    backgroundColor: COLORS.navy, alignItems: 'center', justifyContent: 'center',
+    shadowColor: COLORS.navy, shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3, shadowRadius: 4, elevation: 3,
+  },
+  addEntryBtnText: { fontSize: 20, color: COLORS.white, fontWeight: '700', lineHeight: 24 },
 });
