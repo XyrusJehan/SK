@@ -152,6 +152,8 @@ export default function LYDODocumentTemplatesScreen() {
   const [showReplaceModal, setShowReplaceModal] = useState(false);
   const [checkedTemplates, setCheckedTemplates] = useState({});
   const [uploadedFiles, setUploadedFiles]       = useState({});
+  const [showForwardModal, setShowForwardModal] = useState(false);
+  const [forwardChecked, setForwardChecked]     = useState({});
 
   useEffect(() => { setActiveTab('Documents'); }, []);
 
@@ -609,6 +611,84 @@ export default function LYDODocumentTemplatesScreen() {
     );
   };
 
+  // ── Forward Template Modal ──
+  const toggleForwardCheck = (id) => {
+    setForwardChecked(prev => ({ ...prev, [id]: !prev[id] }));
+  };
+
+  const forwardCheckedCount = Object.values(forwardChecked).filter(Boolean).length;
+
+  const renderForwardModal = () => (
+    <Modal
+      visible={showForwardModal}
+      transparent
+      animationType="fade"
+      onRequestClose={() => { setShowForwardModal(false); setForwardChecked({}); }}
+    >
+      <TouchableOpacity
+        style={styles.modalOverlay}
+        activeOpacity={1}
+        onPress={() => { setShowForwardModal(false); setForwardChecked({}); }}
+      >
+        <View style={[styles.modalCard, { maxHeight: '90%' }]} onStartShouldSetResponder={() => true}>
+
+          {/* Header */}
+          <View style={styles.replaceModalHeader}>
+            <Text style={styles.modalTitle}>Forward Templates</Text>
+            <TouchableOpacity onPress={() => { setShowForwardModal(false); setForwardChecked({}); }}>
+              <Text style={styles.replaceCloseX}>✕</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Select Template label */}
+          <Text style={[styles.replaceLabel, { marginBottom: 10 }]}>Select Template</Text>
+
+          {/* Checklist box */}
+          <ScrollView showsVerticalScrollIndicator={false} style={{ marginBottom: 8 }}>
+            <View style={styles.forwardChecklistBox}>
+              {TEMPLATES.map((t, idx) => (
+                <View key={t.id}>
+                  <TouchableOpacity
+                    style={styles.checklistRow}
+                    onPress={() => toggleForwardCheck(t.id)}
+                    activeOpacity={0.7}
+                  >
+                    <View style={[styles.forwardCheckbox, forwardChecked[t.id] && styles.forwardCheckboxChecked]}>
+                      {forwardChecked[t.id] && <Text style={styles.checkmark}>✓</Text>}
+                    </View>
+                    <Text style={styles.checklistText} numberOfLines={2}>{t.name}</Text>
+                  </TouchableOpacity>
+                  {idx < TEMPLATES.length - 1 && <View style={styles.checklistDivider} />}
+                </View>
+              ))}
+            </View>
+          </ScrollView>
+
+          {/* Footer */}
+          <View style={[styles.modalRow, { marginTop: 12 }]}>
+            <TouchableOpacity
+              style={[styles.modalBtn, { backgroundColor: COLORS.lightGray, flex: 1 }]}
+              onPress={() => { setShowForwardModal(false); setForwardChecked({}); }}
+            >
+              <Text style={{ color: COLORS.darkText, fontWeight: '600' }}>Cancel</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.modalBtn, {
+                backgroundColor: forwardCheckedCount > 0 ? COLORS.navy : COLORS.midGray,
+                flex: 1,
+              }]}
+              disabled={forwardCheckedCount === 0}
+              onPress={() => { setShowForwardModal(false); setForwardChecked({}); }}
+            >
+              <Text style={{ color: COLORS.white, fontWeight: '700' }}>Forward</Text>
+            </TouchableOpacity>
+          </View>
+
+        </View>
+      </TouchableOpacity>
+    </Modal>
+  );
+
   // ── Main Content ──
   const renderContent = () => (
     <ScrollView
@@ -730,7 +810,7 @@ export default function LYDODocumentTemplatesScreen() {
           <TouchableOpacity style={styles.replaceBtn} activeOpacity={0.8} onPress={() => setShowReplaceModal(true)}>
             <Text style={styles.replaceBtnText}>↔ Replace</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.forwardBtn} activeOpacity={0.8}>
+          <TouchableOpacity style={styles.forwardBtn} activeOpacity={0.8} onPress={() => setShowForwardModal(true)}>
             <Text style={styles.forwardBtnText}>→ Forward</Text>
           </TouchableOpacity>
           {!isMobile && (
@@ -781,6 +861,7 @@ export default function LYDODocumentTemplatesScreen() {
       {renderAddModal()}
       {renderDetailModal()}
       {renderReplaceModal()}
+      {renderForwardModal()}
 
       <View style={styles.layout}>
         {/* Mobile Sidebar Overlay */}
@@ -1217,4 +1298,20 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3, shadowRadius: 4, elevation: 3,
   },
   addEntryBtnText: { fontSize: 20, color: COLORS.white, fontWeight: '700', lineHeight: 24 },
+
+  // Forward Modal
+  forwardChecklistBox: {
+    borderWidth: 1, borderColor: COLORS.lightGray,
+    borderRadius: 10, backgroundColor: COLORS.white,
+    overflow: 'hidden',
+  },
+  forwardCheckbox: {
+    width: 20, height: 20, borderRadius: 4,
+    borderWidth: 2, borderColor: COLORS.midGray,
+    alignItems: 'center', justifyContent: 'center',
+    backgroundColor: COLORS.white,
+  },
+  forwardCheckboxChecked: {
+    backgroundColor: COLORS.navy, borderColor: COLORS.navy,
+  },
 });
