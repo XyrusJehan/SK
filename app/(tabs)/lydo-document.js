@@ -316,6 +316,13 @@ export default function LYDODocumentsScreen({ navigation }) {
     router.replace('/');
   };
 
+  const handleDocumentTabPress = (tab) => {
+    if (tab === 'Barangay Documents') { router.push('/(tabs)/lydo-monitor'); return; }
+    if (tab === 'Templates') { router.push('/(tabs)/lydo-document-templates'); return; }
+    if (tab === 'Reports') { router.push('/(tabs)/lydo-document-reports'); return; }
+    setActiveDocumentTab(tab);
+  };
+
   // ── Filtered data ──
   const filteredBarangays = BARANGAYS.filter(b =>
     b.name.toLowerCase().includes(searchText.toLowerCase())
@@ -413,7 +420,7 @@ export default function LYDODocumentsScreen({ navigation }) {
             <TouchableOpacity
               key={tab}
               style={[styles.documentTab, active && styles.documentTabActive]}
-              onPress={() => setActiveDocumentTab(tab)}
+              onPress={() => handleDocumentTabPress(tab)}
               activeOpacity={0.8}
             >
               <Text style={[styles.documentTabText, active && styles.documentTabTextActive]}>{tab}</Text>

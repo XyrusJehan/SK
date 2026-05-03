@@ -307,6 +307,13 @@ export default function LYDODocumentListScreen({ navigation }) {
     router.replace('/');
   };
 
+  const handleDocumentTabPress = (tab) => {
+    if (tab === 'Barangay Documents') { router.push('/(tabs)/lydo-monitor'); return; }
+    if (tab === 'Templates') { router.push('/(tabs)/lydo-document-templates'); return; }
+    if (tab === 'Reports') { router.push('/(tabs)/lydo-document-reports'); return; }
+    setActiveDocumentTab(tab);
+  };
+
   // ── Tap a bullet item on a card → switch to list view filtered by subType ──
   const handleItemPress = (itemName, group) => {
     setSelectedGroup(group);
@@ -451,7 +458,7 @@ export default function LYDODocumentListScreen({ navigation }) {
             <TouchableOpacity
               key={tab}
               style={[styles.documentTab, active && styles.documentTabActive]}
-              onPress={() => setActiveDocumentTab(tab)}
+              onPress={() => handleDocumentTabPress(tab)}
               activeOpacity={0.8}
             >
               <Text style={[styles.documentTabText, active && styles.documentTabTextActive]}>{tab}</Text>
@@ -523,7 +530,7 @@ export default function LYDODocumentListScreen({ navigation }) {
             <TouchableOpacity
               key={tab}
               style={[styles.documentTab, active && styles.documentTabActive]}
-              onPress={() => setActiveDocumentTab(tab)}
+              onPress={() => handleDocumentTabPress(tab)}
               activeOpacity={0.8}
             >
               <Text style={[styles.documentTabText, active && styles.documentTabTextActive]}>{tab}</Text>
