@@ -179,8 +179,8 @@ const styles = StyleSheet.create({
   // Seal / Logo
   sealWrap: { alignItems: 'center', marginBottom: isMobile ? 24 : 36 },
   logoImage: {
-    width: isMobile ? 80 : 100,
-    height: isMobile ? 80 : 100,
+    width: isMobile ? 120 : 140,
+    height: isMobile ? 120 : 140,
   },
 
   // Labels & Inputs
