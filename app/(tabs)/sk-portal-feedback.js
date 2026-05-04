@@ -233,78 +233,96 @@ export default function SKPortalFeedbackScreen() {
       visible={!!selectedFeedback}
       transparent
       animationType="fade"
-      onRequestClose={() => setSelectedFeedback(null)}
+      onRequestClose={() => { setSelectedFeedback(null); setReplyText(''); }}
     >
       <TouchableOpacity
         style={styles.modalOverlay}
         activeOpacity={1}
-        onPress={() => setSelectedFeedback(null)}
+        onPress={() => {}}
       >
-        <View style={styles.modalCard} onStartShouldSetResponder={() => true}>
-          {/* Header */}
-          <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>Feedback</Text>
-            <TouchableOpacity onPress={() => setSelectedFeedback(null)}>
-              <Text style={styles.modalCloseX}>✕</Text>
+        <TouchableOpacity
+          style={styles.modalCard}
+          activeOpacity={1}
+          onPress={() => {}}
+        >
+
+          {/* ── Navy header bar ── */}
+          <View style={styles.modalNavyHeader}>
+            <Text style={styles.modalNavyHeaderText}>
+              Replying to:{' '}
+              <Text style={styles.modalNavyHeaderBold}>{selectedFeedback?.name}</Text>
+            </Text>
+            <TouchableOpacity onPress={() => { setSelectedFeedback(null); setReplyText(''); }}>
+              <Text style={styles.modalNavyCloseX}>✕</Text>
             </TouchableOpacity>
           </View>
 
-          <View style={styles.modalDivider} />
+          {/* ── Body ── */}
+          <View style={styles.modalBody}>
 
-          {/* Commenter */}
-          <Text style={styles.modalCommentedBy}>
-            Commented by <Text style={styles.modalAuthorName}>{selectedFeedback?.name}</Text>
-          </Text>
-
-          {/* Document */}
-          <Text style={styles.modalOnDocument}>
-            On Document:{' '}
-            <Text style={styles.modalDocumentLink}>{selectedFeedback?.document}</Text>
-          </Text>
-
-          {/* Comment box */}
-          <View style={styles.modalCommentBox}>
-            <Text style={styles.modalCommentLabel}>Comment</Text>
-            <Text style={styles.modalCommentText}>{selectedFeedback?.comment}</Text>
-          </View>
-
-          {/* Existing reply */}
-          {selectedFeedback?.reply ? (
-            <View style={styles.existingReplyBox}>
-              <Text style={styles.existingReplyLabel}>Your Reply</Text>
-              <Text style={styles.existingReplyText}>{selectedFeedback.reply}</Text>
+            {/* Avatar + Name + Document */}
+            <View style={styles.modalUserRow}>
+              {/* Black circle avatar */}
+              <View style={styles.modalAvatar}>
+                <Text style={styles.modalAvatarText}>
+                  {selectedFeedback?.name?.charAt(0) ?? '?'}
+                </Text>
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.modalUserName}>{selectedFeedback?.name}</Text>
+                <Text style={styles.modalUserDoc} numberOfLines={2}>
+                  on "{selectedFeedback?.document}"
+                </Text>
+              </View>
             </View>
-          ) : null}
 
-          {/* Reply input */}
-          <Text style={styles.replyInputLabel}>Write a Reply</Text>
-          <TextInput
-            style={styles.replyInput}
-            placeholder="Type your reply here…"
-            placeholderTextColor={COLORS.midGray}
-            value={replyText}
-            onChangeText={setReplyText}
-            multiline
-            numberOfLines={3}
-          />
+            {/* Comment */}
+            <Text style={styles.modalCommentBold}>
+              <Text style={styles.modalCommentLabel}>Comment : </Text>
+              {selectedFeedback?.comment}
+            </Text>
 
-          {/* Footer */}
-          <View style={styles.modalFooter}>
-            <TouchableOpacity
-              style={styles.modalCancelBtn}
-              onPress={() => setSelectedFeedback(null)}
-            >
-              <Text style={styles.modalCancelText}>Cancel</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.modalSendBtn, !replyText.trim() && { opacity: 0.5 }]}
-              onPress={handleSendReply}
-              disabled={!replyText.trim()}
-            >
-              <Text style={styles.modalSendText}>Send Reply</Text>
-            </TouchableOpacity>
+            {/* Existing reply (if any) */}
+            {selectedFeedback?.reply ? (
+              <View style={styles.existingReplyBox}>
+                <Text style={styles.existingReplyLabel}>Your previous reply</Text>
+                <Text style={styles.existingReplyText}>{selectedFeedback.reply}</Text>
+              </View>
+            ) : null}
+
+            {/* Reply text area */}
+            <TextInput
+              style={styles.replyInput}
+              placeholder="Type your reply here…"
+              placeholderTextColor={COLORS.midGray}
+              value={replyText}
+              onChangeText={setReplyText}
+              multiline
+              textAlignVertical="top"
+            />
+
+            {/* Footer buttons */}
+            <View style={styles.modalFooter}>
+              <TouchableOpacity
+                style={styles.modalCancelBtn}
+                onPress={() => { setSelectedFeedback(null); setReplyText(''); }}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.modalCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalSendBtn, !replyText.trim() && { opacity: 0.45 }]}
+                onPress={handleSendReply}
+                disabled={!replyText.trim()}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.modalSendIcon}>✈</Text>
+                <Text style={styles.modalSendText}>Send Reply</Text>
+              </TouchableOpacity>
+            </View>
+
           </View>
-        </View>
+        </TouchableOpacity>
       </TouchableOpacity>
     </Modal>
   );
@@ -760,33 +778,70 @@ const styles = StyleSheet.create({
 
   // ── Reply Modal ──
   modalOverlay: {
-    flex: 1, backgroundColor: 'rgba(0,0,0,0.4)',
-    justifyContent: 'center', alignItems: 'center', padding: 24,
+    flex: 1, backgroundColor: 'rgba(0,0,0,0.45)',
+    justifyContent: 'center', alignItems: 'center', padding: 20,
   },
   modalCard: {
-    backgroundColor: COLORS.white, borderRadius: 16,
-    padding: 24, width: '100%', maxWidth: 420,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.18, shadowRadius: 20, elevation: 12,
+    backgroundColor: COLORS.white,
+    borderRadius: 14,
+    width: '100%', maxWidth: 440,
+    overflow: 'hidden',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.22, shadowRadius: 24, elevation: 14,
   },
-  modalHeader: {
-    flexDirection: 'row', justifyContent: 'space-between',
-    alignItems: 'center', marginBottom: 12,
+
+  // Navy header bar
+  modalNavyHeader: {
+    backgroundColor: COLORS.navy,
+    flexDirection: 'row', alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20, paddingVertical: 14,
   },
-  modalTitle:    { fontSize: 16, fontWeight: '800', color: COLORS.darkText },
-  modalCloseX:   { fontSize: 18, color: COLORS.subText, padding: 4 },
-  modalDivider:  { height: 1, backgroundColor: COLORS.lightGray, marginBottom: 14 },
-  modalCommentedBy: { fontSize: 13, color: COLORS.subText, marginBottom: 4 },
-  modalAuthorName:  { fontWeight: '700', color: COLORS.darkText },
-  modalOnDocument:  { fontSize: 12, color: COLORS.subText, marginBottom: 12 },
-  modalDocumentLink:{ color: COLORS.navy, fontWeight: '600' },
-  modalCommentBox: {
-    backgroundColor: COLORS.offWhite, borderRadius: 8,
-    padding: 12, marginBottom: 12,
-    borderWidth: 1, borderColor: COLORS.lightGray,
+  modalNavyHeaderText: {
+    fontSize: 14, color: COLORS.white, fontWeight: '400',
   },
-  modalCommentLabel: { fontSize: 11, fontWeight: '700', color: COLORS.subText, marginBottom: 4 },
-  modalCommentText:  { fontSize: 13, color: COLORS.darkText, lineHeight: 18 },
+  modalNavyHeaderBold: {
+    fontWeight: '800', color: COLORS.white,
+  },
+  modalNavyCloseX: {
+    fontSize: 18, color: 'rgba(255,255,255,0.8)', padding: 2,
+  },
+
+  // Body
+  modalBody: {
+    padding: 20,
+  },
+
+  // User row: avatar + name + document
+  modalUserRow: {
+    flexDirection: 'row', alignItems: 'flex-start',
+    gap: 12, marginBottom: 16,
+  },
+  modalAvatar: {
+    width: 42, height: 42, borderRadius: 21,
+    backgroundColor: '#222', alignItems: 'center', justifyContent: 'center',
+    flexShrink: 0,
+  },
+  modalAvatarText: {
+    fontSize: 17, fontWeight: '800', color: COLORS.white,
+  },
+  modalUserName: {
+    fontSize: 14, fontWeight: '800', color: COLORS.darkText, marginBottom: 2,
+  },
+  modalUserDoc: {
+    fontSize: 12, color: COLORS.subText, lineHeight: 17,
+  },
+
+  // Comment
+  modalCommentBold: {
+    fontSize: 13, color: COLORS.darkText, lineHeight: 19,
+    marginBottom: 16, fontWeight: '400',
+  },
+  modalCommentLabel: {
+    fontWeight: '800',
+  },
+
+  // Existing reply
   existingReplyBox: {
     backgroundColor: '#E8F5E9', borderRadius: 8,
     padding: 12, marginBottom: 12,
@@ -794,27 +849,33 @@ const styles = StyleSheet.create({
   },
   existingReplyLabel: { fontSize: 11, fontWeight: '700', color: '#2E7D32', marginBottom: 4 },
   existingReplyText:  { fontSize: 13, color: COLORS.darkText, lineHeight: 18 },
-  replyInputLabel: {
-    fontSize: 12, fontWeight: '700', color: COLORS.subText, marginBottom: 6,
-  },
+
+  // Reply textarea
   replyInput: {
-    borderWidth: 1.5, borderColor: COLORS.lightGray, borderRadius: 10,
+    borderWidth: 1, borderColor: COLORS.lightGray, borderRadius: 8,
     paddingHorizontal: 12, paddingVertical: 10,
     fontSize: 13, color: COLORS.darkText,
-    backgroundColor: COLORS.white, minHeight: 80,
-    textAlignVertical: 'top', marginBottom: 16,
+    backgroundColor: COLORS.white, height: 100,
+    textAlignVertical: 'top', marginBottom: 18,
   },
+
+  // Footer
   modalFooter: {
     flexDirection: 'row', gap: 10,
   },
   modalCancelBtn: {
-    flex: 1, paddingVertical: 11, borderRadius: 10,
-    backgroundColor: COLORS.lightGray, alignItems: 'center',
+    flex: 1, paddingVertical: 11, borderRadius: 8,
+    backgroundColor: COLORS.white,
+    borderWidth: 1, borderColor: COLORS.lightGray,
+    alignItems: 'center',
   },
   modalCancelText: { fontSize: 13, fontWeight: '600', color: COLORS.darkText },
   modalSendBtn: {
-    flex: 1, paddingVertical: 11, borderRadius: 10,
-    backgroundColor: COLORS.navy, alignItems: 'center',
+    flex: 1.2, paddingVertical: 11, borderRadius: 8,
+    backgroundColor: COLORS.navy,
+    flexDirection: 'row', alignItems: 'center',
+    justifyContent: 'center', gap: 6,
   },
+  modalSendIcon: { fontSize: 13, color: COLORS.white },
   modalSendText: { fontSize: 13, fontWeight: '700', color: COLORS.white },
 });
