@@ -2,7 +2,7 @@ import React, { useState, useRef } from 'react';
 import {
   View, Text, TextInput, ScrollView, TouchableOpacity,
   StyleSheet, SafeAreaView, StatusBar, Dimensions,
-  Modal, Alert, KeyboardAvoidingView, Platform,
+  Modal, Alert, KeyboardAvoidingView, Platform, Image,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useNav } from './navContext';
@@ -724,9 +724,11 @@ export default function LYDOMonitorScreen() {
   const renderSidebar = () => (
     <View style={styles.sidebar}>
       <View style={styles.logoPill}>
-        <View style={styles.logoCircle}>
-          <Text style={styles.logoText}>LYDO</Text>
-        </View>
+        <Image
+          source={require('./../../assets/images/lydo-logo.png')}
+          style={styles.logoImage}
+          resizeMode="contain"
+        />
       </View>
       <View style={{ height: 28 }} />
       {NAV_TABS.map(tab => {
@@ -948,9 +950,17 @@ const styles = StyleSheet.create({
     alignItems: 'center', paddingTop: 20, paddingBottom: 24, paddingHorizontal: 10, zIndex: 10,
   },
   sidebarOverlay: { position: 'absolute', left: 0, top: 0, bottom: 0, right: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 5 },
-  logoPill: { width: 70, height: 70, borderRadius: 35, backgroundColor: 'rgba(255,255,255,0.15)', alignItems: 'center', justifyContent: 'center', marginBottom: 8, borderWidth: 2, borderColor: 'rgba(255,255,255,0.3)' },
-  logoCircle: { width: 52, height: 52, borderRadius: 26, backgroundColor: COLORS.gold, alignItems: 'center', justifyContent: 'center' },
-  logoText: { fontSize: 14, fontWeight: '900', color: COLORS.navy, letterSpacing: 0.5 },
+  logoPill: {
+    marginTop: 20,
+    width: 70, height: 70, borderRadius: 35,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    alignItems: 'center', justifyContent: 'center',
+    marginBottom: 8, borderWidth: 2, borderColor: 'rgba(255,255,255,0.3)',
+  },
+    logoImage: {
+    width: 110,
+    height: 110,
+  },
   navItem: { width: '100%', paddingVertical: 12, paddingHorizontal: 12, borderRadius: 24, marginBottom: 8, alignItems: 'center', borderWidth: 1.5, borderColor: COLORS.white, backgroundColor: COLORS.navy },
   navItemActive: { backgroundColor: COLORS.white, borderColor: COLORS.white },
   navLabel: { fontSize: 13, fontWeight: '600', color: 'rgba(255,255,255,0.8)', letterSpacing: 0.3 },

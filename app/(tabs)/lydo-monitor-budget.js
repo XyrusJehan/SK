@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import {
   View, Text, TextInput, ScrollView, TouchableOpacity,
   StyleSheet, SafeAreaView, StatusBar, Dimensions,
-  Modal, Alert, KeyboardAvoidingView, Platform,
+  Modal, Alert, KeyboardAvoidingView, Platform, Image,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useNav } from './navContext';
@@ -316,9 +316,11 @@ export default function LYDOMonitorBudgetScreen() {
   const renderSidebar = () => (
     <View style={S.sidebar}>
       <View style={S.logoPill}>
-        <View style={S.logoCircle}>
-          <Text style={S.logoText}>LYDO</Text>
-        </View>
+        <Image
+          source={require('./../../assets/images/lydo-logo.png')}
+          style={S.logoImage}
+          resizeMode="contain"
+        />
       </View>
       <View style={{ height: 28 }} />
       {NAV_TABS.map(tab => {
@@ -575,16 +577,16 @@ const S = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 5,
   },
   logoPill: {
+    marginTop: 20,
     width: 70, height: 70, borderRadius: 35,
     backgroundColor: 'rgba(255,255,255,0.15)',
     alignItems: 'center', justifyContent: 'center',
     marginBottom: 8, borderWidth: 2, borderColor: 'rgba(255,255,255,0.3)',
   },
-  logoCircle: {
-    width: 52, height: 52, borderRadius: 26,
-    backgroundColor: COLORS.gold, alignItems: 'center', justifyContent: 'center',
+    logoImage: {
+    width: 110,
+    height: 110,
   },
-  logoText:     { fontSize: 12, fontWeight: '900', color: COLORS.navy, letterSpacing: 0.5 },
   navItem:      { width: '100%', paddingVertical: 12, paddingHorizontal: 12, borderRadius: 24, marginBottom: 8, alignItems: 'center', borderWidth: 1.5, borderColor: COLORS.white, backgroundColor: COLORS.navy },
   navItemActive:{ backgroundColor: COLORS.white, borderColor: COLORS.white },
   navLabel:     { fontSize: 13, fontWeight: '600', color: 'rgba(255,255,255,0.8)', letterSpacing: 0.3 },

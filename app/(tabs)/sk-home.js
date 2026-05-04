@@ -9,6 +9,7 @@ import {
   SafeAreaView,
   StatusBar,
   Dimensions,
+  Image,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useNav } from './navContext';
@@ -134,9 +135,11 @@ export default function HomeScreen({ navigation }) {
   const renderSidebar = () => (
     <View style={styles.sidebar}>
       <View style={styles.logoPill}>
-        <View style={styles.logoCircle}>
-          <Text style={styles.logoText}>SK</Text>
-        </View>
+        <Image
+          source={require('./../../assets/images/sk-logo.png')}
+          style={styles.logoImage}
+          resizeMode="contain"
+        />
       </View>
       <View style={styles.sidebarSpacer} />
       {['Home', 'Documents'].map((tab) => {
@@ -363,16 +366,17 @@ const styles = StyleSheet.create({
     zIndex: 5,
   },
   logoPill: {
-    width: 70,
-    height: 70,
-    borderRadius: 35,
+    marginTop: 20,
+    width: 70, height: 70, borderRadius: 35,
     backgroundColor: 'rgba(255,255,255,0.15)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 8,
-    borderWidth: 2,
-    borderColor: 'rgba(255,255,255,0.3)',
+    alignItems: 'center', justifyContent: 'center',
+    marginBottom: 8, borderWidth: 2, borderColor: 'rgba(255,255,255,0.3)',
   },
+    logoImage: {
+    width: 100,
+    height: 100,
+  },
+
   logoCircle: {
     width: 52,
     height: 52,

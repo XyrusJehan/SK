@@ -9,6 +9,7 @@ import {
   SafeAreaView,
   StatusBar,
   Dimensions,
+  Image,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useNav } from './navContext';
@@ -125,9 +126,11 @@ export default function LYDODocumentReportsScreen() {
   const renderSidebar = () => (
     <View style={styles.sidebar}>
       <View style={styles.logoPill}>
-        <View style={styles.logoCircle}>
-          <Text style={styles.logoText}>LYDO</Text>
-        </View>
+        <Image
+          source={require('./../../assets/images/lydo-logo.png')}
+          style={styles.logoImage}
+          resizeMode="contain"
+        />
       </View>
       <View style={{ height: 28 }} />
       {NAV_TABS.map(tab => {
@@ -328,14 +331,17 @@ const styles = StyleSheet.create({
     zIndex: 5,
   },
   logoPill: {
+    marginTop: 20,
     width: 70, height: 70, borderRadius: 35,
     backgroundColor: 'rgba(255,255,255,0.15)',
     alignItems: 'center', justifyContent: 'center',
     marginBottom: 8, borderWidth: 2, borderColor: 'rgba(255,255,255,0.3)',
   },
-  logoCircle: {
-    width: 52, height: 52, borderRadius: 26,
-    backgroundColor: COLORS.gold,
+    logoImage: {
+    width: 110,
+    height: 110,
+  },
+  navItem: {
     alignItems: 'center', justifyContent: 'center',
   },
   logoText: { fontSize: 15, fontWeight: '900', color: '#133E75', letterSpacing: 0.5 },

@@ -10,6 +10,7 @@ import {
   StatusBar,
   Dimensions,
   Modal,
+  Image,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useNav } from './navContext';
@@ -230,9 +231,11 @@ export default function LYDODocumentTemplatesScreen() {
   const renderSidebar = () => (
     <View style={styles.sidebar}>
       <View style={styles.logoPill}>
-        <View style={styles.logoCircle}>
-          <Text style={styles.logoText}>LYDO</Text>
-        </View>
+        <Image
+          source={require('./../../assets/images/lydo-logo.png')}
+          style={styles.logoImage}
+          resizeMode="contain"
+        />
       </View>
       <View style={{ height: 28 }} />
       {NAV_TABS.map(tab => {
@@ -1006,16 +1009,16 @@ const styles = StyleSheet.create({
     zIndex: 5,
   },
   logoPill: {
+    marginTop: 20,
     width: 70, height: 70, borderRadius: 35,
     backgroundColor: 'rgba(255,255,255,0.15)',
     alignItems: 'center', justifyContent: 'center',
     marginBottom: 8, borderWidth: 2, borderColor: 'rgba(255,255,255,0.3)',
   },
-  logoCircle: {
-    width: 52, height: 52, borderRadius: 26,
-    backgroundColor: COLORS.gold, alignItems: 'center', justifyContent: 'center',
+    logoImage: {
+    width: 110,
+    height: 110,
   },
-  logoText: { fontSize: 15, fontWeight: '900', color: '#133E75', letterSpacing: 0.5 },
   navItem: {
     width: '100%', paddingVertical: 12, paddingHorizontal: 12,
     borderRadius: 24, marginBottom: 8, alignItems: 'center',
