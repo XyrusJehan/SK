@@ -221,7 +221,7 @@ export default function DocumentsScreen({ navigation }) {
   };
 
   const handleNavPress = (tab) => {
-    if (tab === 'Home') {
+    if (tab === 'Dashboard') {
       router.push('/(tabs)/sk-home');
     } else if (tab === 'Documents') {
       router.push('/(tabs)/sk-document');
@@ -258,7 +258,7 @@ export default function DocumentsScreen({ navigation }) {
         />
       </View>
       <View style={styles.sidebarSpacer} />
-      {['Home', 'Documents', 'Planning', 'Portal'].map((tab) => {
+      {['Dashboard', 'Documents', 'Planning', 'Portal'].map((tab) => {
         const active = activeTab === tab;
         return (
           <TouchableOpacity
@@ -273,7 +273,7 @@ export default function DocumentsScreen({ navigation }) {
           </TouchableOpacity>
         );
       })}
-      <View style={styles.sidebarSpacer} />
+      <View style={{ flex: 1 }} />
       <TouchableOpacity
         style={styles.logoutBtn}
         onPress={handleLogout}
