@@ -49,7 +49,7 @@ export default function LoginScreen() {
       if (result.user.role === 'lydo') {
         router.replace('/(tabs)/lydo-home');
       } else {
-        router.replace('/(tabs)/sk-home');
+        router.replace('/(tabs)/sk-dashboard');
       }
     } else {
       setError(result.error);

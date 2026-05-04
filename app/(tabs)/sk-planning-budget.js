@@ -421,12 +421,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     marginBottom: 10,
+    flexWrap: 'wrap',
+    gap: 4,
   },
   sectionTitle: {
-    fontSize: 14, fontWeight: '800', color: COLORS.navy,
+    fontSize: isMobile ? 12 : 14, fontWeight: '800', color: COLORS.navy,
   },
   dateReceived: {
-    fontSize: 12, fontWeight: '600', color: COLORS.subText,
+    fontSize: isMobile ? 10 : 12, fontWeight: '600', color: COLORS.subText,
   },
 
   // ── Budget Table ──
@@ -445,52 +447,52 @@ const styles = StyleSheet.create({
 
   // Table header
   tableHeader: {
-    
+
     flexDirection: 'row', alignItems: 'center',
     backgroundColor: COLORS.navy,
-    paddingVertical: 11, paddingHorizontal: 16,
+    paddingVertical: 11, paddingHorizontal: isMobile ? 10 : 16,
   },
   thText: {
-    fontSize: 12, fontWeight: '800', color: COLORS.white,
+    fontSize: isMobile ? 9 : 12, fontWeight: '800', color: COLORS.white,
   },
 
   // Table rows
   tableRow: {
     flexDirection: 'row', alignItems: 'center',
-    paddingVertical: 13, paddingHorizontal: 16,
+    paddingVertical: isMobile ? 8 : 13, paddingHorizontal: isMobile ? 10 : 16,
     borderBottomWidth: 1, borderBottomColor: COLORS.lightGray,
-    backgroundColor: COLORS.white, minHeight: 50,
+    backgroundColor: COLORS.white, minHeight: isMobile ? 42 : 50,
   },
   tableRowEven:  { backgroundColor: '#F5F7FA' },
-  tableRowEmpty: { minHeight: 50 },
+  tableRowEmpty: { minHeight: isMobile ? 42 : 50 },
 
   // Columns
-  colBarangay: { flex: 2, paddingRight: 8 },
-  colBudget:   { flex: 1.2, paddingRight: 8 },
-  colAction:   { width: isMobile ? 80 : 120, alignItems: 'flex-end'},
+  colBarangay: { flex: 2, paddingRight: 4 },
+  colBudget:   { flex: 1.2, paddingRight: 4 },
+  colAction:   { width: isMobile ? 70 : 120, alignItems: 'flex-end'},
 
-  tdBarangay: { fontSize: isMobile ? 11 : 13, color: COLORS.darkText, fontWeight: '500' },
-  tdBudget:   { fontSize: isMobile ? 11 : 13, color: COLORS.darkText, fontWeight: '600' },
+  tdBarangay: { fontSize: isMobile ? 10 : 13, color: COLORS.darkText, fontWeight: '500' },
+  tdBudget:   { fontSize: isMobile ? 10 : 13, color: COLORS.darkText, fontWeight: '600' },
 
   // Formulate Plan action
   formulateRow: {
-    flexDirection: 'row', alignItems: 'center', gap: 6,
+    flexDirection: 'row', alignItems: 'center', gap: 4,
   },
   formulateText: {
-    fontSize: isMobile ? 10 : 12, alignItems: 'center',
+    fontSize: isMobile ? 9 : 12, alignItems: 'center',
     color: COLORS.navy, fontWeight: '600',
   },
   extLinkBox: {
-    width: 22, height: 22, borderRadius: 5,
+    width: 20, height: 20, borderRadius: 5,
     borderWidth: 1, borderColor: COLORS.lightGray,
     backgroundColor: COLORS.offWhite,
     alignItems: 'center', justifyContent: 'center',
   },
-  extLinkText: { fontSize: 11, color: COLORS.navy, fontWeight: '700' },
+  extLinkText: { fontSize: 10, color: COLORS.navy, fontWeight: '700' },
 
   // Read-Only
   readOnlyText: {
-    fontSize: isMobile ? 10 : 12,
+    fontSize: isMobile ? 9 : 12,
     color: COLORS.subText, fontWeight: '500',
     textAlign: 'center', flex: 1,
   },
