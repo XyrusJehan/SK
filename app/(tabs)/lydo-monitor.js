@@ -2,7 +2,7 @@ import React, { useState, useRef } from 'react';
 import {
   View, Text, TextInput, ScrollView, TouchableOpacity,
   StyleSheet, SafeAreaView, StatusBar, Dimensions,
-  Modal, Alert, KeyboardAvoidingView, Platform,
+  Modal, Alert, KeyboardAvoidingView, Platform, Image,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useNav } from './navContext';
@@ -724,9 +724,11 @@ export default function LYDOMonitorScreen() {
   const renderSidebar = () => (
     <View style={styles.sidebar}>
       <View style={styles.logoPill}>
-        <View style={styles.logoCircle}>
-          <Text style={styles.logoText}>LYDO</Text>
-        </View>
+        <Image
+          source={require('./../../assets/images/lydo-logo.png')}
+          style={styles.logoImage}
+          resizeMode="contain"
+        />
       </View>
       <View style={{ height: 28 }} />
       {NAV_TABS.map(tab => {
@@ -738,12 +740,8 @@ export default function LYDOMonitorScreen() {
           </TouchableOpacity>
         );
       })}
-      <View style={{ height: 28 }} />
-      <TouchableOpacity
-        style={styles.logoutBtn}
-        onPress={handleLogout}
-        activeOpacity={0.8}
-      >
+      <View style={{ flex: 1 }} />
+      <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout} activeOpacity={0.8}>
         <Text style={styles.logoutText}>Logout</Text>
       </TouchableOpacity>
     </View>
@@ -797,7 +795,6 @@ export default function LYDOMonitorScreen() {
             </TouchableOpacity>
           );
         })}
-        <View style={styles.monitorTabFiller} />
       </View>
 
       {/* Filter Row */}
@@ -895,10 +892,21 @@ export default function LYDOMonitorScreen() {
       <StatusBar barStyle="light-content" backgroundColor={COLORS.navy} />
 
       <View style={styles.layout}>
+        {/* Mobile: Sidebar as overlay */}
         {isMobile && sidebarVisible && (
-          <TouchableOpacity style={styles.sidebarOverlay} onPress={() => setSidebarVisible(false)} activeOpacity={1} />
+          <TouchableOpacity
+            style={styles.sidebarOverlay}
+            activeOpacity={1}
+            onPress={() => setSidebarVisible(false)}
+          />
         )}
-        {(!isMobile || sidebarVisible) && renderSidebar()}
+
+        {isMobile ? (
+          sidebarVisible && renderSidebar()
+        ) : (
+          renderSidebar()
+        )}
+
         {renderContent()}
       </View>
 
@@ -942,30 +950,24 @@ const styles = StyleSheet.create({
     alignItems: 'center', paddingTop: 20, paddingBottom: 24, paddingHorizontal: 10, zIndex: 10,
   },
   sidebarOverlay: { position: 'absolute', left: 0, top: 0, bottom: 0, right: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 5 },
-  logoPill: { width: 70, height: 70, borderRadius: 35, backgroundColor: 'rgba(255,255,255,0.15)', alignItems: 'center', justifyContent: 'center', marginBottom: 8, borderWidth: 2, borderColor: 'rgba(255,255,255,0.3)' },
-  logoCircle: { width: 52, height: 52, borderRadius: 26, backgroundColor: COLORS.gold, alignItems: 'center', justifyContent: 'center' },
-  logoText: { fontSize: 14, fontWeight: '900', color: COLORS.navy, letterSpacing: 0.5 },
+  logoPill: {
+    marginTop: 20,
+    width: 70, height: 70, borderRadius: 35,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    alignItems: 'center', justifyContent: 'center',
+    marginBottom: 8, borderWidth: 2, borderColor: 'rgba(255,255,255,0.3)',
+  },
+    logoImage: {
+    width: 110,
+    height: 110,
+  },
   navItem: { width: '100%', paddingVertical: 12, paddingHorizontal: 12, borderRadius: 24, marginBottom: 8, alignItems: 'center', borderWidth: 1.5, borderColor: COLORS.white, backgroundColor: COLORS.navy },
   navItemActive: { backgroundColor: COLORS.white, borderColor: COLORS.white },
   navLabel: { fontSize: 13, fontWeight: '600', color: 'rgba(255,255,255,0.8)', letterSpacing: 0.3 },
   navLabelActive: { color: '#000', fontWeight: '800' },
-  logoutBtn: {
-    width: '100%',
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-    borderRadius: 24,
-    marginTop: 8,
-    alignItems: 'center',
-    borderWidth: 1.5,
-    borderColor: COLORS.white,
-    backgroundColor: 'rgba(255,255,255,0.1)',
-  },
-  logoutText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#ffffff',
-    letterSpacing: 0.3,
-  },
+  logoutBtn:  { width: '100%', paddingVertical: 12, paddingHorizontal: 12, borderRadius: 24, marginTop: 8, alignItems: 'center', borderWidth: 1.5, borderColor: COLORS.white, backgroundColor: 'rgba(255,255,255,0.1)' },
+  logoutText: { fontSize: 13, fontWeight: '600', color: '#ffffff', letterSpacing: 0.3 },
+
   main: { flex: 1, backgroundColor: COLORS.offWhite, borderTopLeftRadius: 20 },
   mainMobile: { borderTopLeftRadius: 0 },
   mainContent: { padding: 20, paddingBottom: 40 },
@@ -976,7 +978,7 @@ const styles = StyleSheet.create({
   mobileTitle: { fontSize: 18, fontWeight: '800', color: COLORS.darkText },
   header: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 20 },
   headerSub: { fontSize: 10, fontWeight: '600', color: COLORS.subText, letterSpacing: 2, textTransform: 'uppercase', marginBottom: 2 },
-  headerTitle: { fontSize: 20, fontWeight: '900', color: COLORS.darkText, letterSpacing: 0.5 },
+  headerTitle: { fontSize: 20, fontWeight: '900', color: COLORS.darkText, letterSpacing: 0.5, borderBottomWidth: 2, borderBottomColor: COLORS.lightGray, },
   headerDesc: { fontSize: 15, fontWeight: '700', color: COLORS.darkText, marginTop: 6, lineHeight: 17 },
   bellBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: COLORS.cardBg, alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 6, elevation: 3 },
   bellWrapper: { width: 20, height: 22, alignItems: 'center' },
@@ -985,12 +987,11 @@ const styles = StyleSheet.create({
   bellDot: { position: 'absolute', top: 0, right: 1, width: 7, height: 7, borderRadius: 4, backgroundColor: COLORS.gold, borderWidth: 1.5, borderColor: COLORS.cardBg },
   notifBadge: { position: 'absolute', top: -2, right: -2, width: 16, height: 16, borderRadius: 8, backgroundColor: COLORS.gold, alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: COLORS.white },
   notifBadgeText: { fontSize: 8, fontWeight: '900', color: COLORS.navy },
-  monitorTabBar: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: COLORS.lightGray, marginBottom: 14, overflowX: 'auto', overflow: 'hidden',},
-  monitorTab: { paddingHorizontal: isMobile ? 8 : 18, backgroundColor: COLORS.navy, paddingVertical: 10, borderBottomWidth: 2, borderBottomColor: 'transparent', marginBottom: -1 },
-  monitorTabActive: { backgroundColor: COLORS.gold, borderRadius: 4, borderBottomColor: COLORS.gold },
+  monitorTabBar: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: COLORS.lightGray, marginBottom: 14, overflowX: 'hidden', overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.30, shadowRadius: 3, elevation: 6,},
+  monitorTab: { flex: 1, paddingHorizontal: isMobile ? 8 : 40, backgroundColor: COLORS.navy, paddingVertical: 10, borderBottomWidth: 0, borderBottomColor: 'transparent', marginBottom: -1, borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)', alignItems: 'center' },
+  monitorTabActive: { backgroundColor: COLORS.gold, borderRadius: 4, borderBottomColor: COLORS.gold, borderColor: COLORS.gold, shadowColor: COLORS.gold, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.4, shadowRadius: 4, elevation: 3 },
   monitorTabText: { fontSize: isMobile ? 10 : 13, fontWeight: '600', color: COLORS.white },
   monitorTabTextActive: { color: COLORS.darkText, fontWeight: '800' },
-  monitorTabFiller: { flex: 1 },
   filterRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 14, flexWrap: 'wrap' },
   searchBox: { flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.white, borderRadius: 20, borderWidth: 1, borderColor: COLORS.lightGray, paddingHorizontal: 12, paddingVertical: 7, minWidth: 120, maxWidth: isMobile ? 140 : 190 },
   searchInput: { flex: 1, fontSize: 12, color: COLORS.darkText },
@@ -1005,10 +1006,10 @@ const styles = StyleSheet.create({
   tableHeaderText: { fontSize: isMobile ? 10 : 12, fontWeight: '700', color: COLORS.darkText, letterSpacing: 0.2 },
   tableRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, paddingHorizontal: 14, borderBottomWidth: 1, borderBottomColor: COLORS.lightGray, backgroundColor: COLORS.white },
   tableRowEven: { backgroundColor: '#FAFAFA' },
-  colBarangay: { width: isMobile ? 75 : 140, paddingRight: 8 },
-  colDocument: { width: isMobile ? 50 : 80, paddingRight: 8 },
+  colBarangay: { flex: 1, paddingRight: 8 },
+  colDocument: { flex: 1, paddingRight: 8 },
   colStatus:   { flex: 1, paddingRight: 8 },
-  colDateTime: { width: isMobile ? 65 : 110, alignItems: 'flex-end', paddingRight: 8 },
+  colDateTime: { flex: 1, alignItems: 'flex-start', paddingRight: 8 },
   colAction:   { width: isMobile ? 80 : 120, alignItems: 'flex-start' },
   // Approved view columns
   colBarangayApproved:  { width: isMobile ? 90 : 180, paddingRight: 8 },

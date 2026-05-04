@@ -10,6 +10,7 @@ import {
   StatusBar,
   Dimensions,
   Alert,
+  Image,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useNav } from './navContext';
@@ -151,6 +152,7 @@ const ALL_DOCUMENTS = [
 
 const CATEGORIES = ['All', 'Planning', 'Financial', 'Governance', 'Performance'];
 const SORT_OPTIONS = ['Newest', 'Oldest', 'A–Z'];
+const DOCUMENT_TABS = ['Barangay Document', 'Reports', 'Templates'];
 
 const NAV_TABS = ['Home', 'Documents', 'Monitor'];
 
@@ -269,6 +271,7 @@ export default function LYDODocumentListScreen({ navigation }) {
   const [dropdownVisible, setDropdownVisible]   = useState(false);
   const [dropdownOptions, setDropdownOptions]   = useState([]);
   const [dropdownAccent, setDropdownAccent]     = useState(COLORS.navy);
+  const [activeDocumentTab, setActiveDocumentTab] = useState('Barangay Document');
 
   // Set initial view based on route params from lydo-document
   useEffect(() => {
@@ -303,6 +306,13 @@ export default function LYDODocumentListScreen({ navigation }) {
   const handleLogout = () => {
     logout();
     router.replace('/');
+  };
+
+  const handleDocumentTabPress = (tab) => {
+    if (tab === 'Barangay Documents') { router.push('/(tabs)/lydo-monitor'); return; }
+    if (tab === 'Templates') { router.push('/(tabs)/lydo-document-templates'); return; }
+    if (tab === 'Reports') { router.push('/(tabs)/lydo-document-reports'); return; }
+    setActiveDocumentTab(tab);
   };
 
   // ── Tap a bullet item on a card → switch to list view filtered by subType ──
@@ -375,9 +385,11 @@ export default function LYDODocumentListScreen({ navigation }) {
   const renderSidebar = () => (
     <View style={styles.sidebar}>
       <View style={styles.logoPill}>
-        <View style={styles.logoCircle}>
-          <Text style={styles.logoText}>SK</Text>
-        </View>
+        <Image
+          source={require('./../../assets/images/lydo-logo.png')}
+          style={styles.logoImage}
+          resizeMode="contain"
+        />
       </View>
       <View style={{ height: 28 }} />
       {NAV_TABS.map(tab => {
@@ -393,7 +405,7 @@ export default function LYDODocumentListScreen({ navigation }) {
           </TouchableOpacity>
         );
       })}
-      <View style={{ height: 28 }} />
+      <View style={{ flex: 1 }} />
       <TouchableOpacity
         style={styles.logoutBtn}
         onPress={handleLogout}
@@ -440,6 +452,23 @@ export default function LYDODocumentListScreen({ navigation }) {
       )}
 
       <Text style={styles.sectionTitle}>Document Management</Text>
+
+      {/* Document Tab Bar */}
+      <View style={styles.documentTabBar}>
+        {DOCUMENT_TABS.map(tab => {
+          const active = activeDocumentTab === tab;
+          return (
+            <TouchableOpacity
+              key={tab}
+              style={[styles.documentTab, active && styles.documentTabActive]}
+              onPress={() => handleDocumentTabPress(tab)}
+              activeOpacity={0.8}
+            >
+              <Text style={[styles.documentTabText, active && styles.documentTabTextActive]}>{tab}</Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
 
       <View style={isMobile ? styles.gridMobile : styles.gridInner}>
         {DOCUMENT_GROUPS.map(group => (
@@ -495,6 +524,23 @@ export default function LYDODocumentListScreen({ navigation }) {
           </View>
         </View>
       )}
+
+      {/* Document Tab Bar */}
+      <View style={styles.documentTabBar}>
+        {DOCUMENT_TABS.map(tab => {
+          const active = activeDocumentTab === tab;
+          return (
+            <TouchableOpacity
+              key={tab}
+              style={[styles.documentTab, active && styles.documentTabActive]}
+              onPress={() => handleDocumentTabPress(tab)}
+              activeOpacity={0.8}
+            >
+              <Text style={[styles.documentTabText, active && styles.documentTabTextActive]}>{tab}</Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
 
       {/* ── Back breadcrumb ── */}
       <View style={styles.breadcrumbRow}>
@@ -669,9 +715,17 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.5)',
     zIndex: 5,
   },
-  logoPill: { width: 70, height: 70, borderRadius: 35, backgroundColor: 'rgba(255,255,255,0.15)', alignItems: 'center', justifyContent: 'center', marginBottom: 8, borderWidth: 2, borderColor: 'rgba(255,255,255,0.3)' },
-  logoCircle: { width: 52, height: 52, borderRadius: 26, backgroundColor: COLORS.gold, alignItems: 'center', justifyContent: 'center' },
-  logoText: { fontSize: 14, fontWeight: '900', color: COLORS.navy, letterSpacing: 0.5 },
+  logoPill: {
+    marginTop: 20,
+    width: 70, height: 70, borderRadius: 35,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    alignItems: 'center', justifyContent: 'center',
+    marginBottom: 8, borderWidth: 2, borderColor: 'rgba(255,255,255,0.3)',
+  },
+    logoImage: {
+    width: 110,
+    height: 110,
+  },
   navItem: { width: '100%', paddingVertical: 12, paddingHorizontal: 12, borderRadius: 24, marginBottom: 8, alignItems: 'center', borderWidth: 1.5, borderColor: COLORS.white, backgroundColor: COLORS.navy },
   navItemActive: { backgroundColor: '#ffffff', borderColor: '#000000' },
   navLabel: { fontSize: 13, fontWeight: '600', color: '#ffffff', letterSpacing: 0.3 },
@@ -742,6 +796,53 @@ const styles = StyleSheet.create({
 
   // ── Cards view ──
   sectionTitle: { fontSize: 22, fontWeight: '800', color: COLORS.darkText, marginBottom: 18, letterSpacing: 0.3 },
+
+  // Document Tab Bar
+  documentTabBar: {
+    flexDirection: 'row',
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.lightGray,
+    marginBottom: 14,
+    overflowX: 'hidden',
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.30,
+    shadowRadius: 3,
+    elevation: 6,
+  },
+  documentTab: {
+    flex: 1,
+    paddingHorizontal: isMobile ? 8 : 40,
+    backgroundColor: COLORS.navy,
+    paddingVertical: 10,
+    borderBottomWidth: 0,
+    borderBottomColor: 'transparent',
+    marginBottom: -1,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.15)',
+    alignItems: 'center',
+  },
+  documentTabActive: {
+    backgroundColor: COLORS.gold,
+    borderRadius: 4,
+    borderBottomColor: COLORS.gold,
+    borderColor: COLORS.gold,
+    shadowColor: COLORS.gold,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.4,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  documentTabText: {
+    fontSize: isMobile ? 10 : 13,
+    fontWeight: '600',
+    color: COLORS.white,
+  },
+  documentTabTextActive: {
+    color: COLORS.darkText,
+    fontWeight: '800',
+  },
   gridInner: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, paddingBottom: 24 },
   gridMobile: { flexDirection: 'column', gap: 14, paddingBottom: 24 },
   cardWrapper: { width: '47%', minWidth: 150 },
