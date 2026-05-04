@@ -996,10 +996,10 @@ const styles = StyleSheet.create({
   tableHeaderText: { fontSize: isMobile ? 10 : 12, fontWeight: '700', color: COLORS.darkText, letterSpacing: 0.2 },
   tableRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, paddingHorizontal: 14, borderBottomWidth: 1, borderBottomColor: COLORS.lightGray, backgroundColor: COLORS.white },
   tableRowEven: { backgroundColor: '#FAFAFA' },
-  colBarangay: { width: isMobile ? 75 : 140, paddingRight: 8 },
-  colDocument: { width: isMobile ? 50 : 80, paddingRight: 8 },
+  colBarangay: { flex: 1, paddingRight: 8 },
+  colDocument: { flex: 1, paddingRight: 8 },
   colStatus:   { flex: 1, paddingRight: 8 },
-  colDateTime: { width: isMobile ? 65 : 110, alignItems: 'flex-end', paddingRight: 8 },
+  colDateTime: { flex: 1, alignItems: 'flex-start', paddingRight: 8 },
   colAction:   { width: isMobile ? 80 : 120, alignItems: 'flex-start' },
   // Approved view columns
   colBarangayApproved:  { width: isMobile ? 90 : 180, paddingRight: 8 },

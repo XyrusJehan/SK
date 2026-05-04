@@ -3,7 +3,7 @@ import {
   View, Text, TextInput, TouchableOpacity,
   StyleSheet, SafeAreaView, StatusBar,
   KeyboardAvoidingView, Platform, ScrollView,
-  Dimensions,
+  Dimensions, Image,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuth } from './(tabs)/authContext';
@@ -68,12 +68,11 @@ export default function LoginScreen() {
 
             {/* Seal / Logo */}
             <View style={styles.sealWrap}>
-              <View style={styles.sealPlaceholder}>
-                <View style={styles.sealInner}>
-                  <Text style={styles.sealText}>SK</Text>
-                  <Text style={styles.sealSub}>SEAL</Text>
-                </View>
-              </View>
+              <Image
+                source={require('./../assets/images/rizal-logo.png')}
+                style={styles.logoImage}
+                resizeMode="contain"
+              />
             </View>
 
             {/* E-mail */}
@@ -177,18 +176,12 @@ const styles = StyleSheet.create({
     elevation: 10,
   },
 
-  // Seal
+  // Seal / Logo
   sealWrap: { alignItems: 'center', marginBottom: isMobile ? 24 : 36 },
-  sealPlaceholder: {
-    width: isMobile ? 72 : 96, height: isMobile ? 72 : 96,
-    borderRadius: isMobile ? 36 : 48,
-    backgroundColor: COLORS.navyLight,
-    borderWidth: 3, borderColor: COLORS.gold,
-    alignItems: 'center', justifyContent: 'center',
+  logoImage: {
+    width: isMobile ? 120 : 140,
+    height: isMobile ? 120 : 140,
   },
-  sealInner: { alignItems: 'center' },
-  sealText: { fontSize: isMobile ? 18 : 22, fontWeight: '900', color: COLORS.white },
-  sealSub: { fontSize: isMobile ? 7 : 9, fontWeight: '700', color: COLORS.gold, letterSpacing: 2 },
 
   // Labels & Inputs
   label: {

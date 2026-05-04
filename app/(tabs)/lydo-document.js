@@ -126,6 +126,7 @@ const DOCUMENT_GROUPS = [
 
 // ─── NAV TABS ─────────────────────────────────────────────────────────────────
 const NAV_TABS = ['Home', 'Documents', 'Monitor'];
+const DOCUMENT_TABS = ['Barangay Document', 'Reports', 'Templates'];
 
 // ─── ICON COMPONENTS ──────────────────────────────────────────────────────────
 const BellIcon = ({ hasNotif }) => (
@@ -277,6 +278,7 @@ export default function LYDODocumentsScreen({ navigation }) {
   const [searchText, setSearchText]             = useState('');
   const [notifCount]                            = useState(2);
   const [sidebarVisible, setSidebarVisible]     = useState(false);
+  const [activeDocumentTab, setActiveDocumentTab] = useState('Barangay Document');
 
   useEffect(() => { setActiveTab('Documents'); }, []);
 
@@ -312,6 +314,13 @@ export default function LYDODocumentsScreen({ navigation }) {
   const handleLogout = () => {
     logout();
     router.replace('/');
+  };
+
+  const handleDocumentTabPress = (tab) => {
+    if (tab === 'Barangay Documents') { router.push('/(tabs)/lydo-monitor'); return; }
+    if (tab === 'Templates') { router.push('/(tabs)/lydo-document-templates'); return; }
+    if (tab === 'Reports') { router.push('/(tabs)/lydo-document-reports'); return; }
+    setActiveDocumentTab(tab);
   };
 
   // ── Filtered data ──
@@ -402,6 +411,23 @@ export default function LYDODocumentsScreen({ navigation }) {
 
       {/* Page title */}
       <Text style={styles.sectionTitle}>Document Management</Text>
+
+      {/* Document Tab Bar */}
+      <View style={styles.documentTabBar}>
+        {DOCUMENT_TABS.map(tab => {
+          const active = activeDocumentTab === tab;
+          return (
+            <TouchableOpacity
+              key={tab}
+              style={[styles.documentTab, active && styles.documentTabActive]}
+              onPress={() => handleDocumentTabPress(tab)}
+              activeOpacity={0.8}
+            >
+              <Text style={[styles.documentTabText, active && styles.documentTabTextActive]}>{tab}</Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
 
       {/* ── VIEW: ROOT FOLDERS (barangays) ── */}
       {view === 'folders' && (
@@ -662,6 +688,53 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 22, fontWeight: '800', color: COLORS.darkText,
     marginBottom: 6, letterSpacing: 0.3,
+  },
+
+  // Document Tab Bar
+  documentTabBar: {
+    flexDirection: 'row',
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.lightGray,
+    marginBottom: 14,
+    overflowX: 'hidden',
+    overflow:'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.30,
+    shadowRadius: 3,
+    elevation: 6,
+  },
+  documentTab: {
+    flex: 1,
+    paddingHorizontal: isMobile ? 8 : 40,
+    backgroundColor: COLORS.navy,
+    paddingVertical: 10,
+    borderBottomWidth: 0,
+    borderBottomColor: 'transparent',
+    marginBottom: -1,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.15)',
+    alignItems: 'center',
+  },
+  documentTabActive: {
+    backgroundColor: COLORS.gold,
+    borderRadius: 4,
+    borderBottomColor: COLORS.gold,
+    borderColor: COLORS.gold,
+    shadowColor: COLORS.gold,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.4,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  documentTabText: {
+    fontSize: isMobile ? 10 : 13,
+    fontWeight: '600',
+    color: COLORS.white,
+  },
+  documentTabTextActive: {
+    color: COLORS.darkText,
+    fontWeight: '800',
   },
   barangaySubtitle: {
     fontSize: 14, fontWeight: '700', color: COLORS.darkText, marginBottom: 8,
