@@ -196,6 +196,10 @@ export default function DocumentListScreen({ route, navigation }) {
       router.push('/(tabs)/sk-home');
     } else if (tab === 'Documents') {
       router.push('/(tabs)/sk-document');
+        } else if (tab === 'Planning') {
+      router.push('/(tabs)/sk-planning');
+    } else if (tab === 'Portal') {
+      router.push('/(tabs)/sk-portal');
     }
     setActiveTab(tab);
     setSidebarVisible(false);
@@ -235,7 +239,7 @@ export default function DocumentListScreen({ route, navigation }) {
         />
       </View>
       <View style={styles.sidebarSpacer} />
-      {['Home', 'Documents'].map((tab) => {
+      {['Home', 'Documents', 'Planning', 'Portal'].map((tab) => {
         const active = activeTab === tab;
         return (
           <TouchableOpacity
