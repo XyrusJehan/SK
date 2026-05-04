@@ -10,6 +10,7 @@ import {
   StatusBar,
   Alert,
   Dimensions,
+  Image,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useNav } from './navContext';
@@ -132,9 +133,11 @@ export default function LYDOHomeScreen({ navigation }) {
   const renderSidebar = () => (
     <View style={styles.sidebar}>
       <View style={styles.logoPill}>
-        <View style={styles.logoCircle}>
-          <Text style={styles.logoText}>LYDO</Text>
-        </View>
+        <Image
+          source={require('./../../assets/images/lydo-logo.png')}
+          style={styles.logoImage}
+          resizeMode="contain"
+        />
       </View>
       <View style={styles.sidebarSpacer} />
       {['Home', 'Documents', 'Monitor'].map((tab) => {
@@ -358,11 +361,10 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
     marginBottom: 8, borderWidth: 2, borderColor: 'rgba(255,255,255,0.3)',
   },
-  logoCircle: {
-    width: 52, height: 52, borderRadius: 26,
-    backgroundColor: COLORS.gold, alignItems: 'center', justifyContent: 'center',
+  logoImage: {
+    width: 73,
+    height: 73,
   },
-  logoText: { fontSize: 15, fontWeight: '900', color: '#133E75', letterSpacing: 0.5 },
   sidebarSpacer: { height: 28 },
   logoutBtn: {
     width: '100%',
