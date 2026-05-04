@@ -76,7 +76,7 @@ export default function SKPlanningBudgetScreen() {
     setActiveTab(tab);
     setSidebarVisible(false);
     if (tab === 'Dashboard') router.push('/(tabs)/sk-dashboard');
-    if (tab === 'Documents') router.push('/(tabs)/sk-documents');
+    if (tab === 'Documents') router.push('/(tabs)/sk-document');
     if (tab === 'Planning')  router.push('/(tabs)/sk-planning');
     if (tab === 'Portal')    router.push('/(tabs)/sk-portal');
   };
@@ -445,6 +445,7 @@ const styles = StyleSheet.create({
 
   // Table header
   tableHeader: {
+    
     flexDirection: 'row', alignItems: 'center',
     backgroundColor: COLORS.navy,
     paddingVertical: 11, paddingHorizontal: 16,
@@ -466,7 +467,7 @@ const styles = StyleSheet.create({
   // Columns
   colBarangay: { flex: 2, paddingRight: 8 },
   colBudget:   { flex: 1.2, paddingRight: 8 },
-  colAction:   { flex: 1.3 },
+  colAction:   { width: isMobile ? 80 : 120, alignItems: 'flex-end'},
 
   tdBarangay: { fontSize: isMobile ? 11 : 13, color: COLORS.darkText, fontWeight: '500' },
   tdBudget:   { fontSize: isMobile ? 11 : 13, color: COLORS.darkText, fontWeight: '600' },
@@ -476,7 +477,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', gap: 6,
   },
   formulateText: {
-    fontSize: isMobile ? 10 : 12,
+    fontSize: isMobile ? 10 : 12, alignItems: 'center',
     color: COLORS.navy, fontWeight: '600',
   },
   extLinkBox: {
@@ -491,6 +492,6 @@ const styles = StyleSheet.create({
   readOnlyText: {
     fontSize: isMobile ? 10 : 12,
     color: COLORS.subText, fontWeight: '500',
-    textAlign: 'right', flex: 1,
+    textAlign: 'center', flex: 1,
   },
 });
