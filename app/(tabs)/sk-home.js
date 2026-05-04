@@ -366,17 +366,12 @@ const styles = StyleSheet.create({
     zIndex: 5,
   },
   logoPill: {
-    width: 70,
-    height: 100,
-    borderRadius: 35,
+    marginTop: 20,
+    width: 70, height: 70, borderRadius: 35,
     backgroundColor: 'rgba(255,255,255,0.15)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 8,
-    borderWidth: 2,
-    borderColor: 'rgba(255,255,255,0.3)',
+    alignItems: 'center', justifyContent: 'center',
+    marginBottom: 8, borderWidth: 2, borderColor: 'rgba(255,255,255,0.3)',
   },
-
     logoImage: {
     width: 100,
     height: 100,
