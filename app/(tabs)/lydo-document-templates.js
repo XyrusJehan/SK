@@ -46,14 +46,19 @@ const STATUS_COLORS = {
   Archived:    { text: '#6D4C41', bg: '#EFEBE9' },
 };
 
-// ─── TEMPLATE DATA ────────────────────────────────────────────────────────────
-const TEMPLATES = [
-  { id: '1', name: 'Comprehensive Barangay Youth Development Plan', status: 'Active', category: 'Planning' },
-  { id: '2', name: 'Annual Barangay Youth Investment Program (ABYIP) 2026', status: 'Draft', category: 'Planning' },
-  { id: '3', name: 'Annual Budget 2026', status: 'Old Version', category: 'Financial' },
-  { id: '4', name: 'Quarterly Register of Cash in Bank', status: 'Active', category: 'Financial' },
-  { id: '5', name: 'Monthly Itemized List', status: 'Active', category: 'Financial' },
-  { id: '6', name: 'Accomplishment Report', status: 'Active', category: 'Performance' },
+// ─── INITIAL TEMPLATE DATA ────────────────────────────────────────────────────
+const INITIAL_TEMPLATES = [
+  { id: '1', name: 'Comprehensive Barangay Youth Development Plan',      status: 'Active',  category: 'Planning',  version: 1, updatedAt: '2026-01-02' },
+  { id: '2', name: 'Annual Barangay Youth Investment Program (ABYIP) 2026', status: 'Draft', category: 'Planning', version: 1, updatedAt: '2026-01-02' },
+  { id: '3', name: 'Annual Budget 2026',                                  status: 'Active',  category: 'Financial', version: 2, updatedAt: '2026-01-15' },
+  { id: '4', name: 'Quarterly Register of Cash in Bank',                  status: 'Active',  category: 'Financial', version: 1, updatedAt: '2026-01-02' },
+  { id: '5', name: 'Monthly Itemized List',                               status: 'Active',  category: 'Financial', version: 1, updatedAt: '2026-01-02' },
+  { id: '6', name: 'Accomplishment Report',                               status: 'Active',  category: 'Performance', version: 1, updatedAt: '2026-01-02' },
+];
+
+// Pre-seeded archive records (version history)
+const INITIAL_ARCHIVE = [
+  { id: 'arch-3-v1', templateId: '3', name: 'Annual Budget 2026',       version: 1, archivedAt: '2026-01-15', archivedReason: 'Replaced by newer version', category: 'Financial' },
 ];
 
 const FILTER_OPTIONS = ['All', 'Currently in use',];
@@ -151,19 +156,51 @@ export default function LYDODocumentTemplatesScreen() {
   const [selectedTemplate, setSelectedTemplate] = useState(null);
   const [showReplaceModal, setShowReplaceModal] = useState(false);
   const [checkedTemplates, setCheckedTemplates] = useState({});
+  const [dropdownOpen, setDropdownOpen]         = useState(false);
   const [uploadedFiles, setUploadedFiles]       = useState({});
   const [showForwardModal, setShowForwardModal] = useState(false);
   const [forwardChecked, setForwardChecked]     = useState({});
 
+  // ── Dynamic template + archive state ──
+  const [templates, setTemplates]           = useState(INITIAL_TEMPLATES);
+  const [archiveRecords, setArchiveRecords] = useState(INITIAL_ARCHIVE);
+  const [showArchiveView, setShowArchiveView] = useState(false);
+  const [expandedArchiveId, setExpandedArchiveId] = useState(null);
+
   useEffect(() => { setActiveTab('Documents'); }, []);
 
-  // ── Filtered templates ──
-  const filteredTemplates = TEMPLATES.filter(t => {
-    const matchesSearch = t.name.toLowerCase().includes(searchText.toLowerCase());
-    const matchesFilter =
+  // ── Auto-archive: whenever a template is marked 'Old Version', move it to Archived ──
+  useEffect(() => {
+    const oldOnes = templates.filter(t => t.status === 'Old Version');
+    if (oldOnes.length === 0) return;
+    const today = new Date().toISOString().slice(0, 10);
+    setTemplates(prev =>
+      prev.map(t => t.status === 'Old Version' ? { ...t, status: 'Archived' } : t)
+    );
+    setArchiveRecords(prev => {
+      const existing = new Set(prev.map(r => `${r.templateId}-v${r.version}`));
+      const toAdd = oldOnes
+        .filter(t => !existing.has(`${t.id}-v${t.version}`))
+        .map(t => ({
+          id:             `arch-${t.id}-v${t.version}-${Date.now()}`,
+          templateId:     t.id,
+          name:           t.name,
+          version:        t.version,
+          archivedAt:     today,
+          archivedReason: 'Automatically archived — outdated version',
+          category:       t.category,
+        }));
+      return [...prev, ...toAdd];
+    });
+  }, [templates]);
+
+  // ── Filtered templates (Archived ones never appear in the main list) ──
+  const filteredTemplates = templates.filter(t => {
+    if (t.status === 'Archived') return false;
+    const matchesSearch   = t.name.toLowerCase().includes(searchText.toLowerCase());
+    const matchesFilter   =
       activeFilter === 'All' ||
-      (activeFilter === 'Currently in use' && t.status === 'Active') ||
-      (activeFilter === 'Template' && t.status !== 'Old Version');
+      (activeFilter === 'Currently in use' && t.status === 'Active');
     const matchesCategory =
       categoryFilter === 'All Categories' || t.category === categoryFilter;
     return matchesSearch && matchesFilter && matchesCategory;
@@ -248,7 +285,7 @@ export default function LYDODocumentTemplatesScreen() {
   );
 
   // ── Add Template Modal ──
-  const DOC_TYPE_OPTIONS = TEMPLATES.map(t => t.name);
+  const DOC_TYPE_OPTIONS = templates.filter(t => t.status !== 'Archived').map(t => t.name);
 
   const resetAddModal = () => {
     setAddDocType('');
@@ -448,8 +485,6 @@ export default function LYDODocumentTemplatesScreen() {
   );
 
   // ── Replace Template Modal ──
-  const [dropdownOpen, setDropdownOpen] = useState(false);
-
   const toggleTemplateCheck = (id) => {
     setCheckedTemplates(prev => ({ ...prev, [id]: !prev[id] }));
   };
@@ -457,10 +492,9 @@ export default function LYDODocumentTemplatesScreen() {
   const checkedCount = Object.values(checkedTemplates).filter(Boolean).length;
 
   const renderReplaceModal = () => {
-    const checkedItems = TEMPLATES.filter(t => checkedTemplates[t.id]);
-
-    // Build the dropdown trigger label
-    const dropdownLabel = checkedCount === 0
+    const activeTemplates = templates.filter(t => t.status !== 'Archived');
+    const checkedItems    = activeTemplates.filter(t => checkedTemplates[t.id]);
+    const dropdownLabel   = checkedCount === 0
       ? 'Select templates…'
       : checkedItems.map(t => t.name).join(', ');
 
@@ -486,19 +520,15 @@ export default function LYDODocumentTemplatesScreen() {
             </View>
 
             <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-              {/* Document Type — Dropdown Checklist */}
               <Text style={styles.replaceLabel}>Document Type</Text>
 
-              {/* Trigger button */}
+              {/* Trigger */}
               <TouchableOpacity
                 style={[styles.dropdownTrigger, dropdownOpen && styles.dropdownTriggerOpen]}
                 onPress={() => setDropdownOpen(v => !v)}
                 activeOpacity={0.8}
               >
-                <Text
-                  style={[styles.dropdownTriggerText, checkedCount === 0 && { color: COLORS.midGray }]}
-                  numberOfLines={1}
-                >
+                <Text style={[styles.dropdownTriggerText, checkedCount === 0 && { color: COLORS.midGray }]} numberOfLines={1}>
                   {dropdownLabel}
                 </Text>
                 <Text style={styles.dropdownCaret}>{dropdownOpen ? '▲' : '▼'}</Text>
@@ -507,7 +537,7 @@ export default function LYDODocumentTemplatesScreen() {
               {/* Checklist panel */}
               {dropdownOpen && (
                 <View style={styles.checklistPanel}>
-                  {TEMPLATES.map((t, idx) => (
+                  {activeTemplates.map((t, idx) => (
                     <View key={t.id}>
                       <TouchableOpacity
                         style={styles.checklistRow}
@@ -519,43 +549,32 @@ export default function LYDODocumentTemplatesScreen() {
                         </View>
                         <Text style={styles.checklistText} numberOfLines={2}>{t.name}</Text>
                       </TouchableOpacity>
-                      {idx < TEMPLATES.length - 1 && <View style={styles.checklistDivider} />}
+                      {idx < activeTemplates.length - 1 && <View style={styles.checklistDivider} />}
                     </View>
                   ))}
                 </View>
               )}
 
-              {/* Selected count badge */}
               {checkedCount > 0 && !dropdownOpen && (
                 <Text style={styles.selectedCountText}>{checkedCount} template{checkedCount > 1 ? 's' : ''} selected</Text>
               )}
 
-              {/* Upload slots — only shown for checked templates */}
+              {/* Upload slots */}
               {checkedItems.length > 0 && (
                 <View style={{ marginTop: 16 }}>
                   {checkedItems.map(t => (
                     <View key={t.id} style={{ marginBottom: 14 }}>
                       <Text style={styles.replaceLabel}>{t.name}</Text>
                       <TouchableOpacity
-                        style={[
-                          styles.uploadBox,
-                          uploadedFiles[t.id] && styles.uploadBoxDone,
-                        ]}
+                        style={[styles.uploadBox, uploadedFiles[t.id] && styles.uploadBoxDone]}
                         activeOpacity={0.75}
-                        onPress={() => {
-                          // Simulate file pick: mark as uploaded
-                          setUploadedFiles(prev => ({ ...prev, [t.id]: `${t.name}.docx` }));
-                        }}
+                        onPress={() => setUploadedFiles(prev => ({ ...prev, [t.id]: `${t.name}.docx` }))}
                       >
                         {uploadedFiles[t.id] ? (
                           <>
                             <Text style={styles.uploadDoneIcon}>✓</Text>
-                            <Text style={styles.uploadDoneText} numberOfLines={1}>
-                              {uploadedFiles[t.id]}
-                            </Text>
-                            <TouchableOpacity
-                              onPress={() => setUploadedFiles(prev => { const n = {...prev}; delete n[t.id]; return n; })}
-                            >
+                            <Text style={styles.uploadDoneText} numberOfLines={1}>{uploadedFiles[t.id]}</Text>
+                            <TouchableOpacity onPress={() => setUploadedFiles(prev => { const n = {...prev}; delete n[t.id]; return n; })}>
                               <Text style={styles.uploadRemove}>✕</Text>
                             </TouchableOpacity>
                           </>
@@ -576,26 +595,39 @@ export default function LYDODocumentTemplatesScreen() {
               )}
             </ScrollView>
 
-            {/* Footer Buttons */}
+            {/* Footer */}
             <View style={[styles.modalRow, { marginTop: 16 }]}>
               <TouchableOpacity
                 style={[styles.modalBtn, { backgroundColor: COLORS.lightGray, flex: 1 }]}
-                onPress={() => {
-                  setShowReplaceModal(false);
-                  setCheckedTemplates({});
-                  setUploadedFiles({});
-                  setDropdownOpen(false);
-                }}
+                onPress={() => { setShowReplaceModal(false); setCheckedTemplates({}); setUploadedFiles({}); setDropdownOpen(false); }}
               >
                 <Text style={{ color: COLORS.darkText, fontWeight: '600' }}>Cancel</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[
-                  styles.modalBtn,
-                  { backgroundColor: checkedCount > 0 ? COLORS.navy : COLORS.midGray, flex: 1 },
-                ]}
+                style={[styles.modalBtn, { backgroundColor: checkedCount > 0 ? COLORS.navy : COLORS.midGray, flex: 1 }]}
                 disabled={checkedCount === 0}
                 onPress={() => {
+                  const today = new Date().toISOString().slice(0, 10);
+                  // Mark each replaced template as Old Version → auto-archive effect fires
+                  // Then insert a new Active v+1 entry
+                  setTemplates(prev => {
+                    let next = [...prev];
+                    Object.keys(checkedTemplates).forEach(id => {
+                      if (!checkedTemplates[id]) return;
+                      const idx = next.findIndex(t => t.id === id);
+                      if (idx === -1) return;
+                      const old = next[idx];
+                      next[idx] = { ...old, status: 'Old Version' }; // triggers auto-archive
+                      next.splice(idx + 1, 0, {
+                        ...old,
+                        id:        `${id}-v${old.version + 1}`,
+                        version:   old.version + 1,
+                        status:    'Active',
+                        updatedAt: today,
+                      });
+                    });
+                    return next;
+                  });
                   setShowReplaceModal(false);
                   setCheckedTemplates({});
                   setUploadedFiles({});
@@ -646,7 +678,7 @@ export default function LYDODocumentTemplatesScreen() {
           {/* Checklist box */}
           <ScrollView showsVerticalScrollIndicator={false} style={{ marginBottom: 8 }}>
             <View style={styles.forwardChecklistBox}>
-              {TEMPLATES.map((t, idx) => (
+              {templates.filter(t => t.status !== 'Archived').map((t, idx, arr) => (
                 <View key={t.id}>
                   <TouchableOpacity
                     style={styles.checklistRow}
@@ -658,7 +690,7 @@ export default function LYDODocumentTemplatesScreen() {
                     </View>
                     <Text style={styles.checklistText} numberOfLines={2}>{t.name}</Text>
                   </TouchableOpacity>
-                  {idx < TEMPLATES.length - 1 && <View style={styles.checklistDivider} />}
+                  {idx < arr.length - 1 && <View style={styles.checklistDivider} />}
                 </View>
               ))}
             </View>
@@ -727,8 +759,7 @@ export default function LYDODocumentTemplatesScreen() {
         </View>
       )}
 
-      {/* Page title */}
-      <Text style={styles.sectionTitle}>Document Management</Text>
+    
 
       {/* Document Tab Bar */}
       <View style={styles.documentTabBar}>
@@ -814,41 +845,111 @@ export default function LYDODocumentTemplatesScreen() {
             <Text style={styles.forwardBtnText}>→ Forward</Text>
           </TouchableOpacity>
           {!isMobile && (
-            <TouchableOpacity style={styles.archiveBtn} activeOpacity={0.8}>
-              <Text style={styles.archiveBtnText}>🗂 View Archive</Text>
+            <TouchableOpacity style={styles.archiveBtn} activeOpacity={0.8} onPress={() => setShowArchiveView(v => !v)}>
+              <Text style={styles.archiveBtnText}>
+                🗂 {showArchiveView ? 'Hide Archive' : `View Archive${archiveRecords.length > 0 ? ` (${archiveRecords.length})` : ''}`}
+              </Text>
             </TouchableOpacity>
           )}
         </View>
       </View>
 
-      {/* Template List */}
-      <View style={styles.tableContainer}>
-        {/* Table Header */}
-        <View style={styles.tableHeader}>
-          <Text style={[styles.tableHeaderText, { flex: 1 }]}>List of Templates</Text>
-          <Text style={[styles.tableHeaderText, { width: 100, textAlign: 'right' }]}>Status</Text>
-        </View>
-
-        {/* Rows */}
-        {filteredTemplates.length > 0 ? (
-          filteredTemplates.map((item, idx) => (
-            <React.Fragment key={item.id}>
-              <TemplateRow item={item} onPress={setSelectedTemplate} />
-              {idx < filteredTemplates.length - 1 && <View style={styles.divider} />}
-            </React.Fragment>
-          ))
-        ) : (
-          <View style={styles.emptyState}>
-            <Text style={styles.emptyText}>No templates found</Text>
-          </View>
-        )}
-      </View>
-
-      {/* Mobile Archive Link */}
+      {/* Mobile Archive toggle */}
       {isMobile && (
-        <TouchableOpacity style={styles.mobileArchiveBtn} activeOpacity={0.75}>
-          <Text style={styles.mobileArchiveBtnText}>🗂 View Archive</Text>
+        <TouchableOpacity style={styles.mobileArchiveBtn} activeOpacity={0.75} onPress={() => setShowArchiveView(v => !v)}>
+          <Text style={styles.mobileArchiveBtnText}>
+            🗂 {showArchiveView ? 'Hide Archive' : `View Archive${archiveRecords.length > 0 ? ` (${archiveRecords.length})` : ''}`}
+          </Text>
         </TouchableOpacity>
+      )}
+
+      {/* ── ARCHIVE VIEW ── */}
+      {showArchiveView ? (
+        <View style={styles.tableContainer}>
+          {/* Archive header */}
+          <View style={styles.archiveSectionHeader}>
+            <Text style={styles.archiveSectionTitle}>Archives</Text>
+            <View style={styles.archiveLockBadge}>
+              <Text style={styles.archiveLockText}>🔒 Read-only • Cannot be used for new plans</Text>
+            </View>
+          </View>
+
+          {archiveRecords.length === 0 ? (
+            <View style={styles.emptyState}>
+              <Text style={styles.emptyText}>No archived templates yet</Text>
+            </View>
+          ) : (
+            archiveRecords.map((record, idx) => (
+              <View key={record.id}>
+                <TouchableOpacity
+                  style={styles.archiveRow}
+                  onPress={() => setExpandedArchiveId(prev => prev === record.id ? null : record.id)}
+                  activeOpacity={0.75}
+                >
+                  <View style={styles.archiveRowMain}>
+                    <Text style={styles.archiveRowName} numberOfLines={2}>{record.name}</Text>
+                    <Text style={styles.archiveOldVersionText}>Old Version</Text>
+                  </View>
+
+                  {/* Expanded detail */}
+                  {expandedArchiveId === record.id && (
+                    <View style={styles.archiveExpandedDetail}>
+                      <View style={styles.archiveDetailRow}>
+                        <Text style={styles.archiveDetailLabel}>Version</Text>
+                        <View style={styles.archiveVersionBadge}>
+                          <Text style={styles.archiveVersionText}>v{record.version}</Text>
+                        </View>
+                      </View>
+                      <View style={styles.archiveDetailRow}>
+                        <Text style={styles.archiveDetailLabel}>Category</Text>
+                        <Text style={styles.archiveDetailValue}>{record.category}</Text>
+                      </View>
+                      <View style={styles.archiveDetailRow}>
+                        <Text style={styles.archiveDetailLabel}>Archived On</Text>
+                        <Text style={styles.archiveDetailValue}>{record.archivedAt}</Text>
+                      </View>
+                      <View style={styles.archiveDetailRow}>
+                        <Text style={styles.archiveDetailLabel}>Reason</Text>
+                        <Text style={[styles.archiveDetailValue, { flex: 1, textAlign: 'right' }]}>{record.archivedReason}</Text>
+                      </View>
+                      <View style={[styles.archiveDetailRow, { gap: 8, marginTop: 8 }]}>
+                        <TouchableOpacity style={styles.archiveActionBtn}>
+                          <Text style={styles.archiveActionBtnText}>⬇ Download</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity style={[styles.archiveActionBtn, { backgroundColor: '#FDF0E6' }]}>
+                          <Text style={[styles.archiveActionBtnText, { color: '#E87A30' }]}>👁 Preview</Text>
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  )}
+                </TouchableOpacity>
+                {idx < archiveRecords.length - 1 && <View style={styles.divider} />}
+              </View>
+            ))
+          )}
+        </View>
+      ) : (
+        /* ── TEMPLATE LIST ── */
+        <View style={styles.tableContainer}>
+          {/* Table Header */}
+          <View style={styles.tableHeader}>
+            <Text style={[styles.tableHeaderText, { flex: 1 }]}>List of Templates</Text>
+            <Text style={[styles.tableHeaderText, { width: 100, textAlign: 'right' }]}>Status</Text>
+          </View>
+
+          {filteredTemplates.length > 0 ? (
+            filteredTemplates.map((item, idx) => (
+              <React.Fragment key={item.id}>
+                <TemplateRow item={item} onPress={setSelectedTemplate} />
+                {idx < filteredTemplates.length - 1 && <View style={styles.divider} />}
+              </React.Fragment>
+            ))
+          ) : (
+            <View style={styles.emptyState}>
+              <Text style={styles.emptyText}>No templates found</Text>
+            </View>
+          )}
+        </View>
       )}
     </ScrollView>
   );
@@ -1314,4 +1415,54 @@ const styles = StyleSheet.create({
   forwardCheckboxChecked: {
     backgroundColor: COLORS.navy, borderColor: COLORS.navy,
   },
+
+  // ── Archive View ──
+  archiveSectionHeader: {
+    paddingHorizontal: 18, paddingTop: 16, paddingBottom: 10,
+    borderBottomWidth: 1, borderBottomColor: COLORS.lightGray,
+    backgroundColor: COLORS.offWhite,
+    borderTopLeftRadius: 14, borderTopRightRadius: 14,
+  },
+  archiveSectionTitle: {
+    fontSize: 15, fontWeight: '800', color: COLORS.darkText, marginBottom: 6,
+  },
+  archiveLockBadge: {
+    backgroundColor: '#FFF8E1', borderRadius: 6, borderWidth: 1,
+    borderColor: '#F9C74F', paddingHorizontal: 10, paddingVertical: 5,
+    alignSelf: 'flex-start',
+  },
+  archiveLockText: { fontSize: 11, color: '#7A5800', fontWeight: '600' },
+  archiveRow: {
+    paddingHorizontal: 18, paddingVertical: 16,
+  },
+  archiveRowMain: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12,
+  },
+  archiveRowName: {
+    flex: 1, fontSize: 13, color: COLORS.darkText, fontWeight: '500', lineHeight: 18,
+  },
+  archiveOldVersionText: {
+    fontSize: 12, fontWeight: '700', color: '#B71C1C',
+  },
+  archiveExpandedDetail: {
+    marginTop: 12, paddingTop: 12,
+    borderTopWidth: 1, borderTopColor: COLORS.lightGray,
+  },
+  archiveDetailRow: {
+    flexDirection: 'row', alignItems: 'center',
+    justifyContent: 'space-between', marginBottom: 8,
+  },
+  archiveDetailLabel: { fontSize: 12, color: COLORS.subText, fontWeight: '600' },
+  archiveDetailValue: { fontSize: 12, color: COLORS.darkText, fontWeight: '500' },
+  archiveVersionBadge: {
+    backgroundColor: '#EFEBE9', borderRadius: 6,
+    paddingHorizontal: 8, paddingVertical: 3,
+    borderWidth: 1, borderColor: '#BCAAA4',
+  },
+  archiveVersionText: { fontSize: 11, fontWeight: '800', color: '#6D4C41' },
+  archiveActionBtn: {
+    flex: 1, paddingVertical: 8, borderRadius: 8,
+    backgroundColor: '#EEF2FB', alignItems: 'center',
+  },
+  archiveActionBtnText: { fontSize: 12, fontWeight: '700', color: '#5B8DD9' },
 });
