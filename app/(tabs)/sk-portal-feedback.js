@@ -29,6 +29,7 @@ const COLORS = {
 const NAV_TABS    = ['Dashboard', 'Documents', 'Planning', 'Portal'];
 const PORTAL_TABS = ['Published', 'Feedback'];
 const YEAR_FILTERS = ['All Years', '2026', '2025', '2024'];
+const DOCUMENT_FILTERS = ['All Documents', 'Annual Barangay Youth Investment Program', 'Approved Annual Budget 2026', 'Comprehensive Barangay Youth Development Plan (CBYDP) 2026'];
 const FEEDBACK_FILTERS = ['All', 'Recent', 'Unread'];
 
 // ─── FEEDBACK DATA ────────────────────────────────────────────────────────────
@@ -139,10 +140,12 @@ export default function SKPortalFeedbackScreen() {
   const { logout } = useAuth();
 
   const [feedbackFilter, setFeedbackFilter] = useState('All');
+  const [docFilter, setDocFilter]           = useState('All Documents');
   const [yearFilter, setYearFilter]         = useState('All Years');
   const [searchText, setSearchText]         = useState('');
   const [notifCount]                        = useState(2);
   const [sidebarVisible, setSidebarVisible] = useState(false);
+  const [showDocDropdown, setShowDocDropdown] = useState(false);
   const [showYearDropdown, setShowYearDropdown] = useState(false);
 
   // Reply modal
@@ -183,6 +186,7 @@ export default function SKPortalFeedbackScreen() {
 
   // Filter logic
   const filteredFeedback = feedbackList.filter(f => {
+    const matchesDoc = docFilter === 'All Documents' || f.document.includes(docFilter.replace(' 2026', '').trim());
     const matchesFilter =
       feedbackFilter === 'All' ||
       (feedbackFilter === 'Unread' && f.status === 'Unread') ||
@@ -191,7 +195,7 @@ export default function SKPortalFeedbackScreen() {
       f.name.toLowerCase().includes(searchText.toLowerCase()) ||
       f.comment.toLowerCase().includes(searchText.toLowerCase()) ||
       f.document.toLowerCase().includes(searchText.toLowerCase());
-    return matchesFilter && matchesSearch;
+    return matchesDoc && matchesFilter && matchesSearch;
   });
 
   const unreadCount = feedbackList.filter(f => f.status === 'Unread').length;
@@ -386,13 +390,42 @@ export default function SKPortalFeedbackScreen() {
         })}
       </View>
 
-      {/* ── FILTER ROW: Year | Search ── */}
+      {/* ── FILTER ROW: Document | Year | Search ── */}
       <View style={styles.filterBarRow}>
+        {/* Document filter dropdown */}
+        <View style={{ position: 'relative', zIndex: 100 }}>
+          <TouchableOpacity
+            style={styles.filterDropdownBtn}
+            onPress={() => { setShowDocDropdown(v => !v); setShowYearDropdown(false); }}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.filterDropdownText} numberOfLines={1}>
+              {docFilter === 'All Documents' ? 'Document' : docFilter.length > 20 ? docFilter.slice(0, 20) + '…' : docFilter}
+            </Text>
+            <Text style={styles.filterDropdownCaret}>▾</Text>
+          </TouchableOpacity>
+          {showDocDropdown && (
+            <View style={styles.filterDropdownPanel}>
+              {DOCUMENT_FILTERS.map(opt => (
+                <TouchableOpacity
+                  key={opt}
+                  style={[styles.filterDropdownItem, docFilter === opt && styles.filterDropdownItemActive]}
+                  onPress={() => { setDocFilter(opt); setShowDocDropdown(false); }}
+                >
+                  <Text style={[styles.filterDropdownItemText, docFilter === opt && { color: COLORS.navy, fontWeight: '700' }]}>
+                    {opt}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
+        </View>
+
         {/* Year dropdown */}
         <View style={{ position: 'relative', zIndex: 100 }}>
           <TouchableOpacity
             style={styles.filterDropdownBtn}
-            onPress={() => setShowYearDropdown(v => !v)}
+            onPress={() => { setShowYearDropdown(v => !v); setShowDocDropdown(false); }}
             activeOpacity={0.8}
           >
             <Text style={styles.filterDropdownText}>
@@ -639,19 +672,20 @@ const styles = StyleSheet.create({
   // ── Filter bar ──
   filterBarRow: {
     flexDirection: 'row', alignItems: 'center',
-    gap: 8, marginBottom: 12,
+    gap: 8, marginBottom: 12, flexWrap: 'wrap',
+    zIndex: 100,
   },
   filterDropdownBtn: {
     flexDirection: 'row', alignItems: 'center', gap: 4,
     backgroundColor: COLORS.white,
     borderWidth: 1, borderColor: COLORS.lightGray,
-    borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8,
-    minWidth: 80,
+    borderRadius: 8, paddingHorizontal: isMobile ? 8 : 12, paddingVertical: 8,
+    minWidth: isMobile ? 70 : 80,
   },
   filterDropdownText:  { fontSize: 13, color: COLORS.darkText },
   filterDropdownCaret: { fontSize: 10, color: COLORS.subText },
   filterDropdownPanel: {
-    position: 'absolute', top: 42, left: 0, zIndex: 999,
+    position: 'absolute', top: 42, left: 0, zIndex: isMobile ? 200 : 999,
     backgroundColor: COLORS.white,
     borderRadius: 10, borderWidth: 1, borderColor: COLORS.lightGray,
     shadowColor: '#000', shadowOffset: { width: 0, height: 4 },
@@ -673,7 +707,7 @@ const styles = StyleSheet.create({
 
   // ── Section label ──
   sectionLabel: {
-    fontSize: 13, fontWeight: '800', color: COLORS.navy,
+    fontSize: isMobile ? 11 : 13, fontWeight: '800', color: COLORS.navy,
     marginBottom: 12,
   },
 
@@ -688,88 +722,88 @@ const styles = StyleSheet.create({
     paddingBottom: 16,
   },
   feedbackInnerHeader: {
-    paddingHorizontal: 18, paddingTop: 16, paddingBottom: 4,
+    paddingHorizontal: isMobile ? 12 : 18, paddingTop: 16, paddingBottom: 4,
   },
   feedbackInnerTitle: {
-    fontSize: 15, fontWeight: '800', color: COLORS.darkText,
+    fontSize: isMobile ? 13 : 15, fontWeight: '800', color: COLORS.darkText,
   },
 
   // All / Recent / Unread pills
   feedbackFilterRow: {
     flexDirection: 'row', alignItems: 'center',
-    gap: 20, paddingHorizontal: 18, paddingBottom: 12,
+    gap: isMobile ? 12 : 20, paddingHorizontal: isMobile ? 12 : 18, paddingBottom: 12,
     borderBottomWidth: 1, borderBottomColor: COLORS.lightGray,
     marginBottom: 14,
   },
   feedbackFilterBtn:       { alignItems: 'center', paddingBottom: 4 },
-  feedbackFilterText:      { fontSize: 13, fontWeight: '500', color: COLORS.subText },
-  feedbackFilterTextActive:{ fontSize: 13, fontWeight: '800', color: COLORS.darkText },
+  feedbackFilterText:      { fontSize: isMobile ? 11 : 13, fontWeight: '500', color: COLORS.subText },
+  feedbackFilterTextActive:{ fontSize: isMobile ? 11 : 13, fontWeight: '800', color: COLORS.darkText },
   feedbackFilterUnderline: {
     height: 2, width: '100%', backgroundColor: COLORS.darkText,
     marginTop: 2, borderRadius: 1,
   },
 
-  feedbackList: { paddingHorizontal: 16 },
+  feedbackList: { paddingHorizontal: isMobile ? 10 : 16 },
 
   // ── Individual feedback card ──
   feedbackCard: {
     backgroundColor: '#F0F2F5',
     borderRadius: 10,
     borderWidth: 1, borderColor: COLORS.lightGray,
-    padding: 16,
+    padding: isMobile ? 12 : 16,
     shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.04, shadowRadius: 3, elevation: 1,
   },
   feedbackCommentedBy: {
-    fontSize: 13, color: COLORS.subText, marginBottom: 4,
+    fontSize: isMobile ? 11 : 13, color: COLORS.subText, marginBottom: 4,
   },
   feedbackAuthorName: {
     fontWeight: '700', color: COLORS.darkText,
   },
   feedbackOnDocument: {
-    fontSize: 12, color: COLORS.subText, marginBottom: 8,
+    fontSize: isMobile ? 10 : 12, color: COLORS.subText, marginBottom: 6,
   },
   feedbackDocumentLink: {
     color: COLORS.navy, fontWeight: '600',
   },
   feedbackCommentLabel: {
-    fontSize: 13, fontWeight: '700', color: COLORS.darkText,
-    marginBottom: 6, lineHeight: 20,
+    fontSize: isMobile ? 11 : 13, fontWeight: '700', color: COLORS.darkText,
+    marginBottom: 4, lineHeight: isMobile ? 16 : 20,
   },
   feedbackCommentText: {
     fontWeight: '400', color: COLORS.darkText,
   },
   feedbackFooter: {
     flexDirection: 'row', alignItems: 'center',
-    justifyContent: 'space-between', marginTop: 12,
+    justifyContent: 'space-between', marginTop: isMobile ? 8 : 12,
   },
   feedbackStatusRow: {
-    flexDirection: 'row', alignItems: 'center', gap: 8,
+    flexDirection: 'row', alignItems: 'center', gap: 6,
   },
   feedbackStatusLabel: {
-    fontSize: 13, color: COLORS.subText, fontWeight: '600',
+    fontSize: isMobile ? 10 : 13, color: COLORS.subText, fontWeight: '600',
   },
   unreadBadge: {
-    backgroundColor: '#FFF3CD', borderRadius: 6,
-    paddingHorizontal: 8, paddingVertical: 2,
+    backgroundColor: '#FFF3CD', borderRadius: 4,
+    paddingHorizontal: 6, paddingVertical: 2,
     borderWidth: 1, borderColor: '#F0D060',
   },
-  unreadBadgeText: { fontSize: 11, fontWeight: '700', color: '#856404' },
+  unreadBadgeText: { fontSize: 9, fontWeight: '700', color: '#856404' },
   repliedBadge: {
-    backgroundColor: '#E8F5E9', borderRadius: 6,
-    paddingHorizontal: 8, paddingVertical: 2,
+    backgroundColor: '#E8F5E9', borderRadius: 4,
+    paddingHorizontal: 6, paddingVertical: 2,
     borderWidth: 1, borderColor: '#A5D6A7',
   },
-  repliedBadgeText: { fontSize: 11, fontWeight: '700', color: '#2E7D32' },
+  repliedBadgeText: { fontSize: 9, fontWeight: '700', color: '#2E7D32' },
 
   // View & Reply button
   viewReplyBtn: {
     backgroundColor: COLORS.navy,
-    borderRadius: 8,
-    paddingHorizontal: 18, paddingVertical: 10,
+    borderRadius: 6,
+    paddingHorizontal: isMobile ? 10 : 18, paddingVertical: 8,
   },
   viewReplyBtnText: {
-    fontSize: 13, fontWeight: '700', color: COLORS.white,
+    fontSize: isMobile ? 10 : 13, fontWeight: '700', color: COLORS.white,
   },
 
   // Empty
@@ -784,7 +818,7 @@ const styles = StyleSheet.create({
   modalCard: {
     backgroundColor: COLORS.white,
     borderRadius: 14,
-    width: '100%', maxWidth: 440,
+    width: '100%', maxWidth: isMobile ? SCREEN_WIDTH - 40 : 440,
     overflow: 'hidden',
     shadowColor: '#000', shadowOffset: { width: 0, height: 10 },
     shadowOpacity: 0.22, shadowRadius: 24, elevation: 14,
@@ -795,47 +829,47 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.navy,
     flexDirection: 'row', alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 20, paddingVertical: 14,
+    paddingHorizontal: isMobile ? 12 : 20, paddingVertical: 12,
   },
   modalNavyHeaderText: {
-    fontSize: 14, color: COLORS.white, fontWeight: '400',
+    fontSize: isMobile ? 12 : 14, color: COLORS.white, fontWeight: '400',
   },
   modalNavyHeaderBold: {
     fontWeight: '800', color: COLORS.white,
   },
   modalNavyCloseX: {
-    fontSize: 18, color: 'rgba(255,255,255,0.8)', padding: 2,
+    fontSize: 16, color: 'rgba(255,255,255,0.8)', padding: 2,
   },
 
   // Body
   modalBody: {
-    padding: 20,
+    padding: isMobile ? 12 : 20,
   },
 
   // User row: avatar + name + document
   modalUserRow: {
     flexDirection: 'row', alignItems: 'flex-start',
-    gap: 12, marginBottom: 16,
+    gap: 10, marginBottom: 12,
   },
   modalAvatar: {
-    width: 42, height: 42, borderRadius: 21,
+    width: 36, height: 36, borderRadius: 18,
     backgroundColor: '#222', alignItems: 'center', justifyContent: 'center',
     flexShrink: 0,
   },
   modalAvatarText: {
-    fontSize: 17, fontWeight: '800', color: COLORS.white,
+    fontSize: 14, fontWeight: '800', color: COLORS.white,
   },
   modalUserName: {
-    fontSize: 14, fontWeight: '800', color: COLORS.darkText, marginBottom: 2,
+    fontSize: 13, fontWeight: '800', color: COLORS.darkText, marginBottom: 2,
   },
   modalUserDoc: {
-    fontSize: 12, color: COLORS.subText, lineHeight: 17,
+    fontSize: 11, color: COLORS.subText, lineHeight: 15,
   },
 
   // Comment
   modalCommentBold: {
-    fontSize: 13, color: COLORS.darkText, lineHeight: 19,
-    marginBottom: 16, fontWeight: '400',
+    fontSize: isMobile ? 12 : 13, color: COLORS.darkText, lineHeight: isMobile ? 16 : 19,
+    marginBottom: 12, fontWeight: '400',
   },
   modalCommentLabel: {
     fontWeight: '800',
@@ -843,39 +877,39 @@ const styles = StyleSheet.create({
 
   // Existing reply
   existingReplyBox: {
-    backgroundColor: '#E8F5E9', borderRadius: 8,
-    padding: 12, marginBottom: 12,
+    backgroundColor: '#E8F5E9', borderRadius: 6,
+    padding: 10, marginBottom: 10,
     borderWidth: 1, borderColor: '#A5D6A7',
   },
-  existingReplyLabel: { fontSize: 11, fontWeight: '700', color: '#2E7D32', marginBottom: 4 },
-  existingReplyText:  { fontSize: 13, color: COLORS.darkText, lineHeight: 18 },
+  existingReplyLabel: { fontSize: 10, fontWeight: '700', color: '#2E7D32', marginBottom: 3 },
+  existingReplyText:  { fontSize: 12, color: COLORS.darkText, lineHeight: 16 },
 
   // Reply textarea
   replyInput: {
     borderWidth: 1, borderColor: COLORS.lightGray, borderRadius: 8,
-    paddingHorizontal: 12, paddingVertical: 10,
+    paddingHorizontal: 10, paddingVertical: 8,
     fontSize: 13, color: COLORS.darkText,
-    backgroundColor: COLORS.white, height: 100,
-    textAlignVertical: 'top', marginBottom: 18,
+    backgroundColor: COLORS.white, height: isMobile ? 80 : 100,
+    textAlignVertical: 'top', marginBottom: 14,
   },
 
   // Footer
   modalFooter: {
-    flexDirection: 'row', gap: 10,
+    flexDirection: 'row', gap: 8,
   },
   modalCancelBtn: {
-    flex: 1, paddingVertical: 11, borderRadius: 8,
+    flex: 1, paddingVertical: 10, borderRadius: 8,
     backgroundColor: COLORS.white,
     borderWidth: 1, borderColor: COLORS.lightGray,
     alignItems: 'center',
   },
-  modalCancelText: { fontSize: 13, fontWeight: '600', color: COLORS.darkText },
+  modalCancelText: { fontSize: 12, fontWeight: '600', color: COLORS.darkText },
   modalSendBtn: {
-    flex: 1.2, paddingVertical: 11, borderRadius: 8,
+    flex: 1.2, paddingVertical: 10, borderRadius: 8,
     backgroundColor: COLORS.navy,
     flexDirection: 'row', alignItems: 'center',
-    justifyContent: 'center', gap: 6,
+    justifyContent: 'center', gap: 4,
   },
-  modalSendIcon: { fontSize: 13, color: COLORS.white },
-  modalSendText: { fontSize: 13, fontWeight: '700', color: COLORS.white },
+  modalSendIcon: { fontSize: 12, color: COLORS.white },
+  modalSendText: { fontSize: 12, fontWeight: '700', color: COLORS.white },
 });
