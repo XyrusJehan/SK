@@ -429,6 +429,9 @@ export default function LYDOMonitorBudgetScreen() {
           <View>
             <Text style={S.headerSub}>SANGGUNIANG KABATAAN FEDERATION</Text>
             <Text style={S.headerTitle}>RIZAL, LAGUNA</Text>
+            <Text style={S.headerDesc}>
+              SK Full Disclosure Policy Compliance Portal for the Submission and Validation{'\n'}of Statutory Financial Reports and Developmental Plans
+            </Text>
           </View>
           <TouchableOpacity style={S.bellBtn} activeOpacity={0.7}>
             <BellIcon hasNotif={notifCount > 0} />
@@ -614,6 +617,7 @@ const S = StyleSheet.create({
   header:    { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 20 },
   headerSub: { fontSize: 10, fontWeight: '600', color: COLORS.subText, letterSpacing: 2, textTransform: 'uppercase', marginBottom: 2 },
   headerTitle: { fontSize: 20, fontWeight: '900', color: COLORS.darkText, letterSpacing: 0.5 },
+  headerDesc: { fontSize: 15, fontWeight: '700', color: COLORS.darkText, marginTop: 6, lineHeight: 17 },
 
   // Bell
   bellBtn:   { width: 40, height: 40, borderRadius: 20, backgroundColor: COLORS.cardBg, alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 6, elevation: 3 },

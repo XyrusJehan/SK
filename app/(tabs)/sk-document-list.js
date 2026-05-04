@@ -192,10 +192,14 @@ export default function DocumentListScreen({ route, navigation }) {
   const accentColor = meta.color;
 
   const handleNavPress = (tab) => {
-    if (tab === 'Home') {
-      router.push('/(tabs)/sk-home');
+    if (tab === 'Dashboard') {
+      router.push('/(tabs)/sk-dashboard');
     } else if (tab === 'Documents') {
       router.push('/(tabs)/sk-document');
+        } else if (tab === 'Planning') {
+      router.push('/(tabs)/sk-planning');
+    } else if (tab === 'Portal') {
+      router.push('/(tabs)/sk-portal');
     }
     setActiveTab(tab);
     setSidebarVisible(false);
@@ -235,7 +239,7 @@ export default function DocumentListScreen({ route, navigation }) {
         />
       </View>
       <View style={styles.sidebarSpacer} />
-      {['Home', 'Documents'].map((tab) => {
+      {['Dashboard', 'Documents', 'Planning', 'Portal'].map((tab) => {
         const active = activeTab === tab;
         return (
           <TouchableOpacity
@@ -248,7 +252,7 @@ export default function DocumentListScreen({ route, navigation }) {
           </TouchableOpacity>
         );
       })}
-      <View style={styles.sidebarSpacer} />
+      <View style={{ flex: 1 }} />
       <TouchableOpacity
         style={styles.logoutBtn}
         onPress={handleLogout}
