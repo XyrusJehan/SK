@@ -11,6 +11,7 @@ import {
   FlatList,
   Alert,
   Dimensions,
+  Image,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useNav } from './navContext';
@@ -227,9 +228,11 @@ export default function DocumentListScreen({ route, navigation }) {
   const renderSidebar = () => (
     <View style={styles.sidebar}>
       <View style={styles.logoPill}>
-        <View style={styles.logoCircle}>
-          <Text style={styles.logoText}>SK</Text>
-        </View>
+        <Image
+          source={require('./../../assets/images/sk-logo.png')}
+          style={styles.logoImage}
+          resizeMode="contain"
+        />
       </View>
       <View style={styles.sidebarSpacer} />
       {['Home', 'Documents'].map((tab) => {
@@ -483,9 +486,9 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.5)',
     zIndex: 5,
   },
-  logoPill: {
+logoPill: {
     width: 70,
-    height: 70,
+    height: 100,
     borderRadius: 35,
     backgroundColor: 'rgba(255,255,255,0.15)',
     alignItems: 'center',
@@ -494,15 +497,11 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: 'rgba(255,255,255,0.3)',
   },
-  logoCircle: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    backgroundColor: COLORS.gold,
-    alignItems: 'center',
-    justifyContent: 'center',
+
+    logoImage: {
+    width: 100,
+    height: 100,
   },
-  logoText: { fontSize: 18, fontWeight: '900', color: COLORS.maroon, letterSpacing: 1 },
   sidebarSpacer: { height: 28 },
   navItem: {
     width: '100%',
