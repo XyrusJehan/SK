@@ -193,7 +193,7 @@ export default function DocumentListScreen({ route, navigation }) {
 
   const handleNavPress = (tab) => {
     if (tab === 'Dashboard') {
-      router.push('/(tabs)/sk-home');
+      router.push('/(tabs)/sk-dashboard');
     } else if (tab === 'Documents') {
       router.push('/(tabs)/sk-document');
         } else if (tab === 'Planning') {

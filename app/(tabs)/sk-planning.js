@@ -77,6 +77,23 @@ const TEMPLATE_SECTIONS = [
   },
 ];
 
+// ─── ALL TEMPLATES — flat table data (shown when "All" filter is active) ─────
+const ALL_TEMPLATES = [
+  { id: 'a1', name: 'Comprehensive Barangay Youth Development Plan', type: 'Planning',  source: 'LYDO', dateReceived: 'April 21, 2026' },
+  { id: 'a2', name: 'Annual Barangay Youth Investment Program',       type: 'Planning',  source: 'LYDO', dateReceived: 'April 21, 2026' },
+  { id: 'a3', name: 'Registry of Cash Receipts and Deposits',         type: 'Planning',  source: 'LYDO', dateReceived: 'April 21, 2026' },
+  { id: 'a4', name: 'Monthly Itemized List',                          type: 'Financial', source: 'LYDO', dateReceived: 'April 21, 2026' },
+  { id: 'a5', name: 'Comprehensive Barangay Youth Development Plan',  type: 'Planning',  source: 'LYDO', dateReceived: 'April 21, 2026' },
+  { id: 'a6', name: 'SK PPA Template',                                type: 'Planning',  source: 'LYDO', dateReceived: 'April 21, 2026' },
+  { id: 'a7', name: 'Program of Work',                                type: 'Planning',  source: 'LYDO', dateReceived: 'April 21, 2026' },
+  { id: 'a8', name: 'Approved Annual Budget',                         type: 'Budgeting', source: 'LYDO', dateReceived: 'April 21, 2026' },
+  { id: 'a9', name: 'SK Supplemental Budget',                         type: 'Budgeting', source: 'LYDO', dateReceived: 'April 21, 2026' },
+  { id:'a10', name: 'Registry of Cash Disbursements',                 type: 'Financial', source: 'LYDO', dateReceived: 'April 21, 2026' },
+  { id:'a11', name: 'Quarterly Financial Reports',                    type: 'Financial', source: 'LYDO', dateReceived: 'April 21, 2026' },
+  { id:'a12', name: 'Barangay Youth Investment Monitoring Form',       type: 'Monitoring',source: 'LYDO', dateReceived: 'April 21, 2026' },
+  { id:'a13', name: 'Monthly/Quarterly Accomplishment Report',         type: 'Monitoring',source: 'LYDO', dateReceived: 'April 21, 2026' },
+];
+
 // ─── ICONS ────────────────────────────────────────────────────────────────────
 const BellIcon = ({ hasNotif }) => (
   <View style={styles.bellWrapper}>
@@ -150,7 +167,7 @@ export default function SKPlanningScreen() {
 
   const [activePlanningTab, setActivePlanningTab] = useState('Templates');
   const [searchText, setSearchText]               = useState('');
-  const [showAll, setShowAll]                     = useState(false); // false = Active Templates filter
+  const [showAll, setShowAll]                     = useState(true); // false = Active Templates filter
   const [notifCount]                              = useState(2);
   const [sidebarVisible, setSidebarVisible]       = useState(false);
   const [selectedItem, setSelectedItem]           = useState(null);
@@ -159,12 +176,19 @@ export default function SKPlanningScreen() {
   const handleNavPress = (tab) => {
     setActiveTab(tab);
     setSidebarVisible(false);
-    if (tab === 'Dashboard') router.push('/(tabs)/sk-home');
+    if (tab === 'Dashboard') router.push('/(tabs)/sk-dashboard');
     if (tab === 'Documents') router.push('/(tabs)/sk-document');
     if (tab === 'Portal')    router.push('/(tabs)/sk-portal');
   };
 
   const handleLogout = () => { logout(); router.replace('/'); };
+
+  
+  const handleMoTabPress = (tab) => {
+    if (tab === 'Templates') { router.push('/(tabs)/sk-planning'); return; }
+    if (tab === 'Budget')       { router.push('/(tabs)/sk-planning-budget'); return; }
+    setActiveMonitorTab(tab);
+  };
 
   const handleEdit = (item) => { setSelectedItem(item); setShowEditModal(true); };
 
@@ -197,6 +221,12 @@ export default function SKPlanningScreen() {
             activeOpacity={0.8}
           >
             <Text style={[styles.navLabel, active && styles.navLabelActive]}>{tab}</Text>
+            {/* Notification badge for Planning */}
+            {tab === 'Planning' && notifCount > 0 && (
+              <View>
+                
+              </View>
+            )}
           </TouchableOpacity>
         );
       })}
@@ -284,7 +314,7 @@ export default function SKPlanningScreen() {
             <Text style={styles.headerDocLabel}>Template and Budget Reference Documents</Text>
           </View>
           <View style={styles.headerRight}>
-
+   
             <TouchableOpacity style={styles.bellBtn} activeOpacity={0.7}>
               <BellIcon hasNotif={notifCount > 0} />
               {notifCount > 0 && (
@@ -305,9 +335,9 @@ export default function SKPlanningScreen() {
             <TouchableOpacity
               key={tab}
               style={[styles.planningTab, active && styles.planningTabActive]}
-              onPress={() => setActivePlanningTab(tab)}
-              activeOpacity={0.8}
-            >
+              onPress={() => tab === 'Templates' ? router.push('/(tabs)/sk-planning') : tab === 'Budget' ? router.push('/(tabs)/sk-planning-budget') : setActivePlanningTab(tab)} activeOpacity={0.8}>
+             
+            
               <Text style={[styles.planningTabText, active && styles.planningTabTextActive]}>
                 {tab}
               </Text>
@@ -319,8 +349,8 @@ export default function SKPlanningScreen() {
       {/* ── TEMPLATES TAB ── */}
       {activePlanningTab === 'Templates' && (
         <>
-          {/* Search + filter row */}
-          <View style={styles.filterRow}>
+          {/* Search row */}
+          <View style={styles.searchRow}>
             <View style={styles.searchBox}>
               <Text style={{ fontSize: 12, color: COLORS.midGray, marginRight: 4 }}>🔍</Text>
               <TextInput
@@ -336,35 +366,78 @@ export default function SKPlanningScreen() {
                 </TouchableOpacity>
               )}
             </View>
+            {/* Archive icon — top right */}
+            <View style={{ flex: 1 }} />
 
-            {/* All / Active Templates filter */}
+          </View>
+
+          {/* All / Active Templates filter pills */}
+          <View style={styles.filterRow}>
             <TouchableOpacity
-              style={[styles.filterPill, showAll && styles.filterPillActive]}
+              style={showAll ? styles.filterLinkActive : styles.filterLink}
               onPress={() => setShowAll(true)}
               activeOpacity={0.8}
             >
-              <Text style={[styles.filterPillText, showAll && styles.filterPillTextActive]}>All</Text>
+              <Text style={[styles.filterLinkText, showAll && styles.filterLinkTextActive]}>All</Text>
             </TouchableOpacity>
             <TouchableOpacity
-              style={[styles.filterPill, !showAll && styles.filterPillActive]}
+              style={!showAll ? styles.filterLinkActive : styles.filterLink}
               onPress={() => setShowAll(false)}
               activeOpacity={0.8}
             >
-              <Text style={[styles.filterPillText, !showAll && styles.filterPillTextActive]}>
+              <Text style={[styles.filterLinkText, !showAll && styles.filterLinkTextActive]}>
                 Active Templates
               </Text>
             </TouchableOpacity>
           </View>
 
-          {/* Template Sections */}
-          {filteredSections.length > 0 ? (
-            filteredSections.map(sec => (
-              <TemplateSection key={sec.id} section={sec} onEdit={handleEdit} />
-            ))
-          ) : (
-            <View style={styles.emptyState}>
-              <Text style={styles.emptyText}>No templates found.</Text>
+          {/* ── ALL view: flat table ── */}
+          {showAll && (
+            <View style={styles.tableContainer}>
+              {/* Table Header */}
+              <View style={styles.tableHeader}>
+                <Text style={[styles.thText, styles.colName]}>Template Name</Text>
+                <Text style={[styles.thText, styles.colType]}>Type</Text>
+                <Text style={[styles.thText, styles.colSource]}>Source</Text>
+                <Text style={[styles.thText, styles.colDate]}>Date Received</Text>
+              </View>
+              {/* Table Rows */}
+              {ALL_TEMPLATES
+                .filter(t => t.name.toLowerCase().includes(searchText.toLowerCase()))
+                .map((t, idx) => (
+                  <TouchableOpacity
+                    key={t.id}
+                    style={[styles.tableRow, idx % 2 !== 0 && styles.tableRowEven]}
+                    onPress={() => handleEdit(t)}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={[styles.tdName, styles.colName]} numberOfLines={2}>{t.name}</Text>
+                    <Text style={[styles.tdType, styles.colType]}>{t.type}</Text>
+                    <Text style={[styles.tdCell, styles.colSource]}>{t.source}</Text>
+                    <Text style={[styles.tdCell, styles.colDate]}>{t.dateReceived}</Text>
+                  </TouchableOpacity>
+                ))
+              }
+              {/* Empty filler rows to match screenshot */}
+              {Array(Math.max(0, 4 - ALL_TEMPLATES.filter(t =>
+                t.name.toLowerCase().includes(searchText.toLowerCase())).length
+              )).fill(null).map((_, i) => (
+                <View key={`empty-${i}`} style={[styles.tableRow, styles.tableRowEmpty]} />
+              ))}
             </View>
+          )}
+
+          {/* ── ACTIVE TEMPLATES view: category grid ── */}
+          {!showAll && (
+            filteredSections.length > 0 ? (
+              filteredSections.map(sec => (
+                <TemplateSection key={sec.id} section={sec} onEdit={handleEdit} />
+              ))
+            ) : (
+              <View style={styles.emptyState}>
+                <Text style={styles.emptyText}>No templates found.</Text>
+              </View>
+            )
           )}
         </>
       )}
@@ -415,16 +488,12 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 5,
   },
   logoPill: {
-    marginTop: 20,
-    width: 70, height: 70, borderRadius: 35,
+    marginTop: 20, width: 70, height: 70, borderRadius: 35,
     backgroundColor: 'rgba(255,255,255,0.15)',
     alignItems: 'center', justifyContent: 'center',
     marginBottom: 8, borderWidth: 2, borderColor: 'rgba(255,255,255,0.3)',
   },
-    logoImage: {
-    width: 100,
-    height: 100,
-  },
+  logoImage: { width: 100, height: 100 },
   navItem: {
     width: '100%', paddingVertical: 12, paddingHorizontal: 12,
     borderRadius: 24, marginBottom: 8, alignItems: 'center',
@@ -482,6 +551,7 @@ const styles = StyleSheet.create({
   headerDocLabel: { fontSize: 14, fontWeight: '700', color: COLORS.darkText, marginTop: 4 },
   headerRight: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
 
+
   // Bell
   bellBtn: {
     width: 40, height: 40, borderRadius: 20,
@@ -537,28 +607,77 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
 
-  // Filter row
+  // Search row (with archive icon)
+  searchRow: {
+    flexDirection: 'row', alignItems: 'center',
+    gap: 8, marginBottom: 8,
+  },
+  archiveIconBtn: {
+    width: 34, height: 34, borderRadius: 8,
+    backgroundColor: COLORS.white, borderWidth: 1, borderColor: COLORS.lightGray,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  archiveIconText: { fontSize: 16 },
+
+  // Filter links (All / Active Templates) — plain text style like screenshot
   filterRow: {
     flexDirection: 'row', alignItems: 'center',
-    gap: 8, marginBottom: 14, flexWrap: 'wrap',
+    gap: 16, marginBottom: 14,
   },
+  filterLink: { paddingVertical: 2 },
+  filterLinkActive: { paddingVertical: 2, borderBottomWidth: 2, borderBottomColor: COLORS.navy },
+  filterLinkText: { fontSize: 13, fontWeight: '500', color: COLORS.subText },
+  filterLinkTextActive: { color: COLORS.navy, fontWeight: '800' },
+
+  // ── All-view flat table ──
+  tableContainer: {
+    backgroundColor: COLORS.white,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: COLORS.lightGray,
+    overflow: 'hidden',
+    elevation: 1,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    marginBottom: 14,
+  },
+  tableHeader: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: COLORS.offWhite,
+    paddingVertical: 10, paddingHorizontal: 14,
+    borderBottomWidth: 1, borderBottomColor: COLORS.lightGray,
+  },
+  thText: { fontSize: 12, fontWeight: '800', color: COLORS.darkText },
+  tableRow: {
+    flexDirection: 'row', alignItems: 'center',
+    paddingVertical: 12, paddingHorizontal: 14,
+    borderBottomWidth: 1, borderBottomColor: COLORS.lightGray,
+    backgroundColor: COLORS.white, minHeight: 46,
+  },
+  tableRowEven: { backgroundColor: '#FAFAFA' },
+  tableRowEmpty: { minHeight: 46 },
+
+  // Column widths
+  colName:   { flex: 2.4, paddingRight: 8 },
+  colType:   { flex: 1,   paddingRight: 8 },
+  colSource: { flex: 0.7, paddingRight: 8 },
+  colDate:   { flex: 1.2 },
+
+  tdName: { fontSize: isMobile ? 10 : 12, color: COLORS.darkText, lineHeight: 17 },
+  tdType: { fontSize: isMobile ? 10 : 12, color: COLORS.subText, fontStyle: 'italic' },
+  tdCell: { fontSize: isMobile ? 10 : 12, color: COLORS.darkText },
+
+  // Search box
   searchBox: {
     flexDirection: 'row', alignItems: 'center',
     backgroundColor: COLORS.white, borderRadius: 20,
     borderWidth: 1, borderColor: COLORS.lightGray,
     paddingHorizontal: 12, paddingVertical: 7,
-    minWidth: 120, maxWidth: isMobile ? 140 : 190,
+    minWidth: 120, maxWidth: isMobile ? 160 : 220,
   },
   searchInput: { flex: 1, fontSize: 12, color: COLORS.darkText },
-  filterPill: {
-    borderRadius: 20, paddingHorizontal: isMobile ? 10 : 14, paddingVertical: 8,
-    backgroundColor: COLORS.lightGray, borderWidth: 1, borderColor: '#D0D0D0',
-  },
-  filterPillActive: {
-    backgroundColor: COLORS.gold, borderWidth: 1, borderColor: COLORS.midGray,
-  },
-  filterPillText: { fontSize: isMobile ? 10 : 11, fontWeight: '700', color: COLORS.subText },
-  filterPillTextActive: { color: COLORS.darkText },
 
   // ── Template Sections ──
   section: {
