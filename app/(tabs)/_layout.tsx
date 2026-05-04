@@ -11,7 +11,7 @@ export default function TabLayout() {
         <Tabs.Screen name="sk-document" />
         <Tabs.Screen name="sk-document-list" />
         <Tabs.Screen name="sk-planning" />
-        <Tabs.Screen name="sk-planning-templates" />
+        <Tabs.Screen name="sk-planning-feedback" />
         <Tabs.Screen name="sk-portal" />
         <Tabs.Screen name="lydo-home" />
         <Tabs.Screen name="lydo-document" />
