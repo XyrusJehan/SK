@@ -218,103 +218,124 @@ export default function SKDocumentScreen() {
 
   // ── Main Content ──
   const renderContent = () => (
-    <View style={styles.contentWrapper}>
-      <ScrollView
-        style={[styles.main, isMobile && styles.mainMobile]}
-        contentContainerStyle={styles.mainContent}
-        showsVerticalScrollIndicator={false}
-      >
-        {/* Mobile Header */}
-        {isMobile && (
-          <View style={styles.mobileHeader}>
-            <TouchableOpacity style={styles.menuBtn} onPress={() => setSidebarVisible(true)}>
-              <MenuIcon />
-            </TouchableOpacity>
-            <Text style={styles.mobileTitle}>Documents</Text>
-            <TouchableOpacity style={styles.bellBtn}>
-              <BellIcon hasNotif={notifCount > 0} />
-            </TouchableOpacity>
-          </View>
-        )}
+    <ScrollView
+      style={[styles.main, isMobile && styles.mainMobile]}
+      contentContainerStyle={styles.mainContent}
+      showsVerticalScrollIndicator={false}
+    >
+      {/* Mobile Header */}
+      {isMobile && (
+        <View style={styles.mobileHeader}>
+          <TouchableOpacity style={styles.menuBtn} onPress={() => setSidebarVisible(true)}>
+            <MenuIcon />
+          </TouchableOpacity>
+          <Text style={styles.mobileTitle}>Documents</Text>
+          <TouchableOpacity style={styles.bellBtn}>
+            <BellIcon hasNotif={notifCount > 0} />
+          </TouchableOpacity>
+        </View>
+      )}
 
-        {/* Desktop Header */}
-        {!isMobile && (
-          <View style={styles.header}>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.headerSub}>SANGGUNIANG KABATAAN</Text>
-              <Text style={styles.headerTitle}>BARANGAY SAN JOSE</Text>
-            </View>
-            <TouchableOpacity style={styles.bellBtn} activeOpacity={0.7}>
-              <BellIcon hasNotif={notifCount > 0} />
-              {notifCount > 0 && (
-                <View style={styles.notifBadge}>
-                  <Text style={styles.notifBadgeText}>{notifCount}</Text>
-                </View>
-              )}
-            </TouchableOpacity>
+      {/* Desktop Header */}
+      {!isMobile && (
+        <View style={styles.header}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.headerSub}>SANGGUNIANG KABATAAN</Text>
+            <Text style={styles.headerTitle}>BARANGAY SAN JOSE</Text>
           </View>
-        )}
-
-        {/* Search Bar */}
-        <View style={styles.searchRow}>
-          <View style={styles.searchBox}>
-            <Text style={styles.searchIcon}>🔍</Text>
-            <TextInput
-              style={styles.searchInput}
-              placeholder="Search"
-              placeholderTextColor={COLORS.midGray}
-              value={searchText}
-              onChangeText={setSearchText}
-            />
-            {searchText.length > 0 && (
-              <TouchableOpacity onPress={() => setSearchText('')}>
-                <Text style={{ color: COLORS.midGray, fontSize: 12 }}>✕</Text>
-              </TouchableOpacity>
+          <TouchableOpacity style={styles.bellBtn} activeOpacity={0.7}>
+            <BellIcon hasNotif={notifCount > 0} />
+            {notifCount > 0 && (
+              <View style={styles.notifBadge}>
+                <Text style={styles.notifBadgeText}>{notifCount}</Text>
+              </View>
             )}
-          </View>
+          </TouchableOpacity>
         </View>
+      )}
 
-        {/* Category label + All dropdown + Tab bar */}
-        <View style={styles.categoryRow}>
-          <Text style={styles.categoryLabel}>Category:</Text>
-        </View>
-
-        <View style={styles.filterRow}>
-          {/* "All" — small white outlined dropdown button, separate from tab bar */}
-          <View style={{ position: 'relative' }}>
-            <TouchableOpacity
-              style={[styles.allDropdownBtn, activeDocTab === 'All' && styles.allDropdownBtnActive]}
-              onPress={() => setDropdownOpen(v => !v)}
-              activeOpacity={0.8}
-            >
-              <Text style={[styles.allDropdownText, activeDocTab === 'All' && styles.allDropdownTextActive]}>
-                All
-              </Text>
-              <Text style={styles.allDropdownArrow}>{dropdownOpen ? '▲' : '▼'}</Text>
+      {/* Search Bar */}
+      <View style={styles.searchRow}>
+        <View style={styles.searchBox}>
+          <Text style={styles.searchIcon}>🔍</Text>
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Search"
+            placeholderTextColor={COLORS.midGray}
+            value={searchText}
+            onChangeText={setSearchText}
+          />
+          {searchText.length > 0 && (
+            <TouchableOpacity onPress={() => setSearchText('')}>
+              <Text style={{ color: COLORS.midGray, fontSize: 12 }}>✕</Text>
             </TouchableOpacity>
-          </View>
+          )}
+        </View>
+      </View>
 
-          {/* Navy tab bar — Financial, Planning, Governance, Activities only */}
-          <View style={styles.docTabBar}>
-            {DOCUMENT_TABS.map(tab => {
-              const active = activeDocTab === tab;
-              return (
-                <TouchableOpacity
-                  key={tab}
-                  style={[styles.docTab, active && styles.docTabActive]}
-                  onPress={() => { setActiveDocTab(tab); setDropdownOpen(false); }}
-                  activeOpacity={0.8}
-                >
-                  <Text style={[styles.docTabText, active && styles.docTabTextActive]}>
-                    {tab}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
+      {/* Category label + All dropdown + Tab bar */}
+      <View style={styles.categoryRow}>
+        <Text style={styles.categoryLabel}>Category:</Text>
+      </View>
+
+      <View style={styles.filterRow}>
+        {/* "All" — small white outlined dropdown button, separate from tab bar */}
+        <View>
+          <TouchableOpacity
+            style={[styles.allDropdownBtn, activeDocTab === 'All' && styles.allDropdownBtnActive]}
+            onPress={() => setDropdownOpen(v => !v)}
+            activeOpacity={0.8}
+          >
+            <Text style={[styles.allDropdownText, activeDocTab === 'All' && styles.allDropdownTextActive]}>
+              All
+            </Text>
+            <Text style={styles.allDropdownArrow}>{dropdownOpen ? '▲' : '▼'}</Text>
+          </TouchableOpacity>
+
+          {/* Dropdown menu */}
+          {dropdownOpen && (
+            <View style={styles.dropdownMenu}>
+              {['All', ...DOCUMENT_TABS].map(tab => {
+                const active = activeDocTab === tab;
+                return (
+                  <TouchableOpacity
+                    key={tab}
+                    style={[styles.dropdownItem, active && styles.dropdownItemActive]}
+                    onPress={() => { setActiveDocTab(tab); setDropdownOpen(false); }}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={[styles.dropdownItemText, active && styles.dropdownItemTextActive]}>
+                      {tab}
+                    </Text>
+                    {active && <Text style={styles.dropdownCheck}>✓</Text>}
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          )}
         </View>
 
-        {/* Document Cards Grid */}
+        {/* Navy tab bar — Financial, Planning, Governance, Activities only */}
+        <View style={styles.docTabBar}>
+          {DOCUMENT_TABS.map(tab => {
+            const active = activeDocTab === tab;
+            return (
+              <TouchableOpacity
+                key={tab}
+                style={[styles.docTab, active && styles.docTabActive]}
+                onPress={() => { setActiveDocTab(tab); setDropdownOpen(false); }}
+                activeOpacity={0.8}
+              >
+                <Text style={[styles.docTabText, active && styles.docTabTextActive]}>
+                  {tab}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      </View>
+
+      {/* Document Cards Grid */}
       <View style={isMobile ? styles.gridMobile : styles.gridInner}>
         {visibleCategories.length > 0 ? (
           visibleCategories.map(cat => (
@@ -328,32 +349,7 @@ export default function SKDocumentScreen() {
           </View>
         )}
       </View>
-      </ScrollView>
-
-      {/* Dropdown overlay - rendered outside ScrollView so it's on top */}
-      {dropdownOpen && (
-        <View style={styles.dropdownOverlay} pointerEvents="box-none">
-          <View style={styles.dropdownMenuWrapper}>
-            {['All', ...DOCUMENT_TABS].map(tab => {
-              const active = activeDocTab === tab;
-              return (
-                <TouchableOpacity
-                  key={tab}
-                  style={[styles.dropdownItem, active && styles.dropdownItemActive]}
-                  onPress={() => { setActiveDocTab(tab); setDropdownOpen(false); }}
-                  activeOpacity={0.8}
-                >
-                  <Text style={[styles.dropdownItemText, active && styles.dropdownItemTextActive]}>
-                    {tab}
-                  </Text>
-                  {active && <Text style={styles.dropdownCheck}>✓</Text>}
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-        </View>
-      )}
-    </View>
+    </ScrollView>
   );
 
   return (
@@ -414,7 +410,6 @@ const styles = StyleSheet.create({
   logoutText: { fontSize: 13, fontWeight: '600', color: '#fff', letterSpacing: 0.3 },
 
   // ── Main ──
-  contentWrapper: { flex: 1, position: 'relative' },
   main:        { flex: 1, backgroundColor: COLORS.offWhite, borderTopLeftRadius: 20 },
   mainMobile:  { borderTopLeftRadius: 0 },
   mainContent: { padding: 20, paddingBottom: 40 },
@@ -483,9 +478,9 @@ const styles = StyleSheet.create({
   allDropdownBtn: {
     flexDirection: 'row', alignItems: 'center', gap: 3,
     paddingVertical: 0, paddingHorizontal: 10,
-    backgroundColor: COLORS.white, borderRadius: 8,
-    borderWidth: 1, borderColor: COLORS.lightGray,
-    height: 38, justifyContent: 'center', minWidth: 90,
+    backgroundColor: COLORS.white, borderRadius: 4,
+    borderWidth: 1, borderColor: COLORS.midGray,
+    height: 38, justifyContent: 'center',
   },
   allDropdownBtnActive: { backgroundColor: COLORS.gold, borderColor: COLORS.gold },
   allDropdownText:      { fontSize: isMobile ? 10 : 12, fontWeight: '700', color: COLORS.darkText },
@@ -516,14 +511,12 @@ const styles = StyleSheet.create({
   docTabTextActive: { color: COLORS.darkText, fontWeight: '800' },
 
   // ── DROPDOWN MENU (floats below All button) ──
-  dropdownOverlay: {
-    position: 'absolute', top: 110, left: 20, zIndex: 9999,
-  },
-  dropdownMenuWrapper: {
-    backgroundColor: COLORS.white, borderRadius: 10, overflow: 'hidden',
+  dropdownMenu: {
+    position: 'absolute', top: 42, left: 0, zIndex: 99,
+    backgroundColor: COLORS.white, borderRadius: 8, overflow: 'hidden',
     shadowColor: '#000', shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25, shadowRadius: 12, elevation: 50,
-    minWidth: 200, borderWidth: 1, borderColor: COLORS.lightGray,
+    shadowOpacity: 0.15, shadowRadius: 8, elevation: 10,
+    minWidth: 150, borderWidth: 1, borderColor: COLORS.lightGray,
   },
   dropdownItem: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
