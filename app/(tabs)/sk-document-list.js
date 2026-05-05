@@ -1,19 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
-  View,
-  Text,
-  TextInput,
-  ScrollView,
-  TouchableOpacity,
-  StyleSheet,
-  SafeAreaView,
-  StatusBar,
-  FlatList,
-  Alert,
-  Dimensions,
-  Image,
+  View, Text, TextInput, ScrollView, TouchableOpacity,
+  StyleSheet, SafeAreaView, StatusBar, Dimensions,
+  Alert, Image,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useNav } from './navContext';
 import { useAuth } from './authContext';
 
@@ -22,85 +13,132 @@ const isMobile = SCREEN_WIDTH < 768;
 
 // ─── COLORS ───────────────────────────────────────────────────────────────────
 const COLORS = {
-  maroon: '#8B0000',
-  maroonDark: '#6B0000',
-  gold: '#E8C547',
-  accent: '#D4A017',
-  white: '#FFFFFF',
-  offWhite: '#F7F5F2',
+  navy:      '#133E75',
+  gold:      '#E8C547',
+  white:     '#FFFFFF',
+  offWhite:  '#F7F5F2',
   lightGray: '#ECECEC',
-  midGray: '#B0B0B0',
-  darkText: '#1A1A1A',
-  subText: '#666666',
-  cardBg: '#FFFFFF',
-  shadow: 'rgba(0,0,0,0.08)',
-  teal: '#2A7B7B',
+  midGray:   '#B0B0B0',
+  darkText:  '#1A1A1A',
+  subText:   '#666666',
+  cardBg:    '#FFFFFF',
+  shadow:    'rgba(0,0,0,0.08)',
 
   planning: {
-    header: '#5B8DD9',
-    headerDark: '#3A6BBB',
-    bg: '#EAF0FB',
-    btn: '#5B8DD9',
-    text: '#FFFFFF',
-    subText: '#2A4E8A',
+    header:     '#7B9FD4',
+    headerDark: '#5A7EBB',
+    bg:         '#C8D9F0',
+    text:       '#FFFFFF',
+    subText:    '#2A4E8A',
   },
   financial: {
-    header: '#3AAA5C',
-    headerDark: '#228844',
-    bg: '#E8F7EE',
-    btn: '#3AAA5C',
-    text: '#FFFFFF',
-    subText: '#1A6B38',
+    header:     '#4CAF50',
+    headerDark: '#388E3C',
+    bg:         '#C8EDCA',
+    text:       '#FFFFFF',
+    subText:    '#1A6B38',
   },
   governance: {
-    header: '#8B5BD9',
-    headerDark: '#6A3BB5',
-    bg: '#F0EAFB',
-    btn: '#8B5BD9',
-    text: '#FFFFFF',
-    subText: '#5A2EA0',
+    header:     '#7C5CBF',
+    headerDark: '#5A3EA0',
+    bg:         '#D8CAEF',
+    text:       '#FFFFFF',
+    subText:    '#5A2EA0',
   },
   performance: {
-    header: '#E87A30',
+    header:     '#E87A30',
     headerDark: '#C05A10',
-    bg: '#FDF0E6',
-    btn: '#E87A30',
-    text: '#FFFFFF',
-    subText: '#A04010',
+    bg:         '#F5D5B8',
+    text:       '#FFFFFF',
+    subText:    '#A04010',
   },
 };
 
+// ─── CATEGORY META ────────────────────────────────────────────────────────────
 const CATEGORY_META = {
-  All: { color: COLORS.maroon, label: 'All Documents' },
-  Financial: { color: COLORS.financial.header, label: 'Financial Documents' },
-  Planning: { color: COLORS.planning.header, label: 'Planning Documents' },
-  Governance: { color: COLORS.governance.header, label: 'Governance Documents' },
-  Activities: { color: COLORS.performance.header, label: 'Performance Documents' },
+  All:        { color: COLORS.navy,                label: 'All Documents'        },
+  Planning:   { color: COLORS.planning.header,     label: 'Planning Documents'   },
+  Financial:  { color: COLORS.financial.header,    label: 'Financial Documents'  },
+  Governance: { color: COLORS.governance.header,   label: 'Governance Documents' },
+  Activities: { color: COLORS.performance.header,  label: 'Performance Documents'},
 };
 
-// ─── MOCK DOCUMENTS ───────────────────────────────────────────────────────────
-const ALL_DOCUMENTS = [
-  { id: '1', name: 'Comprehensive Barangay Youth Development Plan 2026', category: 'Planning', date: '1/07/2026', status: 'Authorized', hasFile: false },
-  { id: '2', name: 'Comprehensive Barangay Youth Development Plan 2026', category: 'Planning', date: '1/05/2026', status: null, hasFile: true },
-  { id: '3', name: 'Annual Budget Investment Plan 2026', category: 'Planning', date: '12/10/2025', status: 'Authorized', hasFile: true },
-  { id: '4', name: 'SK Work Plan Q1 2026', category: 'Planning', date: '1/02/2026', status: null, hasFile: true },
-  { id: '5', name: 'Monthly Itemized List — January 2026', category: 'Financial', date: '1/31/2026', status: 'Authorized', hasFile: true },
-  { id: '6', name: 'Quarterly Register of Bank Q4 2025', category: 'Financial', date: '1/10/2026', status: null, hasFile: true },
-  { id: '7', name: 'Annual Budget FY 2026', category: 'Financial', date: '12/28/2025', status: 'Authorized', hasFile: false },
-  { id: '8', name: 'Disbursement Voucher #047', category: 'Financial', date: '1/15/2026', status: null, hasFile: true },
-  { id: '9', name: 'Liquidation Report Jan 2026', category: 'Financial', date: '1/28/2026', status: null, hasFile: true },
-  { id: '10', name: 'Resolution No. 2026-01', category: 'Governance', date: '1/03/2026', status: 'Authorized', hasFile: true },
-  { id: '11', name: 'Ordinance No. 2025-12', category: 'Governance', date: '12/15/2025', status: 'Authorized', hasFile: true },
-  { id: '12', name: 'Resolution No. 2025-10', category: 'Governance', date: '10/20/2025', status: null, hasFile: true },
-  { id: '13', name: 'Q4 2025 Accomplishment Report', category: 'Activities', date: '1/08/2026', status: 'Authorized', hasFile: true },
-  { id: '14', name: 'Youth Leadership Summit Documentation', category: 'Activities', date: '12/22/2025', status: null, hasFile: true },
-  { id: '15', name: 'Barangay Clean-Up Event Report', category: 'Activities', date: '12/05/2025', status: null, hasFile: false },
-  { id: '16', name: 'Minutes — General Assembly Dec 2025', category: 'Activities', date: '12/18/2025', status: 'Authorized', hasFile: true },
+// ─── DOCUMENT GROUPS (for accent color lookup) ────────────────────────────────
+const DOCUMENT_GROUPS = [
+  {
+    id: 'planning',
+    title: 'PLANNING DOCUMENTS',
+    category: 'Planning',
+    icon: '📅',
+    colors: COLORS.planning,
+    items: ['ABYIP', 'CBYDP', 'Work Plans', 'Project Proposals'],
+  },
+  {
+    id: 'financial',
+    title: 'FINANCIAL DOCUMENTS',
+    category: 'Financial',
+    icon: '💲',
+    colors: COLORS.financial,
+    items: ['Monthly Itemized List', 'Quarterly Register of Bank', 'Annual Budget', 'Disbursement Vouchers', 'Liquidation Reports'],
+  },
+  {
+    id: 'governance',
+    title: 'GOVERNANCE DOCUMENTS',
+    category: 'Governance',
+    icon: '⚖️',
+    colors: COLORS.governance,
+    items: ['Resolutions', 'Ordinances'],
+  },
+  {
+    id: 'performance',
+    title: 'PERFORMANCE DOCUMENTS',
+    category: 'Activities',
+    icon: '👥',
+    colors: COLORS.performance,
+    items: ['Accomplishment Reports', 'Activity Documentation', 'Event Reports', 'Minutes of the meetings'],
+  },
 ];
 
-const CATEGORIES = ['All', 'Financial', 'Planning', 'Governance', 'Activities'];
+// ─── ALL DOCUMENTS ────────────────────────────────────────────────────────────
+const ALL_DOCUMENTS = [
+  // Planning
+  { id: 'p1', name: 'Annual Barangay Youth Investment Plan 2026',       category: 'Planning',    subType: 'ABYIP',                      date: '1/07/2026',  status: 'Authorized', hasFile: true  },
+  { id: 'p2', name: 'Annual Barangay Youth Investment Plan 2025',       category: 'Planning',    subType: 'ABYIP',                      date: '1/05/2025',  status: null,         hasFile: true  },
+  { id: 'p3', name: 'Comprehensive Barangay Youth Dev Plan 2026',       category: 'Planning',    subType: 'CBYDP',                      date: '12/10/2025', status: 'Authorized', hasFile: true  },
+  { id: 'p4', name: 'Comprehensive Barangay Youth Dev Plan 2025',       category: 'Planning',    subType: 'CBYDP',                      date: '1/02/2025',  status: null,         hasFile: true  },
+  { id: 'p5', name: 'SK Work Plan Q1 2026',                             category: 'Planning',    subType: 'Work Plans',                 date: '1/02/2026',  status: 'Authorized', hasFile: true  },
+  { id: 'p6', name: 'SK Work Plan Q4 2025',                             category: 'Planning',    subType: 'Work Plans',                 date: '10/01/2025', status: null,         hasFile: true  },
+  { id: 'p7', name: 'Youth Center Construction Proposal 2026',          category: 'Planning',    subType: 'Project Proposals',          date: '2/01/2026',  status: null,         hasFile: false },
+  // Financial
+  { id: 'f1', name: 'Monthly Itemized List — January 2026',             category: 'Financial',   subType: 'Monthly Itemized List',      date: '1/31/2026',  status: 'Authorized', hasFile: true  },
+  { id: 'f2', name: 'Monthly Itemized List — December 2025',            category: 'Financial',   subType: 'Monthly Itemized List',      date: '12/31/2025', status: null,         hasFile: true  },
+  { id: 'f3', name: 'Quarterly Register of Bank Q4 2025',               category: 'Financial',   subType: 'Quarterly Register of Bank', date: '1/10/2026',  status: 'Authorized', hasFile: true  },
+  { id: 'f4', name: 'Quarterly Register of Bank Q3 2025',               category: 'Financial',   subType: 'Quarterly Register of Bank', date: '10/10/2025', status: null,         hasFile: true  },
+  { id: 'f5', name: 'Annual Budget 2026',                               category: 'Financial',   subType: 'Annual Budget',              date: '1/05/2026',  status: 'Authorized', hasFile: true  },
+  { id: 'f6', name: 'Annual Budget 2025',                               category: 'Financial',   subType: 'Annual Budget',              date: '1/03/2025',  status: null,         hasFile: true  },
+  { id: 'f7', name: 'Disbursement Voucher #047',                        category: 'Financial',   subType: 'Disbursement Vouchers',      date: '1/15/2026',  status: null,         hasFile: true  },
+  { id: 'f8', name: 'Disbursement Voucher #046',                        category: 'Financial',   subType: 'Disbursement Vouchers',      date: '1/10/2026',  status: 'Authorized', hasFile: true  },
+  { id: 'f9', name: 'Liquidation Report January 2026',                  category: 'Financial',   subType: 'Liquidation Reports',        date: '1/28/2026',  status: null,         hasFile: true  },
+  // Governance
+  { id: 'g1', name: 'Resolution No. 2026-01',                           category: 'Governance',  subType: 'Resolutions',                date: '1/03/2026',  status: 'Authorized', hasFile: true  },
+  { id: 'g2', name: 'Resolution No. 2025-10',                           category: 'Governance',  subType: 'Resolutions',                date: '10/20/2025', status: null,         hasFile: true  },
+  { id: 'g3', name: 'Ordinance No. 2025-12',                            category: 'Governance',  subType: 'Ordinances',                 date: '12/15/2025', status: 'Authorized', hasFile: true  },
+  { id: 'g4', name: 'Ordinance No. 2025-08',                            category: 'Governance',  subType: 'Ordinances',                 date: '8/05/2025',  status: null,         hasFile: true  },
+  // Activities
+  { id: 'a1', name: 'Q4 2025 Accomplishment Report',                    category: 'Activities',  subType: 'Accomplishment Reports',     date: '1/08/2026',  status: 'Authorized', hasFile: true  },
+  { id: 'a2', name: 'Q3 2025 Accomplishment Report',                    category: 'Activities',  subType: 'Accomplishment Reports',     date: '10/10/2025', status: null,         hasFile: true  },
+  { id: 'a3', name: 'Youth Leadership Summit Documentation',             category: 'Activities',  subType: 'Activity Documentation',     date: '12/22/2025', status: null,         hasFile: true  },
+  { id: 'a4', name: 'Barangay Clean-Up Event Report',                   category: 'Activities',  subType: 'Event Reports',              date: '12/05/2025', status: null,         hasFile: false },
+  { id: 'a5', name: 'Minutes — General Assembly Dec 2025',              category: 'Activities',  subType: 'Minutes of the meetings',    date: '12/18/2025', status: 'Authorized', hasFile: true  },
+  { id: 'a6', name: 'Minutes — Special Session Jan 2026',               category: 'Activities',  subType: 'Minutes of the meetings',    date: '1/14/2026',  status: null,         hasFile: true  },
+];
 
-// ─── ICON COMPONENTS ─────────────────────────────────────────────────────────
+const CATEGORIES    = ['All', 'Planning', 'Financial', 'Governance', 'Activities'];
+const SORT_OPTIONS  = ['Newest', 'Oldest', 'A–Z'];
+const DOCUMENT_TABS = ['Planning', 'Financial', 'Governance', 'Activities'];
+const NAV_TABS      = ['Dashboard', 'Documents', 'Planning', 'Portal'];
+
+// ─── ICONS ────────────────────────────────────────────────────────────────────
 const BellIcon = ({ hasNotif }) => (
   <View style={styles.bellWrapper}>
     <View style={styles.bellBody} />
@@ -108,7 +146,11 @@ const BellIcon = ({ hasNotif }) => (
     {hasNotif && <View style={styles.bellDot} />}
   </View>
 );
-
+const MenuIcon = () => (
+  <View style={styles.menuIconContainer}>
+    {[0, 1, 2].map(i => <View key={i} style={styles.menuLine} />)}
+  </View>
+);
 const SearchIcon = () => (
   <View style={styles.searchIconWrap}>
     <View style={styles.searchCircle} />
@@ -116,29 +158,21 @@ const SearchIcon = () => (
   </View>
 );
 
-const MenuIcon = () => (
-  <View style={styles.menuIconContainer}>
-    <View style={styles.menuLine} />
-    <View style={styles.menuLine} />
-    <View style={styles.menuLine} />
-  </View>
-);
-
 // ─── DROPDOWN MENU ────────────────────────────────────────────────────────────
-const DropdownMenu = ({ visible, options, onSelect, onClose, buttonColor }) => {
+const DropdownMenu = ({ visible, options, onSelect, onClose, accentColor }) => {
   if (!visible) return null;
   return (
     <View style={styles.dropdownOverlay}>
-      <TouchableOpacity style={styles.dropdownBackdrop} onPress={onClose} />
-      <View style={[styles.dropdownMenu, { borderTopColor: buttonColor }]}>
+      <TouchableOpacity style={StyleSheet.absoluteFill} onPress={onClose} activeOpacity={1} />
+      <View style={[styles.dropdownMenu, { borderTopColor: accentColor }]}>
         {options.map((opt, idx) => (
           <TouchableOpacity
             key={idx}
-            style={styles.dropdownItem}
-            onPress={() => {
-              onSelect(opt);
-              onClose();
-            }}
+            style={[
+              styles.dropdownItem,
+              idx < options.length - 1 && { borderBottomWidth: 1, borderBottomColor: COLORS.lightGray },
+            ]}
+            onPress={() => { onSelect(opt); onClose(); }}
           >
             <Text style={styles.dropdownItemText}>{opt}</Text>
           </TouchableOpacity>
@@ -149,60 +183,73 @@ const DropdownMenu = ({ visible, options, onSelect, onClose, buttonColor }) => {
 };
 
 // ─── DOCUMENT ROW ─────────────────────────────────────────────────────────────
-const DocumentRow = ({ doc, accentColor, onMenu, isMobile }) => (
-  <View style={styles.docRow}>
+const DocumentRow = ({ doc, accentColor, onMenu, isAlt }) => (
+  <View style={[styles.docRow, isAlt && styles.rowAlt]}>
     <View style={styles.docNameCell}>
-      <Text style={[styles.docName, isMobile && styles.docNameMobile]} numberOfLines={2}>{doc.name}</Text>
+      <Text style={[styles.docName, isMobile && styles.docNameMobile]} numberOfLines={2}>
+        {doc.name}
+      </Text>
       {doc.status === 'Authorized' && (
-        <View style={[styles.statusBadge, { backgroundColor: accentColor + '20', borderColor: accentColor + '50' }]}>
+        <View style={[styles.statusBadge, { backgroundColor: accentColor + '20', borderColor: accentColor + '60' }]}>
           <Text style={[styles.statusText, { color: accentColor }]}>Authorized</Text>
         </View>
       )}
       {doc.hasFile && !doc.status && (
-        <View style={styles.fileIcon}>
+        <View style={styles.fileIconWrap}>
           <Text style={{ fontSize: 13, color: COLORS.midGray }}>⬇</Text>
         </View>
       )}
     </View>
     {!isMobile && <Text style={styles.docDate}>{doc.date}</Text>}
-    <TouchableOpacity onPress={() => onMenu(doc)} style={styles.menuBtn}>
+    <TouchableOpacity onPress={() => onMenu(doc)} style={styles.menuDotBtn}>
       <Text style={styles.menuDots}>⋮</Text>
     </TouchableOpacity>
   </View>
 );
 
-// ─── MAIN SCREEN ─────────────────────────────────────────────────────────────
-export default function DocumentListScreen({ route, navigation }) {
+// ─── MAIN SCREEN ──────────────────────────────────────────────────────────────
+export default function SKDocumentListScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams();
   const { activeTab, setActiveTab } = useNav();
   const { logout } = useAuth();
 
-  const initialCategory = route?.params?.category ?? 'All';
-  const [searchText, setSearchText] = useState('');
-  const [activeCategory, setActiveCategory] = useState(initialCategory);
-  const [sortBy, setSortBy] = useState('Newest');
-  const [notifCount] = useState(2);
-  const [sidebarVisible, setSidebarVisible] = useState(false);
+  const [selectedGroup, setSelectedGroup]         = useState(null);
+  const [selectedSubType, setSelectedSubType]     = useState(null);
+  const [activeCategory, setActiveCategory]       = useState('All');
+  const [sortBy, setSortBy]                       = useState('Newest');
+  const [searchText, setSearchText]               = useState('');
+  const [notifCount]                              = useState(2);
+  const [sidebarVisible, setSidebarVisible]       = useState(false);
+  const [dropdownVisible, setDropdownVisible]     = useState(false);
+  const [dropdownOptions, setDropdownOptions]     = useState([]);
+  const [dropdownAccent, setDropdownAccent]       = useState(COLORS.navy);
+  const [activeDocumentTab, setActiveDocumentTab] = useState('SK Document');
 
-  const [dropdownVisible, setDropdownVisible] = useState(false);
-  const [dropdownOptions, setDropdownOptions] = useState([]);
-  const [dropdownButtonColor, setDropdownButtonColor] = useState(COLORS.maroon);
+  useEffect(() => {
+    setActiveTab('Documents');
+  }, []);
 
-  const meta = CATEGORY_META[activeCategory] ?? CATEGORY_META['All'];
-  const accentColor = meta.color;
+  useEffect(() => {
+    if (params.category) {
+      setActiveCategory(params.category);
+      setSelectedSubType(params.subType || null);
+      const group = DOCUMENT_GROUPS.find(g => g.category === params.category);
+      if (group) setSelectedGroup(group);
+    }
+  }, [params.category, params.subType]);
 
   const handleNavPress = (tab) => {
-    if (tab === 'Dashboard') {
-      router.push('/(tabs)/sk-dashboard');
-    } else if (tab === 'Documents') {
-      router.push('/(tabs)/sk-document');
-        } else if (tab === 'Planning') {
-      router.push('/(tabs)/sk-planning');
-    } else if (tab === 'Portal') {
-      router.push('/(tabs)/sk-portal');
-    }
     setActiveTab(tab);
     setSidebarVisible(false);
+    if (tab === 'Dashboard') router.push('/(tabs)/sk-dashboard');
+    if (tab === 'Documents') router.push('/(tabs)/sk-document');
+    if (tab === 'Planning')  router.push('/(tabs)/sk-planning');
+    if (tab === 'Portal')    router.push('/(tabs)/sk-portal');
+  };
+
+  const goBackToDocument = () => {
+    router.replace('/(tabs)/sk-document');
   };
 
   const handleLogout = () => {
@@ -210,25 +257,57 @@ export default function DocumentListScreen({ route, navigation }) {
     router.replace('/');
   };
 
-  const filtered = ALL_DOCUMENTS.filter((d) => {
-    const matchCat = activeCategory === 'All' || d.category === activeCategory;
-    const matchSearch = searchText === '' || d.name.toLowerCase().includes(searchText.toLowerCase());
-    return matchCat && matchSearch;
-  }).sort((a, b) => {
-    if (sortBy === 'Name') return a.name.localeCompare(b.name);
-    const toDate = (s) => new Date(s.replace(/(\d+)\/(\d+)\/(\d+)/, '$3-$1-$2'));
-    return toDate(b.date) - toDate(a.date);
-  });
+  const handleDocumentTabPress = (tab) => {
+    if (tab === 'Reports')   { router.push('/(tabs)/sk-document-reports');   return; }
+    if (tab === 'Templates') { router.push('/(tabs)/sk-document-templates'); return; }
+    setActiveDocumentTab(tab);
+  };
 
-  const handleMenu = (doc) => {
-    Alert.alert(doc.name, 'Choose an action', [
-      { text: 'View', onPress: () => console.log('View', doc.id) },
-      { text: 'Download', onPress: () => console.log('Download', doc.id) },
-      { text: 'Delete', style: 'destructive', onPress: () => console.log('Delete', doc.id) },
+  const getFilteredDocs = () => {
+    let docs = ALL_DOCUMENTS;
+    if (activeCategory !== 'All') {
+      docs = docs.filter(d => d.category === activeCategory);
+    }
+    if (selectedSubType) {
+      docs = docs.filter(d => d.subType === selectedSubType);
+    }
+    if (searchText.trim()) {
+      const q = searchText.toLowerCase();
+      docs = docs.filter(d =>
+        d.name.toLowerCase().includes(q) ||
+        d.subType.toLowerCase().includes(q)
+      );
+    }
+    if (sortBy === 'Newest') {
+      docs = [...docs].sort((a, b) => new Date(b.date) - new Date(a.date));
+    } else if (sortBy === 'Oldest') {
+      docs = [...docs].sort((a, b) => new Date(a.date) - new Date(b.date));
+    } else if (sortBy === 'A–Z') {
+      docs = [...docs].sort((a, b) => a.name.localeCompare(b.name));
+    }
+    return docs;
+  };
+
+  const filteredDocs = getFilteredDocs();
+  const meta         = CATEGORY_META[activeCategory] ?? CATEGORY_META['All'];
+  const accentColor  = selectedGroup ? selectedGroup.colors.header : meta.color;
+
+  const handleRowMenu = (doc) => {
+    Alert.alert(doc.name, 'Choose an action:', [
+      { text: 'View',   onPress: () => {} },
+      { text: 'Upload', onPress: () => {} },
+      { text: 'Delete', style: 'destructive', onPress: () => {} },
       { text: 'Cancel', style: 'cancel' },
     ]);
   };
 
+  const handleUpload = () => {
+    setDropdownOptions(['Upload File', 'Take Photo', 'Choose from Library']);
+    setDropdownAccent(accentColor);
+    setDropdownVisible(true);
+  };
+
+  // ── Sidebar ──
   const renderSidebar = () => (
     <View style={styles.sidebar}>
       <View style={styles.logoPill}>
@@ -238,8 +317,8 @@ export default function DocumentListScreen({ route, navigation }) {
           resizeMode="contain"
         />
       </View>
-      <View style={styles.sidebarSpacer} />
-      {['Dashboard', 'Documents', 'Planning', 'Portal'].map((tab) => {
+      <View style={{ height: 28 }} />
+      {NAV_TABS.map(tab => {
         const active = activeTab === tab;
         return (
           <TouchableOpacity
@@ -253,22 +332,205 @@ export default function DocumentListScreen({ route, navigation }) {
         );
       })}
       <View style={{ flex: 1 }} />
-      <TouchableOpacity
-        style={styles.logoutBtn}
-        onPress={handleLogout}
-        activeOpacity={0.8}
-      >
+      <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout} activeOpacity={0.8}>
         <Text style={styles.logoutText}>Logout</Text>
       </TouchableOpacity>
     </View>
   );
 
+  // ── Main render (list view only, matching lydo-document-list) ──
+  const renderListView = () => (
+    <ScrollView
+      style={[styles.main, isMobile && styles.mainMobile]}
+      contentContainerStyle={styles.mainContent}
+      showsVerticalScrollIndicator={false}
+    >
+      {/* Mobile header */}
+      {isMobile && (
+        <View style={styles.mobileHeader}>
+          <TouchableOpacity style={styles.menuBtn} onPress={() => setSidebarVisible(true)}>
+            <MenuIcon />
+          </TouchableOpacity>
+          <Text style={styles.mobileTitle}>Documents</Text>
+          <TouchableOpacity style={styles.bellBtn}>
+            <BellIcon hasNotif={notifCount > 0} />
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {/* Desktop header */}
+      {!isMobile && (
+        <View style={styles.header}>
+          <View>
+            <Text style={styles.headerSub}>SANGGUNIANG KABATAAN</Text>
+            <Text style={styles.headerTitle}>BARANGAY SAN JOSE</Text>
+          </View>
+          <View style={styles.headerRight}>
+            <TouchableOpacity
+              style={[styles.uploadBtn, { backgroundColor: accentColor }]}
+              onPress={handleUpload}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.uploadBtnText}>+ Upload</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.bellBtn} activeOpacity={0.7}>
+              <BellIcon hasNotif={notifCount > 0} />
+              {notifCount > 0 && (
+                <View style={styles.notifBadge}>
+                  <Text style={styles.notifBadgeText}>{notifCount}</Text>
+                </View>
+              )}
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
+
+      {/* Document Tab Bar */}
+      <View style={styles.documentTabBar}>
+        {DOCUMENT_TABS.map(tab => {
+          const active = activeDocumentTab === tab;
+          return (
+            <TouchableOpacity
+              key={tab}
+              style={[styles.documentTab, active && styles.documentTabActive]}
+              onPress={() => handleDocumentTabPress(tab)}
+              activeOpacity={0.8}
+            >
+              <Text style={[styles.documentTabText, active && styles.documentTabTextActive]}>{tab}</Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+
+      {/* Back breadcrumb */}
+      <View style={styles.breadcrumbRow}>
+        <TouchableOpacity onPress={goBackToDocument} style={styles.backBtn}>
+          <Text style={styles.backBtnText}>← All Documents</Text>
+        </TouchableOpacity>
+        {selectedGroup && (
+          <>
+            <Text style={styles.breadSep}>›</Text>
+            <Text style={[styles.breadCrumbActive, { color: selectedGroup.colors.header }]}>
+              {selectedSubType ?? selectedGroup.title}
+            </Text>
+          </>
+        )}
+      </View>
+
+      {/* Section heading with colored top border */}
+      <View style={[styles.listHeading, { borderTopColor: accentColor }]}>
+        <Text style={styles.listHeadingIcon}>{selectedGroup?.icon ?? '📁'}</Text>
+        <View style={{ flex: 1 }}>
+          <Text style={[styles.listHeadingTitle, { color: accentColor }]}>
+            {selectedSubType ?? selectedGroup?.title ?? 'All Documents'}
+          </Text>
+          <Text style={styles.listHeadingCount}>
+            {filteredDocs.length} document{filteredDocs.length !== 1 ? 's' : ''}
+          </Text>
+        </View>
+        {isMobile && (
+          <TouchableOpacity
+            style={[styles.uploadBtnMini, { backgroundColor: accentColor }]}
+            onPress={handleUpload}
+            activeOpacity={0.85}
+          >
+            <Text style={styles.uploadBtnText}>+ Upload</Text>
+          </TouchableOpacity>
+        )}
+      </View>
+
+      {/* Search bar */}
+      <View style={[styles.searchBar, { borderColor: accentColor + '44' }]}>
+        <SearchIcon />
+        <TextInput
+          style={styles.searchInput}
+          placeholder={`Search ${selectedSubType ?? 'documents'}…`}
+          placeholderTextColor={COLORS.midGray}
+          value={searchText}
+          onChangeText={setSearchText}
+        />
+        {searchText.length > 0 && (
+          <TouchableOpacity onPress={() => setSearchText('')}>
+            <Text style={{ color: COLORS.midGray, fontSize: 14 }}>✕</Text>
+          </TouchableOpacity>
+        )}
+      </View>
+
+      {/* Category filter chips */}
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.categoryRow}
+      >
+        {CATEGORIES.map(cat => {
+          const isActive = activeCategory === cat;
+          return (
+            <TouchableOpacity
+              key={cat}
+              style={[
+                styles.catBtn,
+                isActive
+                  ? [styles.catBtnActive, { backgroundColor: accentColor, borderColor: accentColor }]
+                  : [styles.catBtnInactive, { borderColor: accentColor + '40' }],
+              ]}
+              onPress={() => { setActiveCategory(cat); setSelectedSubType(null); }}
+              activeOpacity={0.8}
+            >
+              <Text style={[styles.catBtnText, isActive ? styles.catBtnTextActive : { color: accentColor }]}>
+                {cat}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+      </ScrollView>
+
+      {/* Document table card */}
+      <View style={[styles.tableCard, { borderTopColor: accentColor }]}>
+        {/* Sort row */}
+        <View style={styles.sortRow}>
+          <Text style={styles.sortLabel}>Sort:</Text>
+          {SORT_OPTIONS.map(opt => (
+            <TouchableOpacity key={opt} onPress={() => setSortBy(opt)}>
+              <Text style={[styles.sortBtn, sortBy === opt && { color: accentColor, fontWeight: '800' }]}>
+                {opt}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        {/* Table head */}
+        <View style={[styles.tableHead, { backgroundColor: accentColor + '12' }]}>
+          <Text style={[styles.tableHeadDoc, { color: accentColor }]}>Document Name</Text>
+          {!isMobile && <Text style={[styles.tableHeadDate, { color: accentColor }]}>Date</Text>}
+          <View style={{ width: 28 }} />
+        </View>
+
+        {/* Rows */}
+        {filteredDocs.length === 0 ? (
+          <View style={styles.emptyState}>
+            <Text style={styles.emptyText}>No documents found.</Text>
+          </View>
+        ) : (
+          filteredDocs.map((doc, idx) => (
+            <DocumentRow
+              key={doc.id}
+              doc={doc}
+              accentColor={accentColor}
+              onMenu={handleRowMenu}
+              isAlt={idx % 2 === 1}
+            />
+          ))
+        )}
+      </View>
+    </ScrollView>
+  );
+
+  // ─── RENDER ───────────────────────────────────────────────────────────────────
   return (
     <SafeAreaView style={styles.safe}>
-      <StatusBar barStyle="light-content" backgroundColor={COLORS.maroon} />
-      <View style={styles.layout}>
+      <StatusBar barStyle="light-content" backgroundColor={COLORS.navy} />
 
-        {/* Mobile: Sidebar as overlay */}
+      <View style={styles.layout}>
         {isMobile && sidebarVisible && (
           <TouchableOpacity
             style={styles.sidebarOverlay}
@@ -276,418 +538,218 @@ export default function DocumentListScreen({ route, navigation }) {
             onPress={() => setSidebarVisible(false)}
           />
         )}
+        {isMobile ? sidebarVisible && renderSidebar() : renderSidebar()}
 
-        {isMobile ? (
-          sidebarVisible && renderSidebar()
-        ) : (
-          renderSidebar()
-        )}
-
-        {/* ── MAIN ── */}
-        <ScrollView
-          style={[styles.main, isMobile && styles.mainMobile]}
-          contentContainerStyle={styles.mainContent}
-          showsVerticalScrollIndicator={false}
-        >
-          {/* Mobile Header */}
-          {isMobile && (
-            <View style={styles.mobileHeader}>
-              <TouchableOpacity
-                style={styles.menuBtn}
-                onPress={() => setSidebarVisible(!sidebarVisible)}
-              >
-                <MenuIcon />
-              </TouchableOpacity>
-              <Text style={styles.mobileTitle}>Documents</Text>
-              <View style={{ width: 40 }} />
-            </View>
-          )}
-
-          {/* Header */}
-          <View style={styles.header}>
-            <View>
-              <Text style={styles.headerSub}>SANGGUNIANG KABATAAN</Text>
-              <Text style={styles.headerTitle}>BARANGAY SAN JOSE</Text>
-            </View>
-            <View style={styles.headerRight}>
-              {!isMobile && (
-                <>
-                  <TouchableOpacity style={styles.bellBtn} activeOpacity={0.7}>
-                    <BellIcon hasNotif={notifCount > 0} />
-                    {notifCount > 0 && (
-                      <View style={styles.notifBadge}>
-                        <Text style={styles.notifBadgeText}>{notifCount}</Text>
-                      </View>
-                    )}
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[styles.uploadBtn, { backgroundColor: COLORS.maroon }]}
-                    activeOpacity={0.8}
-                  >
-                    <Text style={styles.uploadBtnText}>Upload  ⬆</Text>
-                  </TouchableOpacity>
-                </>
-              )}
-            </View>
-          </View>
-
-          {/* Mobile: Upload button below header */}
-          {isMobile && (
-            <TouchableOpacity
-              style={[styles.uploadBtn, styles.uploadBtnMobile, { backgroundColor: COLORS.maroon }]}
-              activeOpacity={0.8}
-            >
-              <Text style={styles.uploadBtnText}>Upload  ⬆</Text>
-            </TouchableOpacity>
-          )}
-
-          {/* Search */}
-          <View style={styles.searchBar}>
-            <SearchIcon />
-            <TextInput
-              style={styles.searchInput}
-              placeholder="Search documents…"
-              placeholderTextColor={COLORS.midGray}
-              value={searchText}
-              onChangeText={setSearchText}
-            />
-            {searchText !== '' && (
-              <TouchableOpacity onPress={() => setSearchText('')}>
-                <Text style={{ color: COLORS.midGray, fontSize: 15 }}>✕</Text>
-              </TouchableOpacity>
-            )}
-          </View>
-
-          {/* Category + Create New Row */}
-          <View style={styles.categoryRow}>
-            <Text style={styles.categoryLabel}>Category:</Text>
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              style={styles.categoryScroll}
-              contentContainerStyle={{ gap: 6, paddingRight: 8 }}
-            >
-              {CATEGORIES.map((cat) => {
-                const active = activeCategory === cat;
-                const color = CATEGORY_META[cat]?.color ?? COLORS.maroon;
-                return (
-                  <TouchableOpacity
-                    key={cat}
-                    style={[
-                      styles.catBtn,
-                      active ? styles.catBtnActive : styles.catBtnInactive,
-                      active ? { backgroundColor: color, borderColor: color } : { borderColor: color + '40' },
-                    ]}
-                    onPress={() => setActiveCategory(cat)}
-                    activeOpacity={0.8}
-                  >
-                    <Text
-                      style={[
-                        styles.catBtnText,
-                        active ? styles.catBtnTextActive : styles.catBtnTextInactive,
-                        { color: active ? COLORS.white : color },
-                      ]}
-                    >
-                      {cat}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-              <TouchableOpacity
-                style={styles.catBtnGold}
-                onPress={() => {
-                  setDropdownOptions(['ABYIP', 'CBYDP', 'MIL', 'RCB']);
-                  setDropdownButtonColor(COLORS.gold);
-                  setDropdownVisible(true);
-                }}
-                activeOpacity={0.8}
-              >
-                <Text style={styles.catBtnGoldText}>Create New +</Text>
-              </TouchableOpacity>
-            </ScrollView>
-          </View>
-
-          {/* Table Card */}
-          <View style={[styles.tableCard, { borderTopColor: accentColor }]}>
-            {/* Sort Row */}
-            <View style={styles.sortRow}>
-              <Text style={styles.sortLabel}>Sort by:</Text>
-              {['Newest', 'Name'].map((s) => (
-                <TouchableOpacity key={s} onPress={() => setSortBy(s)}>
-                  <Text style={[
-                    styles.sortBtn,
-                    sortBy === s && styles.sortBtnActive,
-                    sortBy === s && { color: accentColor },
-                  ]}>
-                    {s}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-
-            {/* Table Head */}
-            {!isMobile && (
-              <View style={[styles.tableHead, { borderBottomColor: accentColor + '40' }]}>
-                <Text style={[styles.tableHeadDoc, { color: accentColor }]}>Document Name</Text>
-                <Text style={[styles.tableHeadDate, { color: accentColor }]}>Date</Text>
-                <View style={{ width: 24 }} />
-              </View>
-            )}
-
-            {/* Rows */}
-            <FlatList
-              data={filtered}
-              keyExtractor={(item) => item.id}
-              renderItem={({ item, index }) => (
-                <View style={index % 2 !== 0 ? styles.rowAlt : null}>
-                  <DocumentRow doc={item} accentColor={accentColor} onMenu={handleMenu} isMobile={isMobile} />
-                </View>
-              )}
-              ListEmptyComponent={
-                <View style={styles.emptyState}>
-                  <Text style={styles.emptyText}>No documents found.</Text>
-                </View>
-              }
-              showsVerticalScrollIndicator={false}
-            />
-          </View>
-        </ScrollView>
-
-        {/* Dropdown Menu */}
-        <DropdownMenu
-          visible={dropdownVisible}
-          options={dropdownOptions}
-          buttonColor={dropdownButtonColor}
-          onSelect={(item) => console.log('Create:', item)}
-          onClose={() => setDropdownVisible(false)}
-        />
+        {renderListView()}
       </View>
+
+      <DropdownMenu
+        visible={dropdownVisible}
+        options={dropdownOptions}
+        accentColor={dropdownAccent}
+        onSelect={(opt) => Alert.alert('Selected', opt)}
+        onClose={() => setDropdownVisible(false)}
+      />
     </SafeAreaView>
   );
 }
 
 // ─── STYLES ───────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#133E75' },
+  safe:   { flex: 1, backgroundColor: COLORS.navy },
   layout: { flex: 1, flexDirection: 'row' },
 
-  // Sidebar
+  // ── Sidebar ──
   sidebar: {
-    width: 250,
-    backgroundColor: '#133E75',
-    alignItems: 'center',
-    paddingTop: 20,
-    paddingBottom: 24,
-    paddingHorizontal: 10,
-    zIndex: 10,
+    width: 250, backgroundColor: COLORS.navy,
+    alignItems: 'center', paddingTop: 20, paddingBottom: 24, paddingHorizontal: 10, zIndex: 10,
   },
   sidebarOverlay: {
-    position: 'absolute',
-    left: 0,
-    top: 0,
-    bottom: 0,
-    right: 0,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    zIndex: 5,
+    position: 'absolute', left: 0, top: 0, bottom: 0, right: 0,
+    backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 5,
   },
   logoPill: {
-    marginTop: 20,
-    width: 70, height: 70, borderRadius: 35,
+    marginTop: 20, width: 70, height: 70, borderRadius: 35,
     backgroundColor: 'rgba(255,255,255,0.15)',
     alignItems: 'center', justifyContent: 'center',
     marginBottom: 8, borderWidth: 2, borderColor: 'rgba(255,255,255,0.3)',
   },
-    logoImage: {
-    width: 100,
-    height: 100,
-  },
-  sidebarSpacer: { height: 28 },
+  logoImage: { width: 110, height: 110 },
   navItem: {
-    width: '100%',
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-    borderRadius: 24,
-    marginBottom: 8,
-    alignItems: 'center',
-    borderWidth: 1.5,
-    borderColor: COLORS.white,
-    backgroundColor: '#133E75',
+    width: '100%', paddingVertical: 12, paddingHorizontal: 12,
+    borderRadius: 24, marginBottom: 8, alignItems: 'center',
+    borderWidth: 1.5, borderColor: COLORS.white, backgroundColor: COLORS.navy,
   },
-  navItemActive: { backgroundColor: '#ffffff', borderWidth: 1.5, borderColor: '#000000' },
-  navLabel: { fontSize: 13, fontWeight: '600', color: 'rgba(255, 255, 255, 0.8)', letterSpacing: 0.3 },
-  navLabelActive: { color: '#000000', fontWeight: '800' },
+  navItemActive: { backgroundColor: COLORS.white, borderColor: COLORS.white },
+  navLabel:      { fontSize: 13, fontWeight: '600', color: 'rgba(255,255,255,0.85)', letterSpacing: 0.3 },
+  navLabelActive:{ color: '#000', fontWeight: '800' },
   logoutBtn: {
-    width: '100%',
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-    borderRadius: 24,
-    marginTop: 8,
-    alignItems: 'center',
-    borderWidth: 1.5,
-    borderColor: COLORS.white,
+    width: '100%', paddingVertical: 12, paddingHorizontal: 12, borderRadius: 24,
+    marginTop: 8, alignItems: 'center', borderWidth: 1.5, borderColor: COLORS.white,
     backgroundColor: 'rgba(255,255,255,0.1)',
   },
-  logoutText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#ffffff',
-    letterSpacing: 0.3,
-  },
+  logoutText: { fontSize: 13, fontWeight: '600', color: '#fff', letterSpacing: 0.3 },
 
-  // Main
-  main: {
-    flex: 1,
-    backgroundColor: COLORS.offWhite,
-    borderTopLeftRadius: 20,
-  },
-  mainMobile: {
-    borderTopLeftRadius: 0,
-  },
-  mainContent: { padding: 20 },
+  // ── Main ──
+  main:        { flex: 1, backgroundColor: COLORS.offWhite, borderTopLeftRadius: 20 },
+  mainMobile:  { borderTopLeftRadius: 0 },
+  mainContent: { padding: 20, paddingBottom: 40 },
 
-  // Mobile Header
+  // Mobile header
   mobileHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 16,
-    paddingBottom: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.lightGray,
+    flexDirection: 'row', alignItems: 'center',
+    justifyContent: 'space-between', marginBottom: 16,
+    paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: COLORS.lightGray,
   },
-  menuBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: COLORS.cardBg,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
+  menuBtn:           { width: 40, height: 40, borderRadius: 20, backgroundColor: COLORS.cardBg, alignItems: 'center', justifyContent: 'center' },
   menuIconContainer: { width: 20, height: 16, justifyContent: 'space-between' },
-  menuLine: { width: 20, height: 2, backgroundColor: COLORS.maroon, borderRadius: 1 },
-  mobileTitle: { fontSize: 18, fontWeight: '800', color: COLORS.darkText },
+  menuLine:          { width: 20, height: 2, backgroundColor: COLORS.navy, borderRadius: 1 },
+  mobileTitle:       { fontSize: 18, fontWeight: '800', color: COLORS.darkText },
 
-  // Header
+  // Desktop header
   header: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
-    marginBottom: 16,
+    flexDirection: 'row', alignItems: 'flex-start',
+    justifyContent: 'space-between', marginBottom: 16,
   },
-  headerSub: {
-    fontSize: 10,
-    fontWeight: '600',
-    color: COLORS.subText,
-    letterSpacing: 2,
-    textTransform: 'uppercase',
-    marginBottom: 2,
-  },
+  headerSub:   { fontSize: 10, fontWeight: '600', color: COLORS.subText, letterSpacing: 2, textTransform: 'uppercase', marginBottom: 2 },
   headerTitle: { fontSize: 20, fontWeight: '900', color: COLORS.darkText, letterSpacing: 0.5 },
   headerRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
 
   // Bell
   bellBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: COLORS.cardBg,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: COLORS.shadow,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 1,
-    shadowRadius: 6,
-    elevation: 3,
+    width: 40, height: 40, borderRadius: 20,
+    backgroundColor: COLORS.cardBg, alignItems: 'center', justifyContent: 'center',
+    shadowColor: COLORS.shadow, shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 1, shadowRadius: 6, elevation: 3,
   },
   bellWrapper: { width: 20, height: 22, alignItems: 'center' },
-  bellBody: { width: 14, height: 12, borderRadius: 7, borderWidth: 2, borderColor: COLORS.maroon, marginTop: 4 },
-  bellBottom: { width: 8, height: 4, borderBottomLeftRadius: 4, borderBottomRightRadius: 4, backgroundColor: COLORS.maroon, marginTop: -1 },
-  bellDot: { position: 'absolute', top: 0, right: 1, width: 7, height: 7, borderRadius: 4, backgroundColor: COLORS.gold, borderWidth: 1.5, borderColor: COLORS.cardBg },
-  notifBadge: { position: 'absolute', top: -2, right: -2, width: 16, height: 16, borderRadius: 8, backgroundColor: COLORS.gold, alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: COLORS.white },
-  notifBadgeText: { fontSize: 8, fontWeight: '900', color: COLORS.maroon },
+  bellBody:    { width: 14, height: 12, borderRadius: 7, borderWidth: 2, borderColor: '#8B0000', marginTop: 4 },
+  bellBottom:  { width: 8, height: 4, borderBottomLeftRadius: 4, borderBottomRightRadius: 4, backgroundColor: '#8B0000', marginTop: -1 },
+  bellDot:     { position: 'absolute', top: 0, right: 1, width: 7, height: 7, borderRadius: 4, backgroundColor: COLORS.gold, borderWidth: 1.5, borderColor: COLORS.cardBg },
+  notifBadge:  { position: 'absolute', top: -2, right: -2, width: 16, height: 16, borderRadius: 8, backgroundColor: COLORS.gold, alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: COLORS.white },
+  notifBadgeText: { fontSize: 8, fontWeight: '900', color: COLORS.navy },
+
+  // Document Tab Bar
+  documentTabBar: {
+    flexDirection: 'row',
+    borderBottomWidth: 1, borderBottomColor: COLORS.lightGray,
+    marginBottom: 14, overflow: 'hidden',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.30, shadowRadius: 3, elevation: 6,
+  },
+  documentTab: {
+    flex: 1,
+    paddingHorizontal: isMobile ? 8 : 40,
+    backgroundColor: COLORS.navy,
+    paddingVertical: 10,
+    borderBottomWidth: 0, borderBottomColor: 'transparent',
+    marginBottom: -1,
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)',
+    alignItems: 'center',
+  },
+  documentTabActive: {
+    backgroundColor: COLORS.gold,
+    borderRadius: 4, borderBottomColor: COLORS.gold, borderColor: COLORS.gold,
+    shadowColor: COLORS.gold, shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.4, shadowRadius: 4, elevation: 3,
+  },
+  documentTabText:       { fontSize: isMobile ? 10 : 13, fontWeight: '600', color: COLORS.white },
+  documentTabTextActive: { color: COLORS.darkText, fontWeight: '800' },
+
+  // Breadcrumb
+  breadcrumbRow:    { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 14 },
+  backBtn:          { paddingVertical: 4, paddingHorizontal: 2 },
+  backBtnText:      { fontSize: 13, fontWeight: '700', color: COLORS.navy },
+  breadSep:         { fontSize: 14, color: COLORS.midGray },
+  breadCrumbActive: { fontSize: 13, fontWeight: '700' },
+
+  // List heading
+  listHeading: {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    backgroundColor: COLORS.white, borderRadius: 14, padding: 14,
+    borderTopWidth: 4, marginBottom: 16,
+    elevation: 2, shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 6,
+  },
+  listHeadingIcon:  { fontSize: 22 },
+  listHeadingTitle: { fontSize: 14, fontWeight: '800', letterSpacing: 0.3 },
+  listHeadingCount: { fontSize: 11, color: COLORS.subText, marginTop: 2 },
 
   // Upload
-  uploadBtn: { paddingHorizontal: 14, paddingVertical: 9, borderRadius: 20 },
-  uploadBtnMobile: { marginBottom: 16 },
+  uploadBtn:     { paddingHorizontal: 14, paddingVertical: 9, borderRadius: 20 },
+  uploadBtnMini: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 16 },
   uploadBtnText: { fontSize: 12, fontWeight: '700', color: COLORS.white },
 
-  // Search
+  // Search bar
   searchBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: COLORS.white,
-    borderRadius: 14,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    marginBottom: 20,
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: COLORS.white, borderRadius: 14,
+    paddingHorizontal: 14, paddingVertical: 10, marginBottom: 12,
     borderWidth: 1.5,
-    borderColor: COLORS.maroon + '33',
-    shadowColor: COLORS.shadow,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 1,
-    shadowRadius: 6,
-    elevation: 2,
+    shadowColor: COLORS.shadow, shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 1, shadowRadius: 6, elevation: 2,
   },
   searchIconWrap: { width: 18, height: 18, marginRight: 10 },
-  searchCircle: { width: 11, height: 11, borderRadius: 6, borderWidth: 2, borderColor: COLORS.midGray, position: 'absolute', top: 0, left: 0 },
-  searchHandle: { width: 2, height: 6, backgroundColor: COLORS.midGray, borderRadius: 1, position: 'absolute', bottom: 0, right: 1, transform: [{ rotate: '-45deg' }] },
-  searchInput: { flex: 1, fontSize: 14, color: COLORS.darkText, padding: 0 },
+  searchCircle:   { width: 11, height: 11, borderRadius: 6, borderWidth: 2, borderColor: COLORS.midGray, position: 'absolute', top: 0, left: 0 },
+  searchHandle:   { width: 2, height: 6, backgroundColor: COLORS.midGray, borderRadius: 1, position: 'absolute', bottom: 0, right: 1, transform: [{ rotate: '-45deg' }] },
+  searchInput:    { flex: 1, fontSize: 14, color: COLORS.darkText, padding: 0 },
 
-  // Category Row
-  categoryRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 14, flexWrap: 'wrap' },
-  categoryLabel: { fontSize: 12, fontWeight: '700', color: COLORS.subText, marginRight: 8 },
-  categoryScroll: { flexGrow: 0 },
-  catBtn: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20, borderWidth: 1.5, backgroundColor: COLORS.white },
-  catBtnText: { fontSize: 12, fontWeight: '700' },
+  // Category chips
+  categoryRow:      { flexDirection: 'row', gap: 8, marginBottom: 14, paddingBottom: 2 },
+  catBtn:           { paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20, borderWidth: 1.5 },
+  catBtnActive:     {},
+  catBtnInactive:   { backgroundColor: COLORS.white },
+  catBtnText:       { fontSize: 12, fontWeight: '700' },
   catBtnTextActive: { color: COLORS.white },
-  catBtnTextInactive: {},
-  catBtnGold: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20, backgroundColor: COLORS.gold },
-  catBtnGoldText: { fontSize: 12, fontWeight: '800', color: COLORS.maroon },
 
-  // Table Card
+  // Table card
   tableCard: {
-    flex: 1,
-    backgroundColor: COLORS.white,
-    borderRadius: 18,
-    marginBottom: 18,
-    overflow: 'hidden',
-    borderTopWidth: 3,
-    elevation: 4,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
+    backgroundColor: COLORS.white, borderRadius: 18, marginBottom: 18,
+    overflow: 'hidden', borderTopWidth: 3,
+    elevation: 4, shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.08, shadowRadius: 12,
   },
-  sortRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 10, gap: 6, borderBottomWidth: 1, borderBottomColor: COLORS.lightGray },
-  sortLabel: { fontSize: 11, color: COLORS.subText, marginRight: 2 },
-  sortBtn: { fontSize: 12, fontWeight: '600', color: COLORS.midGray, paddingHorizontal: 4 },
-  sortBtnActive: { fontWeight: '800' },
+  sortRow: {
+    flexDirection: 'row', alignItems: 'center',
+    paddingHorizontal: 16, paddingVertical: 10, gap: 6,
+    borderBottomWidth: 1, borderBottomColor: COLORS.lightGray,
+    backgroundColor: 'rgba(0,0,0,0.02)',
+  },
+  sortLabel: { fontSize: 11, color: COLORS.subText, fontWeight: '500', marginRight: 2 },
+  sortBtn:   { fontSize: 11, fontWeight: '600', color: COLORS.midGray, paddingHorizontal: 4 },
 
-  tableHead: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 9, borderBottomWidth: 1.5 },
-  tableHeadDoc: { flex: 1, fontSize: 12, fontWeight: '800', letterSpacing: 0.3 },
-  tableHeadDate: { width: 68, fontSize: 12, fontWeight: '800', textAlign: 'right', letterSpacing: 0.3 },
+  tableHead: {
+    flexDirection: 'row', alignItems: 'center',
+    paddingHorizontal: 14, paddingVertical: 9,
+    borderBottomWidth: 1.5, borderBottomColor: COLORS.lightGray,
+  },
+  tableHeadDoc:  { flex: 1, fontSize: 11, fontWeight: '700', letterSpacing: 0.8, textTransform: 'uppercase' },
+  tableHeadDate: { width: 68, fontSize: 11, fontWeight: '700', textAlign: 'right', letterSpacing: 0.8, textTransform: 'uppercase' },
 
-  // Doc Row
-  docRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: COLORS.lightGray },
-  rowAlt: { backgroundColor: '#FAFAF8' },
-  docNameCell: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8, paddingRight: 6, flexWrap: 'wrap' },
-  docName: { fontSize: 12, color: COLORS.darkText, lineHeight: 17, flex: 1 },
+  // Document rows
+  docRow:        { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: COLORS.lightGray },
+  rowAlt:        { backgroundColor: '#FAFAF8' },
+  docNameCell:   { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8, paddingRight: 6, flexWrap: 'wrap' },
+  docName:       { fontSize: 12, color: COLORS.darkText, lineHeight: 17, flex: 1 },
   docNameMobile: { fontSize: 11 },
-  statusBadge: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10, borderWidth: 1 },
-  statusText: { fontSize: 10, fontWeight: '700' },
-  fileIcon: { paddingHorizontal: 4 },
-  docDate: { width: 68, fontSize: 11, color: COLORS.subText, textAlign: 'right', fontWeight: '600' },
-  menuBtn: { width: 24, alignItems: 'center', paddingLeft: 4 },
-  menuDots: { fontSize: 18, color: COLORS.midGray, fontWeight: '700' },
+  statusBadge:   { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10, borderWidth: 1 },
+  statusText:    { fontSize: 10, fontWeight: '700' },
+  fileIconWrap:  { paddingHorizontal: 4 },
+  docDate:       { width: 68, fontSize: 11, color: COLORS.subText, textAlign: 'right', fontWeight: '600' },
+  menuDotBtn:    { width: 24, alignItems: 'center', paddingLeft: 4 },
+  menuDots:      { fontSize: 18, color: COLORS.midGray, fontWeight: '700' },
 
-  // Empty
   emptyState: { alignItems: 'center', paddingVertical: 40 },
-  emptyText: { fontSize: 13, color: COLORS.midGray },
+  emptyText:  { fontSize: 13, color: COLORS.midGray },
 
   // Dropdown
   dropdownOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 100 },
-  dropdownBackdrop: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
-  dropdownMenu: { position: 'absolute', left: 20, top: 100, right: 20, backgroundColor: COLORS.white, borderRadius: 12, borderTopWidth: 4, elevation: 5, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.15, shadowRadius: 8 },
-  dropdownItem: { paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: COLORS.lightGray },
+  dropdownMenu: {
+    position: 'absolute', left: 20, top: 120, right: 20,
+    backgroundColor: COLORS.white, borderRadius: 12, borderTopWidth: 4,
+    elevation: 5, shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.15, shadowRadius: 8,
+  },
+  dropdownItem:     { paddingHorizontal: 16, paddingVertical: 13 },
   dropdownItemText: { fontSize: 13, color: COLORS.darkText, fontWeight: '500' },
 });
