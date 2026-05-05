@@ -280,7 +280,7 @@ export default function SKDocumentScreen() {
 
       <View style={styles.filterRow}>
         {/* "All" — small white outlined dropdown button, separate from tab bar */}
-        <View>
+        <View style={styles.dropdownContainer}>
           <TouchableOpacity
             style={[styles.allDropdownBtn, activeDocTab === 'All' && styles.allDropdownBtnActive]}
             onPress={() => setDropdownOpen(v => !v)}
@@ -323,7 +323,12 @@ export default function SKDocumentScreen() {
               <TouchableOpacity
                 key={tab}
                 style={[styles.docTab, active && styles.docTabActive]}
-                onPress={() => { setActiveDocTab(tab); setDropdownOpen(false); }}
+                onPress={() => {
+                  router.push({
+                    pathname: '/(tabs)/sk-document-list',
+                    params: { category: tab },
+                  });
+                }}
                 activeOpacity={0.8}
               >
                 <Text style={[styles.docTabText, active && styles.docTabTextActive]}>
@@ -472,6 +477,10 @@ const styles = StyleSheet.create({
   // ── FILTER ROW (All button + tab bar side by side) ──
   filterRow: {
     flexDirection: 'row', alignItems: 'flex-start', marginBottom: 16, gap: 6,
+    zIndex: 10,
+  },
+  dropdownContainer: {
+    zIndex: 100,
   },
 
   // "All" — small white outlined dropdown button beside the navy tab bar
