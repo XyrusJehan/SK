@@ -95,7 +95,7 @@ export default function SignUpScreen() {
     setIsLoading(false);
 
     if (result.success) {
-      router.replace('/(tabs)/sk-dashboard');
+      router.replace('/');
     } else {
       setError(result.error);
     }
