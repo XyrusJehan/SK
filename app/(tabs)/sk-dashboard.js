@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -106,11 +106,24 @@ const COLORS = {
 export default function HomeScreen({ navigation }) {
   const router = useRouter();
   const { activeTab, setActiveTab } = useNav();
-  const { logout } = useAuth();
+  const { logout, user } = useAuth();
   const [searchText, setSearchText] = useState('');
   const [sortBy, setSortBy] = useState('Newest');
   const [notifCount] = useState(2);
   const [sidebarVisible, setSidebarVisible] = useState(false);
+
+  // Get user's barangay from auth context
+  const barangayName = user?.barangay?.barangay_name || 'Unknown Barangay';
+  const barangayId = user?.barangayId;
+
+  // Redirect if no barangay assigned
+  useEffect(() => {
+    if (user && !barangayId) {
+      alert('No barangay assigned to your account. Please contact administrator.');
+      logout();
+      router.replace('/');
+    }
+  }, [user, barangayId]);
 
   const handleNavPress = (tab) => {
     if (tab === 'Dashboard') {
@@ -217,7 +230,7 @@ export default function HomeScreen({ navigation }) {
           <View style={styles.header}>
             <View>
               <Text style={styles.headerSub}>SANGGUNIANG KABATAAN</Text>
-              <Text style={styles.headerTitle}>BARANGAY SAN JOSE</Text>
+              <Text style={styles.headerTitle}>{barangayName.toUpperCase()}</Text>
             </View>
             {!isMobile && (
               <TouchableOpacity style={styles.bellBtn} activeOpacity={0.7}>

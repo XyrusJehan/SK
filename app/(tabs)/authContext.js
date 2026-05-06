@@ -116,6 +116,7 @@ export function AuthProvider({ children }) {
         role: mappedRole,
         roleName: dbRole,
         barangay: barangayData,
+        barangayId: userData.barangay_id,
       };
 
       setUser(userSession);
