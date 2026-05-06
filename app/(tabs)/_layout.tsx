@@ -1,9 +1,24 @@
 import { Tabs } from 'expo-router';
-import React from 'react';
+import React, { useEffect } from 'react';
+import { useRouter } from 'expo-router';
+import { useAuth } from './authContext';
 
 import { NavProvider } from './navContext';
 
 export default function TabLayout() {
+  const router = useRouter();
+  const { user, isLoading } = useAuth();
+
+  useEffect(() => {
+    if (!isLoading && !user) {
+      router.replace('/');
+    }
+  }, [user, isLoading]);
+
+  if (isLoading || !user) {
+    return null;
+  }
+
   return (
     <NavProvider>
       <Tabs screenOptions={{ headerShown: false, tabBarStyle: { display: 'none' } }}>
