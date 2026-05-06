@@ -16,9 +16,9 @@ export async function getUserRole(roleId: number): Promise<string> {
 
   if (error) {
     console.error('Error fetching role:', error);
-    return 'PUBLIC_USER';
+    return 'resident';
   }
-  return data?.role_name || 'PUBLIC_USER';
+  return data?.role_name || 'resident';
 }
 
 // Helper to fetch user with role details
