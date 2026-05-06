@@ -5,8 +5,10 @@ const AuthContext = createContext();
 
 // Map database role names to app roles
 const ROLE_MAP = {
-  'SK_OFFICIAL': 'sk',
   'LYDO': 'lydo',
+  'SK_CHAIRMAN': 'sk',
+  'SK_TREASURER': 'sk',
+  'SK_SECRETARY': 'sk',
   'PUBLIC_USER': 'public',
 };
 
@@ -25,14 +27,10 @@ export function AuthProvider({ children }) {
 
   const login = async (email, password) => {
     try {
-      // Query users table directly
+      // Query users table
       const { data: userData, error: userError } = await supabase
         .from('users')
-        .select(`
-          *,
-          roles (role_name),
-          barangays (barangay_name, municipality, province)
-        `)
+        .select('*')
         .eq('email', email.toLowerCase())
         .eq('status', 'active')
         .single();
@@ -51,16 +49,41 @@ export function AuthProvider({ children }) {
         return { success: false, error: 'Invalid email or password' };
       }
 
-      // Create user session
+      // Get role name from roles table
+      let dbRole = 'PUBLIC_USER';
+      const roleId = Number(userData.role_id);
+      console.log('User role_id:', userData.role_id, 'Type:', typeof roleId);
+
+      const { data: roleData } = await supabase
+        .from('roles')
+        .select('role_name')
+        .eq('role_id', roleId)
+        .maybeSingle();
+
+      console.log('Role data:', roleData);
+      if (roleData?.role_name) {
+        dbRole = roleData.role_name;
+      }
+
+      const mappedRole = ROLE_MAP[dbRole] || 'public';
+      console.log('dbRole:', dbRole, 'mappedRole:', mappedRole);
+
+      // Get barangay info
+      const { data: barangayData } = await supabase
+        .from('barangays')
+        .select('barangay_name, municipality, province')
+        .eq('barangay_id', userData.barangay_id)
+        .single();
+
       const userSession = {
         userId: userData.user_id,
         email: userData.email,
         firstName: userData.first_name,
         lastName: userData.last_name,
         name: `${userData.first_name} ${userData.last_name}`,
-        role: ROLE_MAP[userData.roles?.role_name] || 'public',
-        roleName: userData.roles?.role_name,
-        barangay: userData.barangays,
+        role: mappedRole,
+        roleName: dbRole,
+        barangay: barangayData,
       };
 
       setUser(userSession);

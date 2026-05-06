@@ -51,6 +51,7 @@ export default function LoginScreen() {
     setIsLoading(false);
 
     if (result.success) {
+      console.log('Login success, role:', result.user.role, 'roleName:', result.user.roleName);
       if (result.user.role === 'lydo') {
         router.replace('/(tabs)/lydo-home');
       } else {
@@ -149,14 +150,6 @@ export default function LoginScreen() {
                 <Text style={styles.linkText}>Sign Up</Text>
               </TouchableOpacity>
             </View>
-
-            {/* Demo Accounts Info */}
-            <View style={styles.demoBox}>
-              <Text style={styles.demoTitle}>Demo Accounts:</Text>
-              <Text style={styles.demoText}>LYDO: lydo@sk.com / lydo123</Text>
-              <Text style={styles.demoText}>SK: sk@sk.com / sk123</Text>
-            </View>
-
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
