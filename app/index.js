@@ -36,16 +36,21 @@ export default function LoginScreen() {
   const [emailFocused, setEmailFocused] = useState(false);
   const [passFocused, setPassFocused] = useState(false);
   const [error, setError] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
 
-  const handleLogin = () => {
+  const handleLogin = async () => {
     if (!email || !password) {
       setError('Please enter email and password');
       return;
     }
 
-    const result = login(email, password);
+    setIsLoading(true);
+    setError('');
+
+    const result = await login(email, password);
+    setIsLoading(false);
+
     if (result.success) {
-      setError('');
       if (result.user.role === 'lydo') {
         router.replace('/(tabs)/lydo-home');
       } else {
@@ -128,8 +133,13 @@ export default function LoginScreen() {
             </TouchableOpacity>
 
             {/* Login Button */}
-            <TouchableOpacity style={styles.loginBtn} onPress={handleLogin} activeOpacity={0.85}>
-              <Text style={styles.loginBtnText}>Login</Text>
+            <TouchableOpacity
+              style={[styles.loginBtn, isLoading && styles.loginBtnDisabled]}
+              onPress={handleLogin}
+              activeOpacity={0.85}
+              disabled={isLoading}
+            >
+              <Text style={styles.loginBtnText}>{isLoading ? 'Logging in...' : 'Login'}</Text>
             </TouchableOpacity>
 
             {/* Sign Up Link */}
@@ -230,6 +240,7 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   loginBtnText: { fontSize: 16, fontWeight: '800', color: COLORS.btnText, letterSpacing: 0.5 },
+  loginBtnDisabled: { opacity: 0.7 },
 
   // Sign Up link
   signupRow: {
