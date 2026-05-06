@@ -3,7 +3,7 @@ import {
   View, Text, TextInput, TouchableOpacity,
   StyleSheet, SafeAreaView, StatusBar,
   KeyboardAvoidingView, Platform, ScrollView,
-  Dimensions,
+  Dimensions, Image,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuth } from './(tabs)/authContext';
@@ -113,12 +113,11 @@ export default function SignUpScreen() {
 
             {/* Seal */}
             <View style={styles.sealWrap}>
-              <View style={styles.sealPlaceholder}>
-                <View style={styles.sealInner}>
-                  <Text style={styles.sealText}>SK</Text>
-                  <Text style={styles.sealSub}>SEAL</Text>
-                </View>
-              </View>
+              <Image
+                source={require('./../assets/images/rizal-logo.png')}
+                style={styles.logoImage}
+                resizeMode="contain"
+              />
             </View>
 
             {/* Name Row */}
@@ -285,16 +284,10 @@ const styles = StyleSheet.create({
 
   // Seal
   sealWrap: { alignItems: 'center', marginBottom: isMobile ? 20 : 28 },
-  sealPlaceholder: {
-    width: isMobile ? 70 : 90, height: isMobile ? 70 : 90,
-    borderRadius: isMobile ? 35 : 45,
-    backgroundColor: COLORS.navyLight,
-    borderWidth: 3, borderColor: COLORS.gold,
-    alignItems: 'center', justifyContent: 'center',
+  logoImage: {
+    width: isMobile ? 100 : 120,
+    height: isMobile ? 100 : 120,
   },
-  sealInner: { alignItems: 'center' },
-  sealText: { fontSize: isMobile ? 16 : 20, fontWeight: '900', color: COLORS.white },
-  sealSub: { fontSize: isMobile ? 6 : 8, fontWeight: '700', color: COLORS.gold, letterSpacing: 2 },
 
   // Name Row
   nameRow: { flexDirection: 'row', gap: isMobile ? 6 : 8 },
