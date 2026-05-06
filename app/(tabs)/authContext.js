@@ -33,11 +33,11 @@ export function AuthProvider({ children }) {
         .select('*')
         .eq('email', email.toLowerCase())
         .eq('status', 'active')
-        .single();
+        .maybeSingle();
 
       if (userError) {
         console.error('Supabase error:', userError);
-        return { success: false, error: 'Database error: ' + userError.message };
+        return { success: false, error: 'Invalid email or password' };
       }
 
       if (!userData) {
