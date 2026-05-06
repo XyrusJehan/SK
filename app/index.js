@@ -54,8 +54,11 @@ export default function LoginScreen() {
       console.log('Login success, role:', result.user.role, 'roleName:', result.user.roleName);
       if (result.user.role === 'lydo') {
         router.replace('/(tabs)/lydo-home');
-      } else {
+      } else if (result.user.role === 'sk') {
         router.replace('/(tabs)/sk-dashboard');
+      } else {
+        // Resident/public user stays on home page
+        router.replace('/');
       }
     } else {
       setError(result.error);

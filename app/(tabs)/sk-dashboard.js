@@ -112,13 +112,20 @@ export default function HomeScreen({ navigation }) {
   const [notifCount] = useState(2);
   const [sidebarVisible, setSidebarVisible] = useState(false);
 
+  // Redirect if not SK official
+  useEffect(() => {
+    if (user && user.role !== 'sk') {
+      router.replace('/');
+    }
+  }, [user]);
+
   // Get user's barangay from auth context
   const barangayName = user?.barangay?.barangay_name || 'Unknown Barangay';
   const barangayId = user?.barangayId;
 
-  // Redirect if no barangay assigned
+  // Redirect if no barangay assigned (only for SK officials)
   useEffect(() => {
-    if (user && !barangayId) {
+    if (user && user.role === 'sk' && !barangayId) {
       alert('No barangay assigned to your account. Please contact administrator.');
       logout();
       router.replace('/');

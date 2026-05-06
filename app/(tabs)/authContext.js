@@ -138,6 +138,10 @@ export function AuthProvider({ children }) {
 
   const signup = async (email, password, firstName, lastName) => {
     try {
+      // Clear any existing session before signup
+      setUser(null);
+      localStorage.removeItem('sk_user');
+
       // Validate password requirements
       const passwordError = validatePassword(password);
       if (passwordError) {
@@ -174,6 +178,7 @@ export function AuthProvider({ children }) {
           email: email.toLowerCase(),
           password: hashedPassword,
           role_id: roleData?.role_id || 1,
+          barangay_id: null,
           status: 'active',
         });
 
@@ -187,8 +192,7 @@ export function AuthProvider({ children }) {
         .from('users')
         .select(`
           *,
-          roles (role_name),
-          barangays (barangay_name, municipality, province)
+          roles (role_name)
         `)
         .eq('email', email.toLowerCase())
         .single();

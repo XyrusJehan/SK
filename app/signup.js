@@ -3,7 +3,7 @@ import {
   View, Text, TextInput, TouchableOpacity,
   StyleSheet, SafeAreaView, StatusBar,
   KeyboardAvoidingView, Platform, ScrollView,
-  Dimensions, Image,
+  Dimensions, Image, Modal,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuth } from './(tabs)/authContext';
@@ -70,6 +70,7 @@ export default function SignUpScreen() {
   const [agreed, setAgreed] = useState(false);
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
 
   const handleSignUp = async () => {
     if (!lastName || !firstName || !email || !password || !confirmPassword) {
@@ -84,10 +85,6 @@ export default function SignUpScreen() {
       setError('Please agree to the terms of service and privacy policy.');
       return;
     }
-    if (password.length < 6) {
-      setError('Password must be at least 6 characters.');
-      return;
-    }
     setError('');
     setIsLoading(true);
 
@@ -95,13 +92,14 @@ export default function SignUpScreen() {
     setIsLoading(false);
 
     if (result.success) {
-      router.replace('/');
+      setShowSuccessModal(true);
     } else {
       setError(result.error);
     }
   };
 
   return (
+    <>
     <SafeAreaView style={styles.safe}>
       <StatusBar barStyle="light-content" backgroundColor={COLORS.navyDark} />
       <KeyboardAvoidingView
@@ -256,6 +254,39 @@ export default function SignUpScreen() {
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
+
+      {/* Success Modal */}
+      <Modal
+        visible={showSuccessModal}
+        transparent
+        animationType="fade"
+        statusBarTranslucent
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <View style={styles.checkCircle}>
+              <Text style={styles.checkIcon}>✓</Text>
+            </View>
+            <Text style={styles.modalTitle}>SIGN-UP SUCCESSFUL!</Text>
+            <Text style={styles.modalBody}>
+              Thanks! your account is now created. Please wait for{'\n'}
+              the Admin reviews and approves your registration.{'\n'}
+              You will receive an email once it's finalized.
+            </Text>
+            <TouchableOpacity
+              style={styles.modalBtn}
+              onPress={() => {
+                setShowSuccessModal(false);
+                router.replace('/');
+              }}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.modalBtnText}>OK, GOT IT</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+    </>
   );
 }
 
@@ -355,4 +386,72 @@ const styles = StyleSheet.create({
   },
   subText: { fontSize: 12, color: COLORS.subText },
   linkText: { fontSize: 12, fontWeight: '700', color: COLORS.link },
+
+  // Success Modal
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 24,
+  },
+  modalCard: {
+    backgroundColor: COLORS.navy,
+    borderRadius: 20,
+    padding: 28,
+    width: '100%',
+    maxWidth: 400,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.4,
+    shadowRadius: 24,
+    elevation: 12,
+  },
+  checkCircle: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: '#2EAA57',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 20,
+    shadowColor: '#2EAA57',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.4,
+    shadowRadius: 12,
+    elevation: 6,
+  },
+  checkIcon: { fontSize: 36, color: COLORS.white, fontWeight: '900' },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: '900',
+    color: COLORS.white,
+    letterSpacing: 0.5,
+    marginBottom: 14,
+    textAlign: 'center',
+  },
+  modalBody: {
+    fontSize: 13,
+    color: COLORS.subText,
+    textAlign: 'center',
+    lineHeight: 20,
+    marginBottom: 24,
+  },
+  modalBtn: {
+    backgroundColor: COLORS.navyLight,
+    borderRadius: 10,
+    paddingVertical: 14,
+    paddingHorizontal: 48,
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.2)',
+  },
+  modalBtnText: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: COLORS.white,
+    letterSpacing: 1,
+  },
 });
