@@ -5,11 +5,9 @@ const AuthContext = createContext();
 
 // Map database role names to app roles
 const ROLE_MAP = {
-  'LYDO': 'lydo',
-  'SK_CHAIRMAN': 'sk',
-  'SK_TREASURER': 'sk',
-  'SK_SECRETARY': 'sk',
-  'PUBLIC_USER': 'public',
+  'lydo': 'lydo',
+  'sk_official': 'sk',
+  'resident': 'public',
 };
 
 // Simple hash function for password hashing
@@ -82,7 +80,7 @@ export function AuthProvider({ children }) {
       }
 
       // Get role name from roles table
-      let dbRole = 'PUBLIC_USER';
+      let dbRole = 'resident';
       const roleId = Number(userData.role_id);
       console.log('User role_id:', userData.role_id, 'Type:', typeof roleId);
 
@@ -100,12 +98,16 @@ export function AuthProvider({ children }) {
       const mappedRole = ROLE_MAP[dbRole] || 'public';
       console.log('dbRole:', dbRole, 'mappedRole:', mappedRole);
 
-      // Get barangay info
-      const { data: barangayData } = await supabase
-        .from('barangays')
-        .select('barangay_name, municipality, province')
-        .eq('barangay_id', userData.barangay_id)
-        .single();
+      // Get barangay info (only if barangay_id exists)
+      let barangayData = null;
+      if (userData.barangay_id) {
+        const { data } = await supabase
+          .from('barangays')
+          .select('barangay_name, municipality, province')
+          .eq('barangay_id', userData.barangay_id)
+          .single();
+        barangayData = data;
+      }
 
       const userSession = {
         userId: userData.user_id,
@@ -153,11 +155,11 @@ export function AuthProvider({ children }) {
         return { success: false, error: 'Email already registered' };
       }
 
-      // Get PUBLIC_USER role_id
+      // Get resident role_id
       const { data: roleData } = await supabase
         .from('roles')
         .select('role_id')
-        .eq('role_name', 'PUBLIC_USER')
+        .eq('role_name', 'resident')
         .maybeSingle();
 
       // Hash password before storing
@@ -171,7 +173,7 @@ export function AuthProvider({ children }) {
           last_name: lastName,
           email: email.toLowerCase(),
           password: hashedPassword,
-          role_id: roleData?.role_id || 2,
+          role_id: roleData?.role_id || 1,
           status: 'active',
         });
 
