@@ -125,6 +125,13 @@ export default function SKPortalScreen() {
   const [showDocModal, setShowDocModal]       = useState(false);
   const [showDocDropdown, setShowDocDropdown] = useState(false);
   const [showYearDropdown, setShowYearDropdown] = useState(false);
+  const [showUploadModal, setShowUploadModal]   = useState(false);
+  const [uploadFile, setUploadFile]             = useState(null);
+  const [uploadTitle, setUploadTitle]           = useState('');
+  const [uploadCategory, setUploadCategory]     = useState('');
+  const [uploadYear, setUploadYear]             = useState('');
+  const [showUploadCatDropdown, setShowUploadCatDropdown] = useState(false);
+  const [showUploadYearDropdown, setShowUploadYearDropdown] = useState(false);
 
   const handleNavPress = (tab) => {
     setActiveTab(tab);
@@ -227,6 +234,200 @@ export default function SKPortalScreen() {
             <Text style={styles.modalCloseBtnText}>Close</Text>
           </TouchableOpacity>
         </View>
+      </TouchableOpacity>
+    </Modal>
+  );
+
+  // ── Upload Modal ──
+  const UPLOAD_CATEGORIES = [
+    'Comprehensive Barangay Youth Development Plan',
+    'Annual Barangay Youth Investment Program',
+    'Approved Annual Budget',
+    'Quarterly Register of Cash in Bank',
+  ];
+  const UPLOAD_YEARS = ['2026', '2025', '2024', '2023'];
+
+  const renderUploadModal = () => (
+    <Modal
+      visible={showUploadModal}
+      transparent
+      animationType="fade"
+      onRequestClose={() => setShowUploadModal(false)}
+    >
+      <TouchableOpacity
+        style={styles.modalOverlay}
+        activeOpacity={1}
+        onPress={() => { setShowUploadModal(false); setShowUploadCatDropdown(false); setShowUploadYearDropdown(false); }}
+      >
+        <TouchableOpacity
+          style={styles.uploadModalCard}
+          activeOpacity={1}
+          onPress={() => {}}
+        >
+          {/* Header */}
+          <View style={styles.uploadModalHeader}>
+            <Text style={styles.uploadModalHeaderText}>UPLOAD NEW DOCUMENT TO PUBLIC PORTAL</Text>
+            <TouchableOpacity onPress={() => setShowUploadModal(false)} style={styles.uploadModalClose}>
+              <Text style={styles.uploadModalCloseText}>✕</Text>
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.uploadModalBody}>
+            {/* LEFT — Step 1 */}
+            <View style={styles.uploadModalLeft}>
+              <Text style={styles.uploadStepLabel}>Step 1: Choose Document</Text>
+
+              {/* Drag & drop zone */}
+              <TouchableOpacity
+                style={[styles.dropZone, uploadFile && styles.dropZoneActive]}
+                activeOpacity={0.8}
+                onPress={() => Alert.alert('Select File', 'File picker would open here.')}
+              >
+                <Text style={styles.dropZoneTopLabel}>Drag & Drop</Text>
+                <View style={styles.dropZoneIconWrap}>
+                  {/* Upload arrow icon */}
+                  <View style={styles.uploadArrowBody} />
+                  <View style={styles.uploadArrowHead} />
+                </View>
+                {uploadFile ? (
+                  <Text style={styles.dropZoneFileName} numberOfLines={2}>{uploadFile}</Text>
+                ) : (
+                  <Text style={styles.dropZoneSubLabel}>DRAG & DROP{'\n'}DOCUMENT HERE</Text>
+                )}
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.selectFileBtn}
+                activeOpacity={0.8}
+                onPress={() => { setUploadFile('document_sample.pdf'); Alert.alert('File Selected', 'document_sample.pdf'); }}
+              >
+                <Text style={styles.selectFileBtnText}>Select Document to Upload</Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* RIGHT — Step 2 & 3 */}
+            <View style={styles.uploadModalRight}>
+              <Text style={styles.uploadStepLabel}>Step 2 : Add Document Details</Text>
+
+              {/* Document Title */}
+              <Text style={styles.uploadFieldLabel}>Document Title</Text>
+              <TextInput
+                style={styles.uploadTextInput}
+                value={uploadTitle}
+                onChangeText={setUploadTitle}
+                placeholder=""
+                placeholderTextColor={COLORS.midGray}
+              />
+
+              {/* Category & Year */}
+              <View style={styles.uploadRowFields}>
+                {/* Category dropdown */}
+                <View style={{ flex: 1.6 }}>
+                  <Text style={styles.uploadFieldLabel}>Document Category</Text>
+                  <View style={{ position: 'relative', zIndex: 100 }}>
+                    <TouchableOpacity
+                      style={styles.uploadDropdownBtn}
+                      onPress={() => { setShowUploadCatDropdown(v => !v); setShowUploadYearDropdown(false); }}
+                      activeOpacity={0.8}
+                    >
+                      <Text style={[styles.uploadDropdownText, !uploadCategory && { color: COLORS.midGray }]} numberOfLines={1}>
+                        {uploadCategory || ''}
+                      </Text>
+                      <Text style={styles.uploadDropdownCaret}>▾</Text>
+                    </TouchableOpacity>
+                    {showUploadCatDropdown && ( 
+                      <View style={[styles.filterDropdownPanel, { minWidth: 220, zIndex: 100 }]}>
+                        {UPLOAD_CATEGORIES.map(opt => (
+                          <TouchableOpacity
+                            key={opt}
+                            style={[styles.filterDropdownItem, uploadCategory === opt && styles.filterDropdownItemActive]}
+                            onPress={() => { setUploadCategory(opt); setShowUploadCatDropdown(false); }}
+                          >
+                            <Text style={[styles.filterDropdownItemText, uploadCategory === opt && { color: COLORS.navy, fontWeight: '700' }]} numberOfLines={2}>
+                              {opt}
+                            </Text>
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+                    )}
+                  </View>
+                </View>
+
+                {/* Year dropdown */}
+                <View style={{ flex: 1, marginLeft: 10 }}>
+                  <Text style={styles.uploadFieldLabel}>Year</Text>
+                  <View style={{ position: 'relative', zIndex: 1000 }}>
+                    <TouchableOpacity
+                      style={styles.uploadDropdownBtn}
+                      onPress={() => { setShowUploadYearDropdown(v => !v); setShowUploadCatDropdown(false); }}
+                      activeOpacity={0.8}
+                    >
+                      <Text style={[styles.uploadDropdownText, !uploadYear && { color: COLORS.midGray }]}>
+                        {uploadYear || ''}
+                      </Text>
+                      <Text style={styles.uploadDropdownCaret}>▾</Text>
+                    </TouchableOpacity>
+                    {showUploadYearDropdown && (
+                      <View style={[styles.filterDropdownPanel, { minWidth: 90, zIndex: 99999 }]}>
+                        {UPLOAD_YEARS.map(opt => (
+                          <TouchableOpacity
+                            key={opt}
+                            style={[styles.filterDropdownItem, uploadYear === opt && styles.filterDropdownItemActive]}
+                            onPress={() => { setUploadYear(opt); setShowUploadYearDropdown(false); }}
+                          >
+                            <Text style={[styles.filterDropdownItemText, uploadYear === opt && { color: COLORS.navy, fontWeight: '700' }]}>
+                              {opt}
+                            </Text>
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+                    )}
+                  </View>
+                </View>
+              </View>
+
+              {/* Step 3 */}
+              <Text style={[styles.uploadStepLabel, { marginTop: 18 }]}>Step 3 : Review and Post</Text>
+
+              <TouchableOpacity
+                style={styles.publishBtn}
+                activeOpacity={0.85}
+                onPress={() => {
+                  if (!uploadFile || !uploadTitle || !uploadCategory || !uploadYear) {
+                    Alert.alert('Missing Info', 'Please complete all fields before publishing.');
+                    return;
+                  }
+                  Alert.alert('Published!', `"${uploadTitle}" has been published to the portal.`);
+                  setShowUploadModal(false);
+                }}
+              >
+                <Text style={styles.publishBtnText}>Publish to Transparency Portal</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.draftBtn}
+                activeOpacity={0.85}
+                onPress={() => {
+                  Alert.alert('Saved as Draft', 'Document saved as draft.');
+                  setShowUploadModal(false);
+                }}
+              >
+                <Text style={styles.draftBtnText}>Save as Draft</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          {/* Footer */}
+          <View style={styles.uploadModalFooter}>
+            <TouchableOpacity
+              style={styles.cancelUploadBtn}
+              onPress={() => setShowUploadModal(false)}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.cancelUploadText}>Cancel Upload</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
       </TouchableOpacity>
     </Modal>
   );
@@ -376,7 +577,7 @@ export default function SKPortalScreen() {
             {/* Upload button */}
             <TouchableOpacity
               style={styles.uploadBtn}
-              onPress={() => Alert.alert('Upload', 'Upload document to portal')}
+              onPress={() => { setUploadFile(null); setUploadTitle(''); setUploadCategory(''); setUploadYear(''); setShowUploadModal(true); }}
               activeOpacity={0.8}
             >
               <UploadIcon />
@@ -447,6 +648,7 @@ export default function SKPortalScreen() {
       <StatusBar barStyle="light-content" backgroundColor={COLORS.navy} />
 
       {renderDocModal()}
+      {renderUploadModal()}
 
       <View style={styles.layout}>
         {isMobile && sidebarVisible && (
@@ -742,4 +944,225 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.lightGray, alignItems: 'center',
   },
   modalCloseBtnText: { fontSize: 13, fontWeight: '600', color: COLORS.darkText },
+
+  // ── Upload Modal ──
+  uploadModalCard: {
+    backgroundColor: COLORS.white,
+    borderRadius: 14,
+    width: '95%',
+    maxWidth: 620,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.22,
+    shadowRadius: 24,
+    elevation: 16,
+    overflow: 'hidden',
+  },
+  uploadModalHeader: {
+    backgroundColor: COLORS.navy,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 18,
+    paddingVertical: 14,
+  },
+  uploadModalHeaderText: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: COLORS.white,
+    letterSpacing: 0.4,
+    flex: 1,
+  },
+  uploadModalClose: {
+    width: 28, height: 28, borderRadius: 14,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    alignItems: 'center', justifyContent: 'center',
+    marginLeft: 10,
+  },
+  uploadModalCloseText: { fontSize: 13, fontWeight: '800', color: COLORS.white },
+
+  uploadModalBody: {
+    flexDirection: 'row',
+    padding: 18,
+    gap: 18,
+  },
+  uploadModalLeft: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  uploadModalRight: {
+    flex: 1.4,
+  },
+
+  uploadStepLabel: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: COLORS.darkText,
+    marginBottom: 10,
+    alignSelf: 'flex-start',
+  },
+
+  dropZone: {
+    width: '100%',
+    borderWidth: 1.5,
+    borderColor: COLORS.navy,
+    borderRadius: 8,
+    alignItems: 'center',
+    paddingVertical: 18,
+    paddingHorizontal: 10,
+    backgroundColor: '#F0F4FA',
+    marginBottom: 10,
+  },
+  dropZoneActive: {
+    borderColor: COLORS.gold,
+    backgroundColor: '#FFFDF0',
+  },
+  dropZoneTopLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: COLORS.navy,
+    marginBottom: 10,
+  },
+  dropZoneIconWrap: {
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  uploadArrowBody: {
+    width: 3,
+    height: 22,
+    backgroundColor: COLORS.navy,
+    borderRadius: 2,
+  },
+  uploadArrowHead: {
+    width: 0,
+    height: 0,
+    borderLeftWidth: 8,
+    borderRightWidth: 8,
+    borderBottomWidth: 12,
+    borderLeftColor: 'transparent',
+    borderRightColor: 'transparent',
+    borderBottomColor: COLORS.navy,
+    marginBottom: -22,
+    marginTop: -34,
+  },
+  dropZoneSubLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: COLORS.navy,
+    textAlign: 'center',
+    marginTop: 10,
+    lineHeight: 17,
+    letterSpacing: 0.3,
+  },
+  dropZoneFileName: {
+    fontSize: 11,
+    color: COLORS.navy,
+    textAlign: 'center',
+    fontWeight: '600',
+    marginTop: 6,
+  },
+
+  selectFileBtn: {
+    borderWidth: 1,
+    borderColor: COLORS.midGray,
+    borderRadius: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    backgroundColor: COLORS.white,
+    alignSelf: 'center',
+  },
+  selectFileBtnText: {
+    fontSize: 12,
+    color: COLORS.darkText,
+    fontWeight: '500',
+  },
+
+  uploadFieldLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: COLORS.darkText,
+    marginBottom: 5,
+  },
+  uploadTextInput: {
+    borderWidth: 1,
+    borderColor: COLORS.lightGray,
+    borderRadius: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    fontSize: 13,
+    color: COLORS.darkText,
+    backgroundColor: COLORS.white,
+    marginBottom: 12,
+  },
+  uploadRowFields: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+  },
+  uploadDropdownBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: COLORS.lightGray,
+    borderRadius: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    backgroundColor: COLORS.white,
+  },
+  uploadDropdownText: {
+    flex: 1,
+    fontSize: 12,
+    color: COLORS.darkText,
+  },
+  uploadDropdownCaret: {
+    fontSize: 10,
+    color: COLORS.subText,
+    marginLeft: 4,
+  },
+
+  publishBtn: {
+    backgroundColor: '#2E7D32',
+    borderRadius: 8,
+    paddingVertical: 12,
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  publishBtnText: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: COLORS.white,
+    letterSpacing: 0.3,
+  },
+  draftBtn: {
+    backgroundColor: COLORS.navy,
+    borderRadius: 8,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  draftBtnText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: COLORS.white,
+    letterSpacing: 0.3,
+  },
+
+  uploadModalFooter: {
+    borderTopWidth: 1,
+    borderTopColor: COLORS.lightGray,
+    paddingHorizontal: 18,
+    paddingVertical: 12,
+    alignItems: 'flex-end',
+  },
+  cancelUploadBtn: {
+    borderWidth: 1,
+    borderColor: COLORS.midGray,
+    borderRadius: 6,
+    paddingHorizontal: 16,
+    paddingVertical: 7,
+    backgroundColor: COLORS.white,
+  },
+  cancelUploadText: {
+    fontSize: 12,
+    color: COLORS.darkText,
+    fontWeight: '500',
+  },
 });

@@ -69,8 +69,9 @@ export default function SignUpScreen() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [agreed, setAgreed] = useState(false);
   const [error, setError] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
 
-  const handleSignUp = () => {
+  const handleSignUp = async () => {
     if (!lastName || !firstName || !email || !password || !confirmPassword) {
       setError('Please fill in all required fields.');
       return;
@@ -83,11 +84,20 @@ export default function SignUpScreen() {
       setError('Please agree to the terms of service and privacy policy.');
       return;
     }
+    if (password.length < 6) {
+      setError('Password must be at least 6 characters.');
+      return;
+    }
     setError('');
+    setIsLoading(true);
 
-    const result = signup(email, password, firstName, lastName);
+    const result = await signup(email, password, firstName, lastName);
+    setIsLoading(false);
+
     if (result.success) {
-      router.replace('/(tabs)/sk-home');
+      router.replace('/(tabs)/sk-dashboard');
+    } else {
+      setError(result.error);
     }
   };
 
@@ -227,11 +237,12 @@ export default function SignUpScreen() {
 
             {/* Sign Up Button */}
             <TouchableOpacity
-              style={[styles.signUpBtn, !agreed && styles.signUpBtnDisabled]}
+              style={[styles.signUpBtn, (!agreed || isLoading) && styles.signUpBtnDisabled]}
               onPress={handleSignUp}
               activeOpacity={agreed ? 0.85 : 1}
+              disabled={isLoading}
             >
-              <Text style={styles.signUpBtnText}>Sign Up</Text>
+              <Text style={styles.signUpBtnText}>{isLoading ? 'Creating Account...' : 'Sign Up'}</Text>
             </TouchableOpacity>
 
             {/* Login link */}

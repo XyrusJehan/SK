@@ -1,12 +1,16 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { supabase } from '../../utils/supabase';
 
 const AuthContext = createContext();
 
-// Temporary accounts for testing
-const TEMP_ACCOUNTS = [
-  { email: 'lydo@sk.com', password: 'lydo123', name: 'LYDO', role: 'lydo' },
-  { email: 'sk@sk.com', password: 'sk123', name: 'SK Barangay', role: 'sk' },
-];
+// Map database role names to app roles
+const ROLE_MAP = {
+  'LYDO': 'lydo',
+  'SK_CHAIRMAN': 'sk',
+  'SK_TREASURER': 'sk',
+  'SK_SECRETARY': 'sk',
+  'PUBLIC_USER': 'public',
+};
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
@@ -21,19 +25,75 @@ export function AuthProvider({ children }) {
     setIsLoading(false);
   }, []);
 
-  const login = (email, password) => {
-    const account = TEMP_ACCOUNTS.find(
-      (acc) => acc.email.toLowerCase() === email.toLowerCase() && acc.password === password
-    );
+  const login = async (email, password) => {
+    try {
+      // Query users table
+      const { data: userData, error: userError } = await supabase
+        .from('users')
+        .select('*')
+        .eq('email', email.toLowerCase())
+        .eq('status', 'active')
+        .maybeSingle();
 
-    if (account) {
-      const userData = { email: account.email, name: account.name, role: account.role };
-      setUser(userData);
-      localStorage.setItem('sk_user', JSON.stringify(userData));
-      return { success: true, user: userData };
+      if (userError) {
+        console.error('Supabase error:', userError);
+        return { success: false, error: 'Invalid email or password' };
+      }
+
+      if (!userData) {
+        return { success: false, error: 'Invalid email or password' };
+      }
+
+      // Verify password
+      if (userData.password !== password) {
+        return { success: false, error: 'Invalid email or password' };
+      }
+
+      // Get role name from roles table
+      let dbRole = 'PUBLIC_USER';
+      const roleId = Number(userData.role_id);
+      console.log('User role_id:', userData.role_id, 'Type:', typeof roleId);
+
+      const { data: roleData } = await supabase
+        .from('roles')
+        .select('role_name')
+        .eq('role_id', roleId)
+        .maybeSingle();
+
+      console.log('Role data:', roleData);
+      if (roleData?.role_name) {
+        dbRole = roleData.role_name;
+      }
+
+      const mappedRole = ROLE_MAP[dbRole] || 'public';
+      console.log('dbRole:', dbRole, 'mappedRole:', mappedRole);
+
+      // Get barangay info
+      const { data: barangayData } = await supabase
+        .from('barangays')
+        .select('barangay_name, municipality, province')
+        .eq('barangay_id', userData.barangay_id)
+        .single();
+
+      const userSession = {
+        userId: userData.user_id,
+        email: userData.email,
+        firstName: userData.first_name,
+        lastName: userData.last_name,
+        name: `${userData.first_name} ${userData.last_name}`,
+        role: mappedRole,
+        roleName: dbRole,
+        barangay: barangayData,
+      };
+
+      setUser(userSession);
+      localStorage.setItem('sk_user', JSON.stringify(userSession));
+      return { success: true, user: userSession };
+
+    } catch (error) {
+      console.error('Login error:', error);
+      return { success: false, error: 'An error occurred during login' };
     }
-
-    return { success: false, error: 'Invalid email or password' };
   };
 
   const logout = () => {
@@ -41,12 +101,78 @@ export function AuthProvider({ children }) {
     localStorage.removeItem('sk_user');
   };
 
-  const signup = (email, password, firstName, lastName) => {
-    // For demo, just create a new account
-    const newUser = { email, name: `${firstName} ${lastName}`, role: 'sk' };
-    setUser(newUser);
-    localStorage.setItem('sk_user', JSON.stringify(newUser));
-    return { success: true, user: newUser };
+  const signup = async (email, password, firstName, lastName) => {
+    try {
+      // Check if email already exists
+      const { data: existingUser } = await supabase
+        .from('users')
+        .select('user_id')
+        .eq('email', email.toLowerCase())
+        .single();
+
+      if (existingUser) {
+        return { success: false, error: 'Email already registered' };
+      }
+
+      // Get PUBLIC_USER role_id
+      const { data: roleData } = await supabase
+        .from('roles')
+        .select('role_id')
+        .eq('role_name', 'PUBLIC_USER')
+        .single();
+
+      // Insert user directly into users table
+      const { error: insertError } = await supabase
+        .from('users')
+        .insert({
+          first_name: firstName,
+          last_name: lastName,
+          email: email.toLowerCase(),
+          password: password,
+          role_id: roleData?.role_id || 3,
+          status: 'active',
+        });
+
+      if (insertError) {
+        console.error('Insert error:', insertError);
+        return { success: false, error: 'Database error: ' + insertError.message };
+      }
+
+      // Fetch the newly created user
+      const { data: newUser, error: fetchError } = await supabase
+        .from('users')
+        .select(`
+          *,
+          roles (role_name),
+          barangays (barangay_name, municipality, province)
+        `)
+        .eq('email', email.toLowerCase())
+        .single();
+
+      if (fetchError || !newUser) {
+        console.error('Fetch error:', fetchError);
+        return { success: true, user: { email, name: `${firstName} ${lastName}`, role: 'public' } };
+      }
+
+      const userSession = {
+        userId: newUser.user_id,
+        email: newUser.email,
+        firstName: newUser.first_name,
+        lastName: newUser.last_name,
+        name: `${newUser.first_name} ${newUser.last_name}`,
+        role: 'public',
+        roleName: newUser.roles?.role_name,
+        barangay: null,
+      };
+
+      setUser(userSession);
+      localStorage.setItem('sk_user', JSON.stringify(userSession));
+      return { success: true, user: userSession };
+
+    } catch (error) {
+      console.error('Signup error:', error);
+      return { success: false, error: 'An error occurred during signup' };
+    }
   };
 
   return (
