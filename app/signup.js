@@ -102,6 +102,42 @@ export default function SignUpScreen() {
     <>
     <SafeAreaView style={styles.safe}>
       <StatusBar barStyle="light-content" backgroundColor={COLORS.navyDark} />
+
+      {/* ── Success Modal ── */}
+      <Modal
+        visible={showSuccessModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => {}}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            {/* Green checkmark circle */}
+            <View style={styles.successIconWrap}>
+              <View style={styles.successIconCircle}>
+                <Text style={styles.successIconCheck}>✓</Text>
+              </View>
+            </View>
+
+            <Text style={styles.modalTitle}>SIGN-UP SUCCESSFUL!</Text>
+            <Text style={styles.modalBody}>
+              Thanks! your account is now created. Please wait for the Admin reviews and approves your registration. You will receive an email once it's finalized.
+            </Text>
+
+            <TouchableOpacity
+              style={styles.modalBtn}
+              onPress={() => {
+                setShowSuccessModal(false);
+                router.replace('/');
+              }}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.modalBtnText}>OK, GOT IT</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}

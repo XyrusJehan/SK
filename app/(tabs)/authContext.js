@@ -165,7 +165,7 @@ export function AuthProvider({ children }) {
       // Hash password before storing
       const hashedPassword = hashPassword(password);
 
-      // Insert user directly into users table
+      // Insert user with 'pending' status — requires admin approval before login
       const { error: insertError } = await supabase
         .from('users')
         .insert({
@@ -174,7 +174,9 @@ export function AuthProvider({ children }) {
           email: email.toLowerCase(),
           password: hashedPassword,
           role_id: roleData?.role_id || 1,
-          status: 'active',
+          position: null,
+          barangay_id: null,
+          status: 'pending',
         });
 
       if (insertError) {
@@ -182,36 +184,11 @@ export function AuthProvider({ children }) {
         return { success: false, error: 'Database error: ' + insertError.message };
       }
 
-      // Fetch the newly created user
-      const { data: newUser, error: fetchError } = await supabase
-        .from('users')
-        .select(`
-          *,
-          roles (role_name),
-          barangays (barangay_name, municipality, province)
-        `)
-        .eq('email', email.toLowerCase())
-        .single();
-
-      if (fetchError || !newUser) {
-        console.error('Fetch error:', fetchError);
-        return { success: true, user: { email, name: `${firstName} ${lastName}`, role: 'public' } };
-      }
-
-      const userSession = {
-        userId: newUser.user_id,
-        email: newUser.email,
-        firstName: newUser.first_name,
-        lastName: newUser.last_name,
-        name: `${newUser.first_name} ${newUser.last_name}`,
-        role: 'public',
-        roleName: newUser.roles?.role_name,
-        barangay: null,
+      // Return success without creating a session — user must wait for admin approval
+      return {
+        success: true,
+        user: { email, name: `${firstName} ${lastName}`, role: 'public' },
       };
-
-      setUser(userSession);
-      localStorage.setItem('sk_user', JSON.stringify(userSession));
-      return { success: true, user: userSession };
 
     } catch (error) {
       console.error('Signup error:', error);
