@@ -40,16 +40,23 @@ const MONITOR_TABS = ['Consultation', 'Budget', 'Report', 'Account'];
 const NOTIF_TABS   = new Set(['Consultation', 'Budget']);
 
 // ─── DROPDOWN OPTIONS ─────────────────────────────────────────────────────────
-// These will be populated from database
 let BARANGAY_OPTIONS = ['Select Barangay'];
-let ROLE_OPTIONS = ['Select Position'];
-const POSITION_OPTIONS = ['chairman', 'secretary', 'treasurer'];
+const FILTER_BARANGAY_OPTIONS = ['All Barangays'];
+
 const POSITION_DISPLAY = {
   'chairman': 'SK Chairperson',
   'secretary': 'SK Secretary',
   'treasurer': 'SK Treasurer',
 };
-const FILTER_BARANGAY_OPTIONS = ['All Barangays'];
+
+const ROLE_DISPLAY = {
+  'lydo': 'LYDO',
+  'sk_official': 'SK Official',
+  'resident': 'Resident',
+};
+
+const ROLE_OPTIONS = Object.values(ROLE_DISPLAY);
+const POSITION_OPTIONS = Object.values(POSITION_DISPLAY);
 
 // ─── ICONS ────────────────────────────────────────────────────────────────────
 const BellIcon = ({ hasNotif }) => (
@@ -284,10 +291,11 @@ const STP = StyleSheet.create({
 // ─── ACCOUNT ROW ─────────────────────────────────────────────────────────────
 const AccountRow = ({
   account, checked, onToggle,
-  onBrgyChange, onRoleChange,
+  onBrgyChange, onRoleChange, onPositionChange,
   onApprove, onReject,
   isEven,
   barangayOptions,
+  roleOptions,
   positionOptions,
   rowIndex,
 }) => (
@@ -315,18 +323,29 @@ const AccountRow = ({
       />
     </View>
 
-    {/* Role/Position Dropdown */}
+    {/* Role Dropdown */}
     <View style={styles.colRole}>
+      <InlineDropdown
+        value={account.roleDisplay || 'Select Role'}
+        options={roleOptions}
+        onSelect={onRoleChange}
+        width={isMobile ? 70 : 100}
+        id={`role-${account.id}-${rowIndex}`}
+      />
+    </View>
+
+    {/* Position Dropdown - only for SK Officials */}
+    <View style={styles.colPosition}>
       {account.roleName === 'sk_official' ? (
         <InlineDropdown
           value={account.displayPosition || 'Select Position'}
           options={positionOptions}
-          onSelect={onRoleChange}
-          id={`role-${account.id}-${rowIndex}`}
-          width={isMobile ? 90 : 130}
+          onSelect={onPositionChange}
+          width={isMobile ? 70 : 110}
+          id={`pos-${account.id}-${rowIndex}`}
         />
       ) : (
-        <Text style={styles.cellRole}>Resident</Text>
+        <Text style={styles.cellRole}>-</Text>
       )}
     </View>
 
@@ -441,23 +460,24 @@ export default function LYDOMonitorAccountScreen() {
         console.error('Error fetching users:', userError);
       } else {
         // Transform user data to account format
-        const transformedAccounts = (userData || []).map(user => ({
-          id: user.user_id.toString(),
-          userId: user.user_id,
-          name: `${user.first_name} ${user.last_name}`.trim() || '',
-          email: user.email || '',
-          barangay: user.barangays?.barangay_name || 'Select Barangay',
-          barangayId: user.barangay_id,
-          role: user.roles?.role_name === 'sk_official'
-            ? (user.position || 'Select Position')
-            : (user.roles?.role_name || 'resident'),
-          roleName: user.roles?.role_name || 'resident',
-          roleId: user.role_id,
-          position: user.position,
-          displayPosition: POSITION_DISPLAY[user.position] || user.position || 'Select Position',
-          signUpDate: user.created_at ? new Date(user.created_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '',
-          status: user.status,
-        }));
+        const transformedAccounts = (userData || []).map(user => {
+          const roleName = user.roles?.role_name || 'resident';
+          return {
+            id: user.user_id.toString(),
+            userId: user.user_id,
+            name: `${user.first_name} ${user.last_name}`.trim() || '',
+            email: user.email || '',
+            barangay: user.barangays?.barangay_name || 'Select Barangay',
+            barangayId: user.barangay_id,
+            roleName: roleName,
+            roleDisplay: ROLE_DISPLAY[roleName] || roleName,
+            roleId: user.role_id,
+            position: user.position,
+            displayPosition: POSITION_DISPLAY[user.position] || user.position || 'Select Position',
+            signUpDate: user.created_at ? new Date(user.created_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '',
+            status: user.status,
+          };
+        });
         setAccounts(transformedAccounts);
       }
     } catch (error) {
@@ -634,6 +654,73 @@ export default function LYDOMonitorAccountScreen() {
     await updateUserPosition(account.userId, dbPosition);
   };
 
+  // ── Handle role change ─────────────────────────────────────────────────────────
+  const updateUserRole = async (userId, newRoleName) => {
+    try {
+      // Get the role_id for the new role
+      const { data: roleData } = await supabase
+        .from('roles')
+        .select('role_id')
+        .eq('role_name', newRoleName)
+        .single();
+
+      if (roleData) {
+        const updates = { role_id: roleData.role_id };
+        // If changing to resident, clear position and barangay
+        if (newRoleName === 'resident') {
+          updates.position = null;
+          updates.barangay_id = null;
+        }
+        // If changing to lydo, clear position
+        if (newRoleName === 'lydo') {
+          updates.position = null;
+        }
+
+        const { error } = await supabase
+          .from('users')
+          .update(updates)
+          .eq('user_id', userId);
+
+        if (error) {
+          console.error('Error updating role:', error);
+          Alert.alert('Error', 'Failed to update role');
+          return false;
+        }
+
+        // Update local state
+        setAccounts(prev => prev.map(a =>
+          a.userId === userId ? {
+            ...a,
+            roleName: newRoleName,
+            roleDisplay: ROLE_DISPLAY[newRoleName],
+            roleId: roleData.role_id,
+            position: newRoleName === 'resident' || newRoleName === 'lydo' ? null : a.position,
+            displayPosition: newRoleName === 'resident' || newRoleName === 'lydo' ? null : a.displayPosition,
+            barangay: newRoleName === 'resident' || newRoleName === 'lydo' ? 'Select Barangay' : a.barangay,
+            barangayId: newRoleName === 'resident' || newRoleName === 'lydo' ? null : a.barangayId,
+          } : a
+        ));
+        return true;
+      }
+    } catch (error) {
+      console.error('Error:', error);
+    }
+    return false;
+  };
+
+  const handleRoleChange = async (id, displayRole) => {
+    // Skip if no valid selection
+    if (!displayRole || displayRole === 'Select Role') {
+      return;
+    }
+    // Convert display value back to database value
+    const dbRole = Object.keys(ROLE_DISPLAY).find(
+      key => ROLE_DISPLAY[key] === displayRole
+    ) || displayRole;
+    const account = accounts.find(a => a.id === id);
+    await updateUserRole(account.userId, dbRole);
+  };
+
   // ── Filtered accounts ────────────────────────────────────────────────────────
   const filtered = filterBrgy === 'All Barangays'
     ? accounts
@@ -771,7 +858,10 @@ export default function LYDOMonitorAccountScreen() {
               <Text style={styles.tableHeaderText}>Barangay</Text>
             </View>
             <View style={styles.colRole}>
-              <Text style={styles.tableHeaderText}>Role/Position</Text>
+              <Text style={styles.tableHeaderText}>Role</Text>
+            </View>
+            <View style={styles.colPosition}>
+              <Text style={styles.tableHeaderText}>Position</Text>
             </View>
             <View style={styles.colDate}>
               <Text style={styles.tableHeaderText}>Sign-up Date</Text>
@@ -804,11 +894,13 @@ export default function LYDOMonitorAccountScreen() {
                 rowIndex={idx}
                 onToggle={() => toggleSelect(acc.id)}
                 onBrgyChange={val => handleBarangayChange(acc.id, val)}
-                onRoleChange={val => handlePositionChange(acc.id, val)}
+                onRoleChange={val => handleRoleChange(acc.id, val)}
+                onPositionChange={val => handlePositionChange(acc.id, val)}
                 onApprove={() => handleApprove(acc.id)}
                 onReject={() => handleReject(acc.id)}
                 barangayOptions={getBarangayOptions()}
-                positionOptions={getPositionOptions()}
+                roleOptions={ROLE_OPTIONS}
+                positionOptions={POSITION_OPTIONS}
               />
             ))
           )}
@@ -936,6 +1028,7 @@ const styles = StyleSheet.create({
   colName:     { flex: 1, paddingRight: 8 },
   colBarangay: { flex: 1, paddingRight: 8, zIndex: 900 },
   colRole:     { flex: 1, paddingRight: 8, zIndex: 900 },
+  colPosition: { flex: 1, paddingRight: 8, zIndex: 900 },
   colDate:     { flex: 1, paddingRight: 8 },
   colStatus:   { flex: 1, paddingRight: 8 },
   colAction:   { width: isMobile ? 80 : 100, gap: 4 },
