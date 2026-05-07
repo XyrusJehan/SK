@@ -32,7 +32,7 @@ const COLORS = {
 };
 
 const NAV_TABS     = ['Home', 'Documents', 'Monitor'];
-const MONITOR_TABS = ['Consultation', 'Budget', 'Report', 'Submitted'];
+const MONITOR_TABS = ['Consultation', 'Budget', 'Report', 'Accounts'];
 
 // ─── DROPDOWN OPTIONS ─────────────────────────────────────────────────────────
 const DOCUMENT_OPTIONS = ['ABYIP', 'CBYDP', 'SK Budget', 'Accomplishment'];
@@ -418,7 +418,8 @@ export default function LYDOMonitorReportScreen() {
   const handleMonitorTabPress = (tab) => {
     if (tab === 'Consultation') { router.push('/(tabs)/lydo-monitor'); return; }
     if (tab === 'Budget')       { router.push('/(tabs)/lydo-monitor-budget'); return; }
-    if (tab === 'Submitted')    { router.push('/(tabs)/lydo-monitor-submitted'); return; }
+    if (tab === 'Report')       { router.push('/(tabs)/lydo-monitor-report'); return; }
+    if (tab === 'Accounts')      { router.push('/(tabs)/lydo-monitor-accounts'); return; }
     setActiveMonitorTab(tab);
   };
 
