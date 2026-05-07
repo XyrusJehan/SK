@@ -56,12 +56,11 @@ export function AuthProvider({ children }) {
 
   const login = async (email, password) => {
     try {
-      // Query users table
+      // First check if user exists (without status filter)
       const { data: userData, error: userError } = await supabase
         .from('users')
         .select('*')
         .eq('email', email.toLowerCase())
-        .eq('status', 'active')
         .maybeSingle();
 
       if (userError) {
@@ -71,6 +70,19 @@ export function AuthProvider({ children }) {
 
       if (!userData) {
         return { success: false, error: 'Invalid email or password' };
+      }
+
+      // Check account status
+      if (userData.status === 'pending') {
+        return { success: false, error: 'Account is pending approval. Please wait for admin to approve your registration.' };
+      }
+
+      if (userData.status === 'inactive') {
+        return { success: false, error: 'Account has been deactivated. Please contact the admin.' };
+      }
+
+      if (userData.status !== 'active') {
+        return { success: false, error: 'Invalid account status' };
       }
 
       // Verify password (accept both hashed and plain text for backward compatibility)
