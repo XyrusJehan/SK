@@ -51,14 +51,21 @@ export default function LoginScreen() {
     setIsLoading(false);
 
     if (result.success) {
-      console.log('Login success, role:', result.user.role, 'roleName:', result.user.roleName);
+      console.log('Login success, role:', result.user.role, 'roleName:', result.user.roleName, 'status:', result.user.status);
       if (result.user.role === 'lydo') {
         router.replace('/(tabs)/lydo-home');
+      } else if (result.user.role === 'sk') {
+        router.replace('/(tabs)/sk-dashboard');
       } else {
         router.replace('/(tabs)/sk-dashboard');
       }
     } else {
-      setError(result.error);
+      // Provide more helpful error message
+      let errorMsg = result.error;
+      if (result.error.includes('Invalid email or password')) {
+        errorMsg = 'Invalid email, password, or account not yet approved';
+      }
+      setError(errorMsg);
     }
   };
 
