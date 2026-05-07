@@ -3,7 +3,7 @@ import {
   View, Text, TextInput, TouchableOpacity,
   StyleSheet, SafeAreaView, StatusBar,
   KeyboardAvoidingView, Platform, ScrollView,
-  Dimensions, Image,
+  Dimensions, Image, Modal,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuth } from './(tabs)/authContext';
@@ -70,6 +70,7 @@ export default function SignUpScreen() {
   const [agreed, setAgreed] = useState(false);
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
 
   const handleSignUp = async () => {
     if (!lastName || !firstName || !email || !password || !confirmPassword) {
@@ -95,7 +96,7 @@ export default function SignUpScreen() {
     setIsLoading(false);
 
     if (result.success) {
-      router.replace('/');
+      setShowSuccessModal(true);
     } else {
       setError(result.error);
     }
@@ -104,6 +105,42 @@ export default function SignUpScreen() {
   return (
     <SafeAreaView style={styles.safe}>
       <StatusBar barStyle="light-content" backgroundColor={COLORS.navyDark} />
+
+      {/* ── Success Modal ── */}
+      <Modal
+        visible={showSuccessModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => {}}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            {/* Green checkmark circle */}
+            <View style={styles.successIconWrap}>
+              <View style={styles.successIconCircle}>
+                <Text style={styles.successIconCheck}>✓</Text>
+              </View>
+            </View>
+
+            <Text style={styles.modalTitle}>SIGN-UP SUCCESSFUL!</Text>
+            <Text style={styles.modalBody}>
+              Thanks! your account is now created. Please wait for the Admin reviews and approves your registration. You will receive an email once it's finalized.
+            </Text>
+
+            <TouchableOpacity
+              style={styles.modalBtn}
+              onPress={() => {
+                setShowSuccessModal(false);
+                router.replace('/');
+              }}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.modalBtnText}>OK, GOT IT</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -355,4 +392,80 @@ const styles = StyleSheet.create({
   },
   subText: { fontSize: 12, color: COLORS.subText },
   linkText: { fontSize: 12, fontWeight: '700', color: COLORS.link },
+
+  // ── Success Modal ──
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  modalCard: {
+    width: '100%',
+    maxWidth: 360,
+    backgroundColor: COLORS.white,
+    borderRadius: 20,
+    paddingHorizontal: 28,
+    paddingTop: 36,
+    paddingBottom: 28,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.25,
+    shadowRadius: 24,
+    elevation: 14,
+  },
+  successIconWrap: {
+    marginBottom: 18,
+  },
+  successIconCircle: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: COLORS.success,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: COLORS.success,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.35,
+    shadowRadius: 10,
+    elevation: 6,
+  },
+  successIconCheck: {
+    fontSize: 36,
+    color: COLORS.white,
+    fontWeight: '900',
+    lineHeight: 42,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: '900',
+    color: COLORS.navy,
+    textAlign: 'center',
+    letterSpacing: 0.5,
+    marginBottom: 12,
+  },
+  modalBody: {
+    fontSize: 13,
+    color: '#555',
+    textAlign: 'center',
+    lineHeight: 20,
+    marginBottom: 24,
+    paddingHorizontal: 4,
+  },
+  modalBtn: {
+    backgroundColor: COLORS.navy,
+    borderRadius: 10,
+    height: 46,
+    paddingHorizontal: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalBtnText: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: COLORS.white,
+    letterSpacing: 1,
+  },
 });
