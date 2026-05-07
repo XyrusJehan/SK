@@ -491,24 +491,32 @@ export default function LYDOMonitorAccountScreen() {
   // ── Update user status in database ───────────────────────────────────────────
   const updateUserStatus = async (userId, newStatus) => {
     try {
-      const { error } = await supabase
+      console.log('Updating userId:', userId, 'to status:', newStatus);
+      const { data, error } = await supabase
         .from('users')
         .update({ status: newStatus })
-        .eq('user_id', userId);
+        .eq('user_id', userId)
+        .select();
 
       if (error) {
         console.error('Error updating status:', error);
-        Alert.alert('Error', 'Failed to update account status');
+        Alert.alert('Error', 'Failed to update account status: ' + error.message);
         return false;
       }
 
-      // Update local state
-      setAccounts(prev => prev.map(a =>
-        a.userId === userId ? { ...a, status: newStatus } : a
-      ));
+      console.log('Update result:', data);
+
+      // Update local state - create new array to trigger re-render
+      setAccounts(prev => {
+        const updated = prev.map(a =>
+          a.userId === userId ? { ...a, status: newStatus } : a
+        );
+        return [...updated];
+      });
       return true;
     } catch (error) {
       console.error('Error:', error);
+      Alert.alert('Error', 'An unexpected error occurred');
       return false;
     }
   };
@@ -601,15 +609,20 @@ export default function LYDOMonitorAccountScreen() {
 
   const handleApprove = (id) => {
     const account = accounts.find(a => a.id === id);
-    Alert.alert('Approve Account', `Are you sure you want to approve ${account?.name || 'this applicant'}?`, [
+    if (!account) {
+      Alert.alert('Error', 'Account not found');
+      return;
+    }
+    Alert.alert('Approve Account', `Are you sure you want to approve ${account.name || 'this applicant'}?`, [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Approve',
         style: 'default',
         onPress: async () => {
+          console.log('Approve clicked for userId:', account.userId);
           const success = await updateUserStatus(account.userId, 'active');
           if (success) {
-            Alert.alert('Success', 'Account has been approved');
+            Alert.alert('Success', 'Account has been approved and is now active');
           }
         }
       },
@@ -618,15 +631,20 @@ export default function LYDOMonitorAccountScreen() {
 
   const handleReject = (id) => {
     const account = accounts.find(a => a.id === id);
-    Alert.alert('Reject Account', `Are you sure you want to reject ${account?.name || 'this applicant'}?`, [
+    if (!account) {
+      Alert.alert('Error', 'Account not found');
+      return;
+    }
+    Alert.alert('Reject Account', `Are you sure you want to reject ${account.name || 'this applicant'}?`, [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Reject',
         style: 'destructive',
         onPress: async () => {
+          console.log('Reject clicked for userId:', account.userId);
           const success = await updateUserStatus(account.userId, 'inactive');
           if (success) {
-            Alert.alert('Success', 'Account has been rejected');
+            Alert.alert('Success', 'Account has been rejected and is now inactive');
           }
         }
       },
