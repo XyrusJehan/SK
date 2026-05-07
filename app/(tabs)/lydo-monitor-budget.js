@@ -27,7 +27,7 @@ const COLORS = {
 };
 
 const NAV_TABS     = ['Home', 'Documents', 'Monitor'];
-const MONITOR_TABS = ['Consultation', 'Budget', 'Report', 'Submitted'];
+const MONITOR_TABS = ['Consultation', 'Budget', 'Report', 'Accounts'];
 
 // ─── FLOW STEPS ───────────────────────────────────────────────────────────────
 // step 1 → Submitted Budget  (Barangay | Document | time/date | View)
@@ -298,6 +298,7 @@ export default function LYDOMonitorBudgetScreen() {
   const handleMonitorTabPress = (tab) => {
     if (tab === 'Report') { router.push('/(tabs)/lydo-monitor-report'); return; }
     if (tab === 'Consultation') { router.push('/(tabs)/lydo-monitor'); return; }
+    if (tab === 'Accounts') { router.push('/(tabs)/lydo-monitor-accounts'); return; }
     if (tab !== 'Budget') { handleNavPress('Monitor'); return; }
     setActiveMonitorTab(tab);
     setCurrentStep(1);
