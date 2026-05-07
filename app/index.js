@@ -52,13 +52,16 @@ export default function LoginScreen() {
 
     if (result.success) {
       console.log('Login success, role:', result.user.role, 'roleName:', result.user.roleName, 'status:', result.user.status);
-      if (result.user.role === 'lydo') {
-        router.replace('/(tabs)/lydo-home');
-      } else if (result.user.role === 'sk') {
-        router.replace('/(tabs)/sk-dashboard');
-      } else {
-        router.replace('/(tabs)/sk-dashboard');
-      }
+      // Use setTimeout to ensure state propagates before navigation
+      setTimeout(() => {
+        if (result.user.role === 'lydo') {
+          router.replace('/lydo-home');
+        } else if (result.user.role === 'sk') {
+          router.replace('/sk-dashboard');
+        } else {
+          router.replace('/sk-dashboard');
+        }
+      }, 50);
     } else {
       // Provide more helpful error message
       let errorMsg = result.error;
