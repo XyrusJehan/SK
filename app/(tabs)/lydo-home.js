@@ -89,8 +89,15 @@ const COLORS = {
 export default function LYDOHomeScreen({ navigation }) {
   const router = useRouter();
   const { activeTab, setActiveTab } = useNav();
-  const { logout } = useAuth();
+  const { logout, user } = useAuth();
   const [searchText, setSearchText]   = useState('');
+
+  // Redirect if not LYDO
+  useEffect(() => {
+    if (user && user.role !== 'lydo') {
+      router.replace('/');
+    }
+  }, [user]);
 
   useEffect(() => {
     setActiveTab('Home');

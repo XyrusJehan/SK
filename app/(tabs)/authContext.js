@@ -174,6 +174,8 @@ export function AuthProvider({ children }) {
           email: email.toLowerCase(),
           password: hashedPassword,
           role_id: roleData?.role_id || 1,
+          position: null,
+          barangay_id: null,
           status: 'pending',
         });
 

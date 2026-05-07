@@ -12,6 +12,9 @@ export default function TabLayout() {
   useEffect(() => {
     if (!isLoading && !user) {
       router.replace('/');
+    } else if (!isLoading && user && user.role === 'public') {
+      // Public/resident users should not access tab screens
+      router.replace('/');
     }
   }, [user, isLoading]);
 

@@ -31,7 +31,7 @@ const COLORS = {
 };
 
 const NAV_TABS     = ['Home', 'Documents', 'Monitor'];
-const MONITOR_TABS = ['Consultation', 'Budget', 'Report', 'Submitted'];
+const MONITOR_TABS = ['Consultation', 'Budget', 'Report', 'Accounts'];
 
 // ─── CBYDP DOCUMENT SECTIONS (tappable for highlight) ────────────────────────
 const DOC_SECTIONS = [
@@ -790,7 +790,7 @@ export default function LYDOMonitorScreen() {
           return (
             <TouchableOpacity key={tab}
               style={[styles.monitorTab, active && styles.monitorTabActive]}
-              onPress={() => tab === 'Budget' ? router.push('/(tabs)/lydo-monitor-budget') : tab === 'Report' ? router.push('/(tabs)/lydo-monitor-report') : setActiveMonitorTab(tab)} activeOpacity={0.8}>
+              onPress={() => tab === 'Budget' ? router.push('/(tabs)/lydo-monitor-budget') : tab === 'Report' ? router.push('/(tabs)/lydo-monitor-report') : tab === 'Accounts' ? router.push('/(tabs)/lydo-monitor-accounts') : setActiveMonitorTab(tab)} activeOpacity={0.8}>
               <Text style={[styles.monitorTabText, active && styles.monitorTabTextActive]}>{tab}</Text>
             </TouchableOpacity>
           );
