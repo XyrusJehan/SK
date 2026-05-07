@@ -85,10 +85,6 @@ export default function SignUpScreen() {
       setError('Please agree to the terms of service and privacy policy.');
       return;
     }
-    if (password.length < 6) {
-      setError('Password must be at least 6 characters.');
-      return;
-    }
     setError('');
     setIsLoading(true);
 
@@ -103,6 +99,7 @@ export default function SignUpScreen() {
   };
 
   return (
+    <>
     <SafeAreaView style={styles.safe}>
       <StatusBar barStyle="light-content" backgroundColor={COLORS.navyDark} />
 
@@ -293,6 +290,39 @@ export default function SignUpScreen() {
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
+
+      {/* Success Modal */}
+      <Modal
+        visible={showSuccessModal}
+        transparent
+        animationType="fade"
+        statusBarTranslucent
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <View style={styles.checkCircle}>
+              <Text style={styles.checkIcon}>✓</Text>
+            </View>
+            <Text style={styles.modalTitle}>SIGN-UP SUCCESSFUL!</Text>
+            <Text style={styles.modalBody}>
+              Thanks! your account is now created. Please wait for{'\n'}
+              the Admin reviews and approves your registration.{'\n'}
+              You will receive an email once it's finalized.
+            </Text>
+            <TouchableOpacity
+              style={styles.modalBtn}
+              onPress={() => {
+                setShowSuccessModal(false);
+                router.replace('/');
+              }}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.modalBtnText}>OK, GOT IT</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+    </>
   );
 }
 
@@ -393,74 +423,66 @@ const styles = StyleSheet.create({
   subText: { fontSize: 12, color: COLORS.subText },
   linkText: { fontSize: 12, fontWeight: '700', color: COLORS.link },
 
-  // ── Success Modal ──
+  // Success Modal
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.55)',
-    justifyContent: 'center',
     alignItems: 'center',
+    justifyContent: 'center',
     padding: 24,
   },
   modalCard: {
-    width: '100%',
-    maxWidth: 360,
-    backgroundColor: COLORS.white,
+    backgroundColor: COLORS.navy,
     borderRadius: 20,
-    paddingHorizontal: 28,
-    paddingTop: 36,
-    paddingBottom: 28,
+    padding: 28,
+    width: '100%',
+    maxWidth: 400,
     alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.25,
+    shadowOpacity: 0.4,
     shadowRadius: 24,
-    elevation: 14,
+    elevation: 12,
   },
-  successIconWrap: {
-    marginBottom: 18,
-  },
-  successIconCircle: {
+  checkCircle: {
     width: 72,
     height: 72,
     borderRadius: 36,
-    backgroundColor: COLORS.success,
+    backgroundColor: '#2EAA57',
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: COLORS.success,
+    marginBottom: 20,
+    shadowColor: '#2EAA57',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.35,
-    shadowRadius: 10,
+    shadowOpacity: 0.4,
+    shadowRadius: 12,
     elevation: 6,
   },
-  successIconCheck: {
-    fontSize: 36,
-    color: COLORS.white,
-    fontWeight: '900',
-    lineHeight: 42,
-  },
+  checkIcon: { fontSize: 36, color: COLORS.white, fontWeight: '900' },
   modalTitle: {
     fontSize: 20,
     fontWeight: '900',
-    color: COLORS.navy,
-    textAlign: 'center',
+    color: COLORS.white,
     letterSpacing: 0.5,
-    marginBottom: 12,
+    marginBottom: 14,
+    textAlign: 'center',
   },
   modalBody: {
     fontSize: 13,
-    color: '#555',
+    color: COLORS.subText,
     textAlign: 'center',
     lineHeight: 20,
     marginBottom: 24,
-    paddingHorizontal: 4,
   },
   modalBtn: {
-    backgroundColor: COLORS.navy,
+    backgroundColor: COLORS.navyLight,
     borderRadius: 10,
-    height: 46,
-    paddingHorizontal: 36,
-    alignItems: 'center',
-    justifyContent: 'center',
+    paddingVertical: 14,
+    paddingHorizontal: 48,
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.2)',
   },
   modalBtnText: {
     fontSize: 14,
