@@ -266,17 +266,17 @@ const StatusPill = ({ status }) => {
       </View>
     );
   }
-  if (status === 'approved') {
+  if (status === 'active') {
     return (
       <View style={[STP.pill, { backgroundColor: '#E8F5E9', borderColor: '#81C784' }]}>
-        <Text style={[STP.text, { color: COLORS.approve }]}>Approved</Text>
+        <Text style={[STP.text, { color: COLORS.approve }]}>Active</Text>
       </View>
     );
   }
-  if (status === 'rejected') {
+  if (status === 'inactive') {
     return (
       <View style={[STP.pill, { backgroundColor: '#FFEBEE', borderColor: '#EF9A9A' }]}>
-        <Text style={[STP.text, { color: '#C62828' }]}>Rejected</Text>
+        <Text style={[STP.text, { color: '#C62828' }]}>Inactive</Text>
       </View>
     );
   }
@@ -361,23 +361,23 @@ const AccountRow = ({
 
     {/* Action — Approve / Reject stacked */}
     <View style={styles.colAction}>
-      {account.status === 'pending' && (
-        <>
-          <TouchableOpacity
-            style={styles.approveBtn}
-            onPress={onApprove}
-            activeOpacity={0.85}
-          >
-            <Text style={styles.actionBtnText}>Approve</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.rejectBtn}
-            onPress={onReject}
-            activeOpacity={0.85}
-          >
-            <Text style={styles.actionBtnText}>Reject</Text>
-          </TouchableOpacity>
-        </>
+      {(account.status === 'pending' || account.status === 'inactive') && (
+        <TouchableOpacity
+          style={styles.approveBtn}
+          onPress={onApprove}
+          activeOpacity={0.85}
+        >
+          <Text style={styles.actionBtnText}>Approve</Text>
+        </TouchableOpacity>
+      )}
+      {(account.status === 'pending' || account.status === 'active') && (
+        <TouchableOpacity
+          style={styles.rejectBtn}
+          onPress={onReject}
+          activeOpacity={0.85}
+        >
+          <Text style={styles.actionBtnText}>Reject</Text>
+        </TouchableOpacity>
       )}
     </View>
 
@@ -436,7 +436,7 @@ export default function LYDOMonitorAccountScreen() {
         setRoles(roleData || []);
       }
 
-      // Fetch pending/active users with their roles and barangays
+      // Fetch all users (pending, active, inactive) with their roles and barangays
       const { data: userData, error: userError } = await supabase
         .from('users')
         .select(`
@@ -452,8 +452,6 @@ export default function LYDOMonitorAccountScreen() {
           roles (role_name),
           barangays (barangay_name)
         `)
-        .in('status', ['pending', 'active'])
-        .in('role_id', roleData?.map(r => r.role_id) || [1, 3])
         .order('created_at', { ascending: false });
 
       if (userError) {
@@ -462,6 +460,9 @@ export default function LYDOMonitorAccountScreen() {
         // Transform user data to account format
         const transformedAccounts = (userData || []).map(user => {
           const roleName = user.roles?.role_name || 'resident';
+          // Clean position value - only accept valid positions
+          const validPositions = ['chairman', 'secretary', 'treasurer'];
+          const cleanPosition = validPositions.includes(user.position) ? user.position : null;
           return {
             id: user.user_id.toString(),
             userId: user.user_id,
@@ -472,8 +473,8 @@ export default function LYDOMonitorAccountScreen() {
             roleName: roleName,
             roleDisplay: ROLE_DISPLAY[roleName] || roleName,
             roleId: user.role_id,
-            position: user.position,
-            displayPosition: POSITION_DISPLAY[user.position] || user.position || 'Select Position',
+            position: cleanPosition,
+            displayPosition: cleanPosition ? (POSITION_DISPLAY[cleanPosition] || cleanPosition) : 'Select Position',
             signUpDate: user.created_at ? new Date(user.created_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '',
             status: user.status,
           };
@@ -540,6 +541,11 @@ export default function LYDOMonitorAccountScreen() {
   // ── Update user position (for SK officials) ─────────────────────────────────
   const updateUserPosition = async (userId, position) => {
     try {
+      // Skip if position is "Select Position"
+      if (position === 'Select Position' || !position) {
+        return false;
+      }
+
       const { error } = await supabase
         .from('users')
         .update({ position: position })
@@ -553,7 +559,7 @@ export default function LYDOMonitorAccountScreen() {
       // Update local state
       const displayPosition = POSITION_DISPLAY[position] || position;
       setAccounts(prev => prev.map(a =>
-        a.userId === userId ? { ...a, position, displayPosition, role: position } : a
+        a.userId === userId ? { ...a, position, displayPosition } : a
       ));
       return true;
     } catch (error) {
