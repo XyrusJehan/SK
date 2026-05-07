@@ -656,8 +656,11 @@ export default function LYDOMonitorAccountScreen() {
     // Convert display value back to database value
     const dbPosition = Object.keys(POSITION_DISPLAY).find(
       key => POSITION_DISPLAY[key] === displayPosition
-    ) || displayPosition;
-    await updateUserPosition(account.userId, dbPosition);
+    );
+    // Only update if we found a valid position
+    if (dbPosition) {
+      await updateUserPosition(account.userId, dbPosition);
+    }
   };
 
   // ── Handle role change ─────────────────────────────────────────────────────────
@@ -722,9 +725,12 @@ export default function LYDOMonitorAccountScreen() {
     // Convert display value back to database value
     const dbRole = Object.keys(ROLE_DISPLAY).find(
       key => ROLE_DISPLAY[key] === displayRole
-    ) || displayRole;
-    const account = accounts.find(a => a.id === id);
-    await updateUserRole(account.userId, dbRole);
+    );
+    // Only update if we found a valid role
+    if (dbRole) {
+      const account = accounts.find(a => a.id === id);
+      await updateUserRole(account.userId, dbRole);
+    }
   };
 
   // ── Filtered accounts ────────────────────────────────────────────────────────
