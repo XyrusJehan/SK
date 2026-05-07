@@ -109,6 +109,11 @@ const GlobalDropdownProvider = ({ children }) => {
   };
 
   const selectOption = (id, option) => {
+    // Skip if no option selected (clicked backdrop)
+    if (option === null || option === undefined) {
+      closeDropdown(id);
+      return;
+    }
     const dropdown = dropdowns[id];
     if (dropdown && dropdown.onSelect) {
       dropdown.onSelect(option);
@@ -604,6 +609,10 @@ export default function LYDOMonitorAccountScreen() {
 
   // ── Handle barangay change from dropdown ───────────────────────────────────
   const handleBarangayChange = async (id, barangayName) => {
+    // Skip if "Select Barangay" is selected
+    if (barangayName === 'Select Barangay' || !barangayName) {
+      return;
+    }
     const account = accounts.find(a => a.id === id);
     const barangay = barangays.find(b => b.barangay_name === barangayName);
     if (barangay) {
@@ -613,6 +622,10 @@ export default function LYDOMonitorAccountScreen() {
 
   // ── Handle position change from dropdown ──────────────────────────────────
   const handlePositionChange = async (id, displayPosition) => {
+    // Skip if "Select Position" is selected
+    if (displayPosition === 'Select Position' || !displayPosition) {
+      return;
+    }
     const account = accounts.find(a => a.id === id);
     // Convert display value back to database value
     const dbPosition = Object.keys(POSITION_DISPLAY).find(
