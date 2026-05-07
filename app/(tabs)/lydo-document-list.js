@@ -725,6 +725,7 @@ const styles = StyleSheet.create({
     logoImage: {
     width: 110,
     height: 110,
+    //
   },
   navItem: { width: '100%', paddingVertical: 12, paddingHorizontal: 12, borderRadius: 24, marginBottom: 8, alignItems: 'center', borderWidth: 1.5, borderColor: COLORS.white, backgroundColor: COLORS.navy },
   navItemActive: { backgroundColor: '#ffffff', borderColor: '#000000' },
