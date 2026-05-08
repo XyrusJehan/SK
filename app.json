@@ -25,7 +25,7 @@
       "output": "static",
       "favicon": "./assets/images/favicon.png"
     },
-    "plugins": [
+    "plugins": [Y
       "expo-router",
       [
         "expo-splash-screen",
@@ -46,7 +46,12 @@
     },
     "extra": {
       "supabaseUrl": "https://ttsgeniubfkcexitfqsd.supabase.co",
-      "supabaseAnonKey": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblBGnKu0"
-    }
+      "supabaseAnonKey": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblBGnKu0",
+      "router": {},
+      "eas": {
+        "projectId": "c9b7166d-f556-4be5-9e05-193050e787e7"
+      }
+    },
+    "owner": "iamwhiskeyy"
   }
 }
