@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../../utils/supabase';
 
 const AuthContext = createContext();
@@ -47,11 +48,18 @@ export function AuthProvider({ children }) {
 
   useEffect(() => {
     // Check for stored session
-    const storedUser = localStorage.getItem('sk_user');
-    if (storedUser) {
-      setUser(JSON.parse(storedUser));
-    }
-    setIsLoading(false);
+    const checkStoredSession = async () => {
+      try {
+        const storedUser = await AsyncStorage.getItem('sk_user');
+        if (storedUser) {
+          setUser(JSON.parse(storedUser));
+        }
+      } catch (error) {
+        console.error('Error reading stored session:', error);
+      }
+      setIsLoading(false);
+    };
+    checkStoredSession();
   }, []);
 
   const login = async (email, password) => {
@@ -134,7 +142,7 @@ export function AuthProvider({ children }) {
       };
 
       setUser(userSession);
-      localStorage.setItem('sk_user', JSON.stringify(userSession));
+      await AsyncStorage.setItem('sk_user', JSON.stringify(userSession));
       return { success: true, user: userSession };
 
     } catch (error) {
@@ -143,9 +151,9 @@ export function AuthProvider({ children }) {
     }
   };
 
-  const logout = () => {
+  const logout = async () => {
     setUser(null);
-    localStorage.removeItem('sk_user');
+    await AsyncStorage.removeItem('sk_user');
   };
 
   const signup = async (email, password, firstName, lastName) => {
