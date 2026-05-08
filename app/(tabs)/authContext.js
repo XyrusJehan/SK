@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+
 import { supabase } from '../../utils/supabase';
 
 const AuthContext = createContext();
