@@ -491,16 +491,19 @@ export default function LYDOMonitorAccountScreen() {
   // ── Update user status in database ───────────────────────────────────────────
   const updateUserStatus = async (userId, newStatus) => {
     try {
-      console.log('Updating userId:', userId, 'to status:', newStatus);
+      console.log('Updating userId:', userId, 'type:', typeof userId, 'to status:', newStatus);
+
+      // Ensure userId is a number
+      const numericUserId = Number(userId);
+      console.log('Numeric userId:', numericUserId);
+
       const { data, error } = await supabase
         .from('users')
         .update({ status: newStatus })
-        .eq('user_id', userId)
-        .select();
+        .eq('user_id', numericUserId);
 
       if (error) {
         console.error('Error updating status:', error);
-        Alert.alert('Error', 'Failed to update account status: ' + error.message);
         return false;
       }
 
@@ -509,14 +512,13 @@ export default function LYDOMonitorAccountScreen() {
       // Update local state - create new array to trigger re-render
       setAccounts(prev => {
         const updated = prev.map(a =>
-          a.userId === userId ? { ...a, status: newStatus } : a
+          a.userId === numericUserId ? { ...a, status: newStatus } : a
         );
         return [...updated];
       });
       return true;
     } catch (error) {
       console.error('Error:', error);
-      Alert.alert('Error', 'An unexpected error occurred');
       return false;
     }
   };
@@ -607,48 +609,36 @@ export default function LYDOMonitorAccountScreen() {
     setAccounts(prev => prev.map(a => a.id === id ? { ...a, ...patch } : a));
   };
 
-  const handleApprove = (id) => {
+  const handleApprove = async (id) => {
+    console.log('handleApprove called with id:', id);
     const account = accounts.find(a => a.id === id);
     if (!account) {
-      Alert.alert('Error', 'Account not found');
+      console.error('Account not found');
       return;
     }
-    Alert.alert('Approve Account', `Are you sure you want to approve ${account.name || 'this applicant'}?`, [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Approve',
-        style: 'default',
-        onPress: async () => {
-          console.log('Approve clicked for userId:', account.userId);
-          const success = await updateUserStatus(account.userId, 'active');
-          if (success) {
-            Alert.alert('Success', 'Account has been approved and is now active');
-          }
-        }
-      },
-    ]);
+    console.log('Approving account:', account.name, 'userId:', account.userId);
+    const success = await updateUserStatus(account.userId, 'active');
+    if (success) {
+      console.log('Account approved successfully');
+      // Refresh the accounts list
+      fetchData();
+    }
   };
 
-  const handleReject = (id) => {
+  const handleReject = async (id) => {
+    console.log('handleReject called with id:', id);
     const account = accounts.find(a => a.id === id);
     if (!account) {
-      Alert.alert('Error', 'Account not found');
+      console.error('Account not found');
       return;
     }
-    Alert.alert('Reject Account', `Are you sure you want to reject ${account.name || 'this applicant'}?`, [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Reject',
-        style: 'destructive',
-        onPress: async () => {
-          console.log('Reject clicked for userId:', account.userId);
-          const success = await updateUserStatus(account.userId, 'inactive');
-          if (success) {
-            Alert.alert('Success', 'Account has been rejected and is now inactive');
-          }
-        }
-      },
-    ]);
+    console.log('Rejecting account:', account.name, 'userId:', account.userId);
+    const success = await updateUserStatus(account.userId, 'inactive');
+    if (success) {
+      console.log('Account rejected successfully');
+      // Refresh the accounts list
+      fetchData();
+    }
   };
 
   // ── Handle barangay change from dropdown ───────────────────────────────────
@@ -1061,7 +1051,7 @@ const styles = StyleSheet.create({
   colPosition: { flex: 1, paddingRight: 8, zIndex: 900 },
   colDate:     { flex: 1, paddingRight: 8 },
   colStatus:   { flex: 1, paddingRight: 8 },
-  colAction:   { width: isMobile ? 80 : 100, gap: 4 },
+  colAction:   { width: isMobile ? 80 : 100, gap: 4, zIndex: 1000, position: 'relative' },
 
   // Cells
   cellName:    { fontSize: isMobile ? 10 : 12, color: COLORS.darkText, fontWeight: '500' },
@@ -1070,8 +1060,8 @@ const styles = StyleSheet.create({
   cellRole:    { fontSize: isMobile ? 10 : 12, color: COLORS.subText, fontWeight: '500' },
 
   // Action buttons
-  approveBtn:     { backgroundColor: '#43A047', borderRadius: 4, paddingHorizontal: 8, paddingVertical: 4, alignItems: 'center' },
-  rejectBtn:      { backgroundColor: '#C62828', borderRadius: 4, paddingHorizontal: 8, paddingVertical: 4, alignItems: 'center' },
+  approveBtn:     { backgroundColor: '#43A047', borderRadius: 4, paddingHorizontal: 8, paddingVertical: 4, alignItems: 'center', zIndex: 1000, position: 'relative' },
+  rejectBtn:      { backgroundColor: '#C62828', borderRadius: 4, paddingHorizontal: 8, paddingVertical: 4, alignItems: 'center', zIndex: 1000, position: 'relative' },
   actionBtnText:  { fontSize: 10, fontWeight: '700', color: COLORS.white },
 
   emptyState: { alignItems: 'center', paddingVertical: 40 },
