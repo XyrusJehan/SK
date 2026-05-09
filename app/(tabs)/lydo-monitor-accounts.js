@@ -2,7 +2,7 @@ import React, { useState, useEffect, useContext, useRef } from 'react';
 import {
   View, Text, TextInput, ScrollView, TouchableOpacity,
   StyleSheet, SafeAreaView, StatusBar, Dimensions,
-  Modal, Alert, Image, ActivityIndicator,
+  Alert, Image, ActivityIndicator,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useNav } from './navContext';
@@ -942,28 +942,23 @@ export default function LYDOMonitorAccountScreen() {
       <SafeAreaView style={styles.safe}>
       <StatusBar barStyle="light-content" backgroundColor={COLORS.navy} />
 
-      {/* Mobile Sidebar Modal */}
-      <Modal
-        visible={isMobile && sidebarVisible}
-        animationType="slide"
-        transparent
-        onRequestClose={() => setSidebarVisible(false)}
-      >
-        <View style={styles.mobileSidebarContainer}>
+      {/* Layout */}
+      <View style={styles.layout}>
+        {/* Mobile: Sidebar as overlay */}
+        {isMobile && sidebarVisible && (
           <TouchableOpacity
             style={styles.sidebarOverlay}
             activeOpacity={1}
             onPress={() => setSidebarVisible(false)}
           />
-          <View style={styles.mobileSidebar}>
-            {renderSidebar()}
-          </View>
-        </View>
-      </Modal>
+        )}
 
-      {/* Layout */}
-      <View style={styles.layout}>
-        {!isMobile && renderSidebar()}
+        {isMobile ? (
+          sidebarVisible && renderSidebar()
+        ) : (
+          renderSidebar()
+        )}
+
         {renderContent()}
       </View>
     </SafeAreaView>
@@ -982,9 +977,7 @@ const styles = StyleSheet.create({
     alignItems: 'center', paddingTop: 20, paddingBottom: 24,
     paddingHorizontal: 10, zIndex: 10,
   },
-  sidebarOverlay:        { position: 'absolute', left: 0, top: 0, bottom: 0, right: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 5 },
-  mobileSidebarContainer:{ flex: 1 },
-  mobileSidebar:         { position: 'absolute', left: 0, top: 0, bottom: 0, width: '75%', maxWidth: 280, zIndex: 10 },
+  sidebarOverlay: { position: 'absolute', left: 0, top: 0, bottom: 0, right: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 5 },
 
   logoPill:      { marginTop: 20, width: 70, height: 70, borderRadius: 35, backgroundColor: 'rgba(255,255,255,0.15)', alignItems: 'center', justifyContent: 'center', marginBottom: 8, borderWidth: 2, borderColor: 'rgba(255,255,255,0.3)' },
   logoImage:     { width: 110, height: 110 },

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View, Text, TextInput, ScrollView, TouchableOpacity,
   StyleSheet, SafeAreaView, StatusBar, Dimensions,
@@ -7,6 +7,7 @@ import {
 import { useRouter } from 'expo-router';
 import { useNav } from './navContext';
 import { useAuth } from './authContext';
+import { supabase } from '../../utils/supabase';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const isMobile = SCREEN_WIDTH < 768;
@@ -51,7 +52,7 @@ const COLORS = {
 
 // ─── TABS ─────────────────────────────────────────────────────────────────────
 const NAV_TABS      = ['Dashboard', 'Documents', 'Planning', 'Portal'];
-const DOCUMENT_TABS = ['Financial', 'Planning', 'Governance', 'Activities'];
+const DOCUMENT_TABS = ['Folder', 'Document Management'];
 
 // ─── DOCUMENT CATEGORIES ─────────────────────────────────────────────────────
 const DOC_CATEGORIES = [
@@ -149,13 +150,43 @@ const DocumentCard = ({ group, onItemPress }) => {
 export default function SKDocumentScreen() {
   const router = useRouter();
   const { activeTab, setActiveTab } = useNav();
-  const { logout } = useAuth();
+  const { logout, user } = useAuth();
 
-  const [activeDocTab, setActiveDocTab]     = useState('All');
+  // Get user's barangay from auth context
+  const barangayName = user?.barangay?.barangay_name || 'Unknown Barangay';
+  const barangayId = user?.barangayId;
+
+  const [activeDocTab, setActiveDocTab]     = useState('Folder');
   const [searchText, setSearchText]         = useState('');
   const [notifCount]                        = useState(2);
   const [sidebarVisible, setSidebarVisible] = useState(false);
-  const [dropdownOpen, setDropdownOpen]     = useState(false);
+  const [documents, setDocuments]           = useState([]);
+
+  // Fetch documents for this barangay
+  useEffect(() => {
+    const fetchDocuments = async () => {
+      if (!barangayId) return;
+
+      try {
+        const { data: docs, error } = await supabase
+          .from('documents')
+          .select('document_id, title, folder_category, document_type, status, year, created_at')
+          .eq('barangay_id', barangayId)
+          .order('created_at', { ascending: false });
+
+        if (error) {
+          console.error('Error fetching documents:', error);
+          return;
+        }
+
+        setDocuments(docs || []);
+      } catch (error) {
+        console.error('Error:', error);
+      }
+    };
+
+    fetchDocuments();
+  }, [barangayId]);
 
   const handleNavPress = (tab) => {
     setActiveTab(tab);
@@ -176,13 +207,12 @@ export default function SKDocumentScreen() {
     });
   };
 
-  // Filter by active tab + search
+  // Filter by search only (Folder tab shows all categories)
   const visibleCategories = DOC_CATEGORIES.filter(cat => {
-    const matchesTab    = activeDocTab === 'All' || cat.tab === activeDocTab;
     const matchesSearch = searchText === '' ||
       cat.title.toLowerCase().includes(searchText.toLowerCase()) ||
       cat.items.some(i => i.toLowerCase().includes(searchText.toLowerCase()));
-    return matchesTab && matchesSearch;
+    return matchesSearch;
   });
 
   // ── Sidebar ──
@@ -241,7 +271,7 @@ export default function SKDocumentScreen() {
         <View style={styles.header}>
           <View style={{ flex: 1 }}>
             <Text style={styles.headerSub}>SANGGUNIANG KABATAAN</Text>
-            <Text style={styles.headerTitle}>BARANGAY SAN JOSE</Text>
+            <Text style={styles.headerTitle}>{barangayName.toUpperCase()}</Text>
           </View>
           <TouchableOpacity style={styles.bellBtn} activeOpacity={0.7}>
             <BellIcon hasNotif={notifCount > 0} />
@@ -274,48 +304,13 @@ export default function SKDocumentScreen() {
       </View>
 
       {/* Category label + All dropdown + Tab bar */}
+      {/* Category label + Tab bar */}
       <View style={styles.categoryRow}>
         <Text style={styles.categoryLabel}>Category:</Text>
       </View>
 
       <View style={styles.filterRow}>
-        {/* "All" — small white outlined dropdown button, separate from tab bar */}
-        <View style={styles.dropdownContainer}>
-          <TouchableOpacity
-            style={[styles.allDropdownBtn, activeDocTab === 'All' && styles.allDropdownBtnActive]}
-            onPress={() => setDropdownOpen(v => !v)}
-            activeOpacity={0.8}
-          >
-            <Text style={[styles.allDropdownText, activeDocTab === 'All' && styles.allDropdownTextActive]}>
-              All
-            </Text>
-            <Text style={styles.allDropdownArrow}>{dropdownOpen ? '▲' : '▼'}</Text>
-          </TouchableOpacity>
-
-          {/* Dropdown menu */}
-          {dropdownOpen && (
-            <View style={styles.dropdownMenu}>
-              {['All', ...DOCUMENT_TABS].map(tab => {
-                const active = activeDocTab === tab;
-                return (
-                  <TouchableOpacity
-                    key={tab}
-                    style={[styles.dropdownItem, active && styles.dropdownItemActive]}
-                    onPress={() => { setActiveDocTab(tab); setDropdownOpen(false); }}
-                    activeOpacity={0.8}
-                  >
-                    <Text style={[styles.dropdownItemText, active && styles.dropdownItemTextActive]}>
-                      {tab}
-                    </Text>
-                    {active && <Text style={styles.dropdownCheck}>✓</Text>}
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-          )}
-        </View>
-
-        {/* Navy tab bar — Financial, Planning, Governance, Activities only */}
+        {/* Folder / Document Management tab bar */}
         <View style={styles.docTabBar}>
           {DOCUMENT_TABS.map(tab => {
             const active = activeDocTab === tab;
@@ -324,10 +319,9 @@ export default function SKDocumentScreen() {
                 key={tab}
                 style={[styles.docTab, active && styles.docTabActive]}
                 onPress={() => {
-                  router.push({
-                    pathname: '/(tabs)/sk-document-list',
-                    params: { category: tab },
-                  });
+                  if (tab === 'Document Management') {
+                    router.push({ pathname: '/(tabs)/sk-document-management' });
+                  }
                 }}
                 activeOpacity={0.8}
               >
@@ -474,27 +468,11 @@ const styles = StyleSheet.create({
   categoryRow:   { flexDirection: 'row', alignItems: 'center', marginBottom: 4 },
   categoryLabel: { fontSize: 12, fontWeight: '700', color: COLORS.darkText },
 
-  // ── FILTER ROW (All button + tab bar side by side) ──
+  // ── FILTER ROW ──
   filterRow: {
     flexDirection: 'row', alignItems: 'flex-start', marginBottom: 16, gap: 6,
     zIndex: 10,
   },
-  dropdownContainer: {
-    zIndex: 100,
-  },
-
-  // "All" — small white outlined dropdown button beside the navy tab bar
-  allDropdownBtn: {
-    flexDirection: 'row', alignItems: 'center', gap: 3,
-    paddingVertical: 0, paddingHorizontal: 10,
-    backgroundColor: COLORS.white, borderRadius: 4,
-    borderWidth: 1, borderColor: COLORS.midGray,
-    height: 38, justifyContent: 'center',
-  },
-  allDropdownBtnActive: { backgroundColor: COLORS.gold, borderColor: COLORS.gold },
-  allDropdownText:      { fontSize: isMobile ? 10 : 12, fontWeight: '700', color: COLORS.darkText },
-  allDropdownTextActive: { color: COLORS.darkText },
-  allDropdownArrow:     { fontSize: 7, color: COLORS.subText },
 
   // ── DOCUMENT TAB BAR (4 tabs only) ──
   docTabBar: {
@@ -518,24 +496,6 @@ const styles = StyleSheet.create({
     color: COLORS.white, textAlign: 'center',
   },
   docTabTextActive: { color: COLORS.darkText, fontWeight: '800' },
-
-  // ── DROPDOWN MENU (floats below All button) ──
-  dropdownMenu: {
-    position: 'absolute', top: 42, left: 0, zIndex: 99,
-    backgroundColor: COLORS.white, borderRadius: 8, overflow: 'hidden',
-    shadowColor: '#000', shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15, shadowRadius: 8, elevation: 10,
-    minWidth: 150, borderWidth: 1, borderColor: COLORS.lightGray,
-  },
-  dropdownItem: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingVertical: 10, paddingHorizontal: 14,
-    borderBottomWidth: 1, borderBottomColor: COLORS.lightGray,
-  },
-  dropdownItemActive:     { backgroundColor: '#EEF3FB' },
-  dropdownItemText:       { fontSize: 12, fontWeight: '600', color: COLORS.darkText },
-  dropdownItemTextActive: { color: COLORS.navy, fontWeight: '800' },
-  dropdownCheck:          { fontSize: 12, color: COLORS.navy, fontWeight: '800' },
 
   // ── Cards grid ──
   gridInner:         { flexDirection: 'row', flexWrap: 'wrap', gap: 12, paddingBottom: 24 },

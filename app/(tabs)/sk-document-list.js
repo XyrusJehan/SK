@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   View, Text, TextInput, ScrollView, TouchableOpacity,
   StyleSheet, SafeAreaView, StatusBar, Dimensions, Image,
@@ -6,6 +6,7 @@ import {
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useNav } from './navContext';
 import { useAuth } from './authContext';
+import { supabase } from '../../utils/supabase';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const isMobile = SCREEN_WIDTH < 768;
@@ -32,79 +33,8 @@ const NAV_TABS      = ['Dashboard', 'Documents', 'Planning', 'Portal'];
 const DOCUMENT_TABS = ['Financial', 'Planning', 'Governance', 'Activities'];
 
 // ─── DOCUMENT DATA ────────────────────────────────────────────────────────────
-// Maps each tab → subTypes → mock documents
-const DOCUMENTS_DATA = {
-  Financial: {
-    'Monthly Itemized List': [
-      { id: 'f1', name: 'Monthly Itemized List - January 2025.pdf', date: '2025-01-31' },
-      { id: 'f2', name: 'Monthly Itemized List - February 2025.pdf', date: '2025-02-28' },
-      { id: 'f3', name: 'Monthly Itemized List - March 2025.pdf', date: '2025-03-31' },
-    ],
-    'Quarterly Register of Bank': [
-      { id: 'f4', name: 'Bank Register Q1 2025.pdf', date: '2025-03-31' },
-      { id: 'f5', name: 'Bank Register Q4 2024.pdf', date: '2024-12-31' },
-    ],
-    'Annual Budget': [
-      { id: 'f6', name: 'Annual Budget 2025.xlsx', date: '2025-01-05' },
-      { id: 'f7', name: 'Annual Budget 2024.xlsx', date: '2024-01-10' },
-    ],
-    'Disbursement Vouchers': [
-      { id: 'f8', name: 'Disbursement Voucher - March 2025.pdf', date: '2025-03-15' },
-      { id: 'f9', name: 'Disbursement Voucher - February 2025.pdf', date: '2025-02-14' },
-    ],
-    'Liquidation Reports': [
-      { id: 'f10', name: 'Liquidation Report Q1 2025.pdf', date: '2025-04-05' },
-    ],
-  },
-  Planning: {
-    'ABYIP': [
-      { id: 'p1', name: 'ABYIP 2025-2026.pdf', date: '2025-01-15' },
-      { id: 'p2', name: 'ABYIP 2024-2025.pdf', date: '2024-01-20' },
-    ],
-    'CBYDP': [
-      { id: 'p3', name: 'CBYDP 2025.pdf', date: '2025-02-01' },
-    ],
-    'Work Plans': [
-      { id: 'p4', name: 'Work Plan Q1 2025.docx', date: '2025-01-07' },
-      { id: 'p5', name: 'Work Plan Q2 2025.docx', date: '2025-04-01' },
-      { id: 'p6', name: 'Work Plan Annual 2024.docx', date: '2024-01-08' },
-    ],
-    'Project Proposals': [
-      { id: 'p7', name: 'Youth Leadership Summit Proposal.pdf', date: '2025-03-10' },
-      { id: 'p8', name: 'Livelihood Program Proposal.pdf', date: '2025-02-20' },
-    ],
-  },
-  Governance: {
-    'Resolutions': [
-      { id: 'g1', name: 'Resolution No. 2025-01.pdf', date: '2025-01-10' },
-      { id: 'g2', name: 'Resolution No. 2025-02.pdf', date: '2025-02-14' },
-      { id: 'g3', name: 'Resolution No. 2024-12.pdf', date: '2024-12-05' },
-    ],
-    'Ordinances': [
-      { id: 'g4', name: 'Ordinance No. 2025-01.pdf', date: '2025-03-01' },
-      { id: 'g5', name: 'Ordinance No. 2024-03.pdf', date: '2024-06-15' },
-    ],
-  },
-  Activities: {
-    'Accomplishment Reports': [
-      { id: 'a1', name: 'Accomplishment Report Q1 2025.pdf', date: '2025-04-05' },
-      { id: 'a2', name: 'Accomplishment Report Annual 2024.pdf', date: '2025-01-15' },
-    ],
-    'Activity Documentation': [
-      { id: 'a3', name: 'Brigada Eskwela Documentation 2025.pdf', date: '2025-06-10' },
-      { id: 'a4', name: 'Youth Week Activity Docs 2025.pdf', date: '2025-03-20' },
-    ],
-    'Event Reports': [
-      { id: 'a5', name: 'SK Assembly Event Report - March 2025.pdf', date: '2025-03-28' },
-      { id: 'a6', name: 'Sports Fest Report 2024.pdf', date: '2024-11-30' },
-    ],
-    'Minutes of the meetings': [
-      { id: 'a7', name: 'Minutes - Regular Meeting March 2025.pdf', date: '2025-03-15' },
-      { id: 'a8', name: 'Minutes - Regular Meeting February 2025.pdf', date: '2025-02-15' },
-      { id: 'a9', name: 'Minutes - Special Session January 2025.pdf', date: '2025-01-22' },
-    ],
-  },
-};
+// (Data now fetched from Supabase based on barangay_id)
+const DOCUMENTS_DATA = {};
 
 // ─── ICONS ────────────────────────────────────────────────────────────────────
 const MenuIcon = () => (
@@ -137,8 +67,12 @@ const FileIcon = ({ name }) => {
 export default function SKDocumentListScreen() {
   const router = useRouter();
   const { activeTab, setActiveTab } = useNav();
-  const { logout } = useAuth();
+  const { logout, user } = useAuth();
   const params = useLocalSearchParams();
+
+  // Get user's barangay from auth context
+  const barangayName = user?.barangay?.barangay_name || 'Unknown Barangay';
+  const barangayId = user?.barangayId;
 
   // Determine initial tab from params (category passed from sk-document)
   const initTab = DOCUMENT_TABS.includes(params?.category) ? params.category : 'Financial';
@@ -151,12 +85,59 @@ export default function SKDocumentListScreen() {
   const [sidebarVisible, setSidebarVisible] = useState(false);
   const [dropdownOpen, setDropdownOpen]     = useState(false);
   const [notifCount]                        = useState(2);
+  const [documents, setDocuments]           = useState([]);
+
+  // Fetch documents for this barangay filtered by category
+  useEffect(() => {
+    const fetchDocuments = async () => {
+      if (!barangayId) return;
+
+      try {
+        // Map tab categories to folder_category values
+        const categoryMap = {
+          'Financial': 'financial',
+          'Planning': 'planning',
+          'Governance': 'governance',
+          'Activities': 'performance'
+        };
+        const folderCategory = categoryMap[activeDocTab];
+
+        const query = supabase
+          .from('documents')
+          .select('document_id, title, folder_category, document_type, status, year, created_at')
+          .eq('barangay_id', barangayId);
+
+        if (folderCategory) {
+          query.eq('folder_category', folderCategory);
+        }
+
+        const { data: docs, error } = await query.order('created_at', { ascending: false });
+
+        if (error) {
+          console.error('Error fetching documents:', error);
+          return;
+        }
+
+        const formattedDocs = docs?.map(doc => ({
+          id: doc.document_id,
+          name: doc.title || 'Untitled',
+          date: doc.created_at ? new Date(doc.created_at).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
+        })) || [];
+
+        setDocuments(formattedDocs);
+      } catch (error) {
+        console.error('Error:', error);
+      }
+    };
+
+    fetchDocuments();
+  }, [barangayId, activeDocTab]);
 
   // Accent color based on active tab
   const tabColor = COLORS[activeDocTab.toLowerCase()] || COLORS.planning;
 
-  // SubTypes for active tab
-  const subTypes = Object.keys(DOCUMENTS_DATA[activeDocTab] || {});
+  // SubTypes for active tab (from fetched documents)
+  const subTypes = [];
 
   // When tab changes, reset subType
   const handleTabChange = (tab) => {
@@ -168,10 +149,11 @@ export default function SKDocumentListScreen() {
 
   // All docs for current tab (or filtered by subType)
   const allDocs = useMemo(() => {
-    const tabData = DOCUMENTS_DATA[activeDocTab] || {};
-    if (activeSubType) return tabData[activeSubType] || [];
-    return Object.values(tabData).flat();
-  }, [activeDocTab, activeSubType]);
+    if (activeSubType) {
+      return documents.filter(d => d.name.includes(activeSubType));
+    }
+    return documents;
+  }, [activeDocTab, activeSubType, documents]);
 
   // Apply search + sort
   const visibleDocs = useMemo(() => {
@@ -256,7 +238,7 @@ export default function SKDocumentListScreen() {
         <View style={styles.header}>
           <View style={{ flex: 1 }}>
             <Text style={styles.headerSub}>SANGGUNIANG KABATAAN</Text>
-            <Text style={styles.headerTitle}>BARANGAY SAN JOSE</Text>
+            <Text style={styles.headerTitle}>{barangayName.toUpperCase()}</Text>
           </View>
           {/* Upload Button */}
           <TouchableOpacity style={styles.uploadBtn} activeOpacity={0.8}>

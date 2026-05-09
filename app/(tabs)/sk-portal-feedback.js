@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View, Text, TextInput, ScrollView, TouchableOpacity,
   StyleSheet, SafeAreaView, StatusBar, Dimensions,
@@ -7,6 +7,7 @@ import {
 import { useRouter } from 'expo-router';
 import { useNav } from './navContext';
 import { useAuth } from './authContext';
+import { supabase } from '../../utils/supabase';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const isMobile = SCREEN_WIDTH < 768;
@@ -33,44 +34,7 @@ const DOCUMENT_FILTERS = ['All Documents', 'Annual Barangay Youth Investment Pro
 const FEEDBACK_FILTERS = ['All', 'Recent', 'Unread'];
 
 // ─── FEEDBACK DATA ────────────────────────────────────────────────────────────
-const FEEDBACK_DATA = [
-  {
-    id: 'f1',
-    name: 'Patrick Dela Rosa',
-    document: 'Annual Barangay Youth Investment Program',
-    comment: 'Concerns about the over budget for sports instead of  education being priority',
-    date: 'April 22, 2026',
-    status: 'Unread',
-    reply: '',
-  },
-  {
-    id: 'f2',
-    name: 'Harvey Daella',
-    document: 'Annual Barangay Youth Investment Program',
-    comment: 'Concerns about the over budget for sports instead of  education being priority',
-    date: 'April 20, 2026',
-    status: 'Read',
-    reply: '',
-  },
-  {
-    id: 'f3',
-    name: 'Maria Santos',
-    document: 'Approved Annual Budget 2026',
-    comment: 'Can we see the breakdown for barangay health programs?',
-    date: 'April 18, 2026',
-    status: 'Unread',
-    reply: '',
-  },
-  {
-    id: 'f4',
-    name: 'Jose Reyes',
-    document: 'Comprehensive Barangay Youth Development Plan (CBYDP) 2026',
-    comment: 'The CBYDP looks comprehensive. When is the implementation date?',
-    date: 'April 15, 2026',
-    status: 'Read',
-    reply: 'Implementation starts June 2026. Thank you for your interest!',
-  },
-];
+// (Data now fetched from Supabase based on barangay_id)
 
 // ─── ICONS ───────────────────────────────────────────────────────────────────
 const BellIcon = ({ hasNotif }) => (
@@ -137,7 +101,11 @@ const FeedbackCard = ({ item, onViewReply }) => (
 export default function SKPortalFeedbackScreen() {
   const router = useRouter();
   const { activeTab, setActiveTab } = useNav();
-  const { logout } = useAuth();
+  const { logout, user } = useAuth();
+
+  // Get user's barangay from auth context
+  const barangayName = user?.barangay?.barangay_name || 'Unknown Barangay';
+  const barangayId = user?.barangayId;
 
   const [feedbackFilter, setFeedbackFilter] = useState('All');
   const [docFilter, setDocFilter]           = useState('All Documents');
@@ -151,7 +119,43 @@ export default function SKPortalFeedbackScreen() {
   // Reply modal
   const [selectedFeedback, setSelectedFeedback] = useState(null);
   const [replyText, setReplyText]               = useState('');
-  const [feedbackList, setFeedbackList]         = useState(FEEDBACK_DATA);
+  const [feedbackList, setFeedbackList]         = useState([]);
+
+  // Fetch feedback for this barangay
+  useEffect(() => {
+    const fetchFeedback = async () => {
+      if (!barangayId) return;
+
+      try {
+        const { data: feedback, error } = await supabase
+          .from('resident_comments')
+          .select('*')
+          .eq('barangay_id', barangayId)
+          .order('created_at', { ascending: false });
+
+        if (error) {
+          console.error('Error fetching feedback:', error);
+          return;
+        }
+
+        const formattedFeedback = feedback?.map(f => ({
+          id: f.comment_id,
+          name: f.resident_name || 'Anonymous',
+          document: f.document_title || 'Unknown',
+          comment: f.comment || '',
+          date: f.created_at ? new Date(f.created_at).toLocaleDateString() : '',
+          status: f.is_read ? 'Read' : 'Unread',
+          reply: f.reply || '',
+        })) || [];
+
+        setFeedbackList(formattedFeedback);
+      } catch (error) {
+        console.error('Error:', error);
+      }
+    };
+
+    fetchFeedback();
+  }, [barangayId]);
 
   const handleNavPress = (tab) => {
     setActiveTab(tab);
@@ -357,7 +361,7 @@ export default function SKPortalFeedbackScreen() {
         <View style={styles.header}>
           <View style={{ flex: 1 }}>
             <Text style={styles.headerSub}>SANGGUNIANG KABATAAN</Text>
-            <Text style={styles.headerTitle}>BARANGAY SAN JOSE</Text>
+            <Text style={styles.headerTitle}>{barangayName.toUpperCase()}</Text>
             <Text style={styles.headerDocLabel}>Portal and Post Managemnet</Text>
           </View>
           <TouchableOpacity style={styles.bellBtn} activeOpacity={0.7}>
