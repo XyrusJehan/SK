@@ -237,7 +237,25 @@ export default function HomeScreen({ navigation }) {
                 <MenuIcon />
               </TouchableOpacity>
               <Text style={styles.mobileTitle}>SK Home</Text>
-              <View style={{ width: 40 }} />
+              <View style={styles.mobileHeaderActions}>
+                {/* Calendar */}
+                <TouchableOpacity style={styles.mobileActionBtn} activeOpacity={0.7}>
+                  <Text style={styles.mobileActionIcon}>📅</Text>
+                </TouchableOpacity>
+                {/* Archives */}
+                <TouchableOpacity style={[styles.mobileActionBtn, styles.mobileArchivesBtn]} activeOpacity={0.7}>
+                  <Text style={styles.mobileActionIcon}>🗃️</Text>
+                </TouchableOpacity>
+                {/* Notification Bell */}
+                <TouchableOpacity style={styles.bellBtnMobile} activeOpacity={0.7}>
+                  <BellIcon hasNotif={notifCount > 0} />
+                  {notifCount > 0 && (
+                    <View style={styles.notifBadgeMobile}>
+                      <Text style={styles.notifBadgeTextMobile}>{notifCount}</Text>
+                    </View>
+                  )}
+                </TouchableOpacity>
+              </View>
             </View>
           )}
 
@@ -514,7 +532,8 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 0,
   },
   mainContent: {
-    padding: 20,
+    padding: isMobile ? 12 : 20,
+    paddingBottom: isMobile ? 24 : 40,
   },
 
   // Mobile Header
@@ -522,8 +541,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 16,
-    paddingBottom: 12,
+    marginBottom: 12,
+    paddingBottom: 10,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.lightGray,
   },
@@ -547,20 +566,42 @@ const styles = StyleSheet.create({
     borderRadius: 1,
   },
   mobileTitle: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: '800',
     color: COLORS.darkText,
   },
+  mobileHeaderActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  mobileActionBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: COLORS.cardBg,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  mobileArchivesBtn: {
+    backgroundColor: '#133E75',
+  },
+  mobileActionIcon: { fontSize: 14 },
 
   // Header
   header: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     justifyContent: 'space-between',
-    marginBottom: 16,
+    marginBottom: isMobile ? 12 : 16,
   },
   headerSub: {
-    fontSize: 10,
+    fontSize: isMobile ? 8 : 10,
     fontWeight: '600',
     color: COLORS.subText,
     letterSpacing: 2,
@@ -568,7 +609,7 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
   },
   headerTitle: {
-    fontSize: 20,
+    fontSize: isMobile ? 16 : 20,
     fontWeight: '900',
     color: COLORS.darkText,
     letterSpacing: 0.5,
@@ -629,15 +670,44 @@ const styles = StyleSheet.create({
   },
   notifBadgeText: { fontSize: 8, fontWeight: '900', color: COLORS.maroon },
 
+  // Mobile Bell
+  bellBtnMobile: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: COLORS.cardBg,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  notifBadgeMobile: {
+    position: 'absolute',
+    top: -2,
+    right: -2,
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    backgroundColor: COLORS.gold,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1.5,
+    borderColor: COLORS.white,
+  },
+  notifBadgeTextMobile: { fontSize: 7, fontWeight: '900', color: COLORS.maroon },
+
   // Search
   searchBar: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: COLORS.cardBg,
-    borderRadius: 14,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    marginBottom: 20,
+    borderRadius: isMobile ? 10 : 14,
+    paddingHorizontal: isMobile ? 12 : 14,
+    paddingVertical: isMobile ? 8 : 10,
+    marginBottom: isMobile ? 14 : 20,
     borderWidth: 1.5,
     borderColor: COLORS.maroon + '33',
     shadowColor: COLORS.shadow,
@@ -675,7 +745,7 @@ const styles = StyleSheet.create({
   },
   searchInput: {
     flex: 1,
-    fontSize: 14,
+    fontSize: isMobile ? 13 : 14,
     color: COLORS.darkText,
     padding: 0,
   },
@@ -683,8 +753,8 @@ const styles = StyleSheet.create({
   // Cards
   card: {
     backgroundColor: COLORS.cardBg,
-    borderRadius: 18,
-    marginBottom: 18,
+    borderRadius: isMobile ? 12 : 18,
+    marginBottom: isMobile ? 12 : 18,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.08,
@@ -695,20 +765,20 @@ const styles = StyleSheet.create({
   cardHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 14,
+    paddingHorizontal: isMobile ? 12 : 16,
+    paddingVertical: isMobile ? 10 : 14,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.lightGray,
     gap: 8,
   },
   cardHeaderAccent: {
     width: 4,
-    height: 18,
+    height: isMobile ? 14 : 18,
     borderRadius: 2,
     backgroundColor: COLORS.maroon,
   },
   cardTitle: {
-    fontSize: 15,
+    fontSize: isMobile ? 13 : 15,
     fontWeight: '800',
     color: COLORS.darkText,
     flex: 1,
@@ -717,34 +787,34 @@ const styles = StyleSheet.create({
   taskBadge: {
     backgroundColor: COLORS.maroon,
     borderRadius: 10,
-    paddingHorizontal: 8,
+    paddingHorizontal: 6,
     paddingVertical: 2,
   },
-  taskBadgeText: { fontSize: 11, fontWeight: '700', color: COLORS.white },
+  taskBadgeText: { fontSize: 10, fontWeight: '700', color: COLORS.white },
 
   // Table
   tableHead: {
     flexDirection: 'row',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
+    paddingHorizontal: isMobile ? 10 : 16,
+    paddingVertical: isMobile ? 6 : 8,
     backgroundColor: COLORS.maroon + '10',
     borderBottomWidth: 1,
     borderBottomColor: COLORS.lightGray,
   },
   tableHeadCell: {
-    fontSize: 11,
+    fontSize: isMobile ? 9 : 11,
     fontWeight: '700',
     color: COLORS.maroon,
     letterSpacing: 0.8,
     textTransform: 'uppercase',
-    width: 70,
+    width: isMobile ? 60 : 70,
     textAlign: 'center',
   },
   tableRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingHorizontal: isMobile ? 10 : 16,
+    paddingVertical: isMobile ? 8 : 12,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.lightGray,
   },
@@ -755,26 +825,26 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: 'row',
     alignItems: 'flex-start',
-    gap: 8,
-    paddingRight: 8,
+    gap: 6,
+    paddingRight: 6,
   },
   urgentDot: {
-    width: 7,
-    height: 7,
-    borderRadius: 4,
+    width: 6,
+    height: 6,
+    borderRadius: 3,
     backgroundColor: COLORS.maroon,
-    marginTop: 5,
+    marginTop: 4,
   },
   taskDesc: {
     flex: 1,
-    fontSize: 13,
+    fontSize: isMobile ? 11 : 13,
     color: COLORS.darkText,
-    lineHeight: 19,
+    lineHeight: isMobile ? 16 : 19,
   },
   actionBtn: {
-    width: 70,
-    paddingVertical: 7,
-    borderRadius: 20,
+    width: isMobile ? 54 : 70,
+    paddingVertical: isMobile ? 5 : 7,
+    borderRadius: isMobile ? 12 : 20,
     alignItems: 'center',
   },
   actionBtnUpload: {
@@ -784,7 +854,7 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.teal,
   },
   actionBtnText: {
-    fontSize: 12,
+    fontSize: isMobile ? 10 : 12,
     fontWeight: '700',
     color: COLORS.white,
     letterSpacing: 0.3,
@@ -797,20 +867,20 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   sortLabel: {
-    fontSize: 11,
+    fontSize: isMobile ? 10 : 11,
     color: COLORS.subText,
     fontWeight: '500',
   },
   sortBtn: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 10,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 8,
   },
   sortBtnActive: {
     backgroundColor: COLORS.teal + '20',
   },
   sortBtnText: {
-    fontSize: 11,
+    fontSize: isMobile ? 10 : 11,
     fontWeight: '600',
     color: COLORS.midGray,
   },
@@ -822,30 +892,30 @@ const styles = StyleSheet.create({
   activityRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    gap: 12,
+    paddingHorizontal: isMobile ? 10 : 16,
+    paddingVertical: isMobile ? 10 : 14,
+    gap: isMobile ? 8 : 12,
   },
   activityRowBorder: {
     borderBottomWidth: 1,
     borderBottomColor: COLORS.lightGray,
   },
   activityDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
   },
   activityInfo: {
     flex: 1,
   },
   activityLabel: {
-    fontSize: 13,
+    fontSize: isMobile ? 11 : 13,
     fontWeight: '600',
     color: COLORS.darkText,
-    lineHeight: 18,
+    lineHeight: isMobile ? 15 : 18,
   },
   activityMeta: {
-    fontSize: 11,
+    fontSize: isMobile ? 10 : 11,
     color: COLORS.subText,
     marginTop: 2,
   },
@@ -853,12 +923,12 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
   },
   activityTimeText: {
-    fontSize: 12,
+    fontSize: isMobile ? 10 : 12,
     fontWeight: '700',
     color: COLORS.maroon,
   },
   activityDateText: {
-    fontSize: 11,
+    fontSize: isMobile ? 9 : 11,
     color: COLORS.subText,
     marginTop: 1,
   },
@@ -900,17 +970,16 @@ const styles = StyleSheet.create({
   // ── Stat counters ──
   statsRow: {
     flexDirection: isMobile ? 'column' : 'row',
-    gap: 12,
-    marginBottom: 20,
+    gap: isMobile ? 8 : 12,
+    marginBottom: isMobile ? 14 : 20,
   },
   statCard: {
-    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-    borderRadius: 14,
-    paddingVertical: 14,
-    paddingHorizontal: 14,
+    gap: isMobile ? 8 : 12,
+    borderRadius: isMobile ? 10 : 14,
+    paddingVertical: isMobile ? 10 : 14,
+    paddingHorizontal: isMobile ? 10 : 14,
     borderLeftWidth: 4,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 3 },
@@ -919,23 +988,23 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   statIconWrap: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
+    width: isMobile ? 36 : 44,
+    height: isMobile ? 36 : 44,
+    borderRadius: isMobile ? 8 : 12,
     alignItems: 'center',
     justifyContent: 'center',
     flexShrink: 0,
   },
-  statIcon: { fontSize: 20 },
+  statIcon: { fontSize: isMobile ? 16 : 20 },
   statInfo: { flex: 1 },
   statValue: {
-    fontSize: isMobile ? 26 : 30,
+    fontSize: isMobile ? 22 : 30,
     fontWeight: '900',
-    lineHeight: isMobile ? 30 : 34,
+    lineHeight: isMobile ? 26 : 34,
     letterSpacing: -0.5,
   },
   statLabel: {
-    fontSize: 11,
+    fontSize: isMobile ? 10 : 11,
     fontWeight: '600',
     color: COLORS.subText,
     marginTop: 2,
