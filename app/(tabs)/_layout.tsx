@@ -2,7 +2,7 @@ import { Tabs } from 'expo-router';
 import React, { useEffect } from 'react';
 import { useRouter } from 'expo-router';
 import { useAuth } from './authContext';
-
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { NavProvider } from './navContext';
 
 export default function TabLayout() {
