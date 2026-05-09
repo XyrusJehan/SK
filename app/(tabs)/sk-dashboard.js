@@ -69,6 +69,20 @@ const MenuIcon = () => (
   </View>
 );
 
+// ─── ANNUAL COMPLIANCE TIMELINE DATA ─────────────────────────────────────────
+const COMPLIANCE_TIMELINE = [
+  { month: 'Jan 15', label: 'Q4 2025 Vendor Certifications' },
+  { month: 'Feb 25', label: 'Q4 2025 Vendor Allions' },
+  { month: 'Mar 31', label: 'Annual Data Privacy Audit' },
+  { month: 'May 16', label: 'Q2 Tax Compliance (IRS Form 990)', highlight: true },
+  { month: 'Jun 16', label: 'Q2 Tax Compliance Audit' },
+  { month: 'Jul 24', label: 'Q2 Tax Compliance (IRS Form 990)' },
+  { month: 'Aug 24', label: 'Board Resolution Filing' },
+  { month: 'Sep 30', label: 'Board Resolution Filing' },
+  { month: 'Sep 30', label: 'Board Resolution Filing' },
+  { month: 'Dec 31', label: 'Annual Employee Code of Conduct' },
+];
+
 // ─── CALENDAR MODAL ───────────────────────────────────────────────────────────
 function CalendarModal({ visible, onClose }) {
   const now = new Date();
@@ -81,17 +95,21 @@ function CalendarModal({ visible, onClose }) {
   const [selMonth, setSelMonth] = useState(todayM);
   const [selYear, setSelYear] = useState(todayY);
   const [timeIdx, setTimeIdx] = useState(4);
-  const [todayEvt, setTodayEvt] = useState('');
-  const [evt1, setEvt1] = useState('');
-  const [evt2, setEvt2] = useState('');
+  const [tooltip, setTooltip] = useState(null); // { day, label }
 
-  const goldKeys = {
-    [`${todayY}-${todayM}-${todayD}`]: true,
-    [`${todayY}-${todayM}-16`]: true,
-    [`${todayY}-${todayM}-24`]: true,
+  // Deadline definitions per month (day → label)
+  const deadlines = {
+    4: 'Q2 Tax Compliance (IRS Form 990)',  // May 4 example
+    16: 'Q2 Tax Compliance (IRS Form 990)',
+    24: 'Board Resolution Filing',
   };
+  const todayKey = `${todayY}-${todayM}-${todayD}`;
+
+  const isDeadline = (y, m, d) => !!(deadlines[d]) && y === cur.y && m === cur.m;
+  const isToday = (y, m, d) => y === todayY && m === todayM && d === todayD;
 
   const shiftMonth = (dir) => {
+    setTooltip(null);
     setCur((prev) => {
       let m = prev.m + dir;
       let y = prev.y;
@@ -105,11 +123,12 @@ function CalendarModal({ visible, onClose }) {
     setSelD(d);
     setSelMonth(cur.m);
     setSelYear(cur.y);
+    if (deadlines[d]) {
+      setTooltip(tooltip?.day === d ? null : { day: d, label: deadlines[d] });
+    } else {
+      setTooltip(null);
+    }
   };
-
-  const selectedDate = new Date(selYear, selMonth, selD);
-  const isToday = selYear === todayY && selMonth === todayM && selD === todayD;
-  const selDateLabel = `${CAL_MONTHS[selMonth]} ${String(selD).padStart(2, '0')}, ${CAL_DAY_NAMES[selectedDate.getDay()]}`;
 
   const buildCells = () => {
     const { y, m } = cur;
@@ -119,9 +138,11 @@ function CalendarModal({ visible, onClose }) {
     const cells = [];
     for (let i = 0; i < firstDow; i++) cells.push({ day: prevDim - firstDow + 1 + i, ghost: true });
     for (let d = 1; d <= dim; d++) {
-      const key = `${y}-${m}-${d}`;
-      const isGold = !!goldKeys[key] || (d === selD && y === selYear && m === selMonth);
-      cells.push({ day: d, ghost: false, gold: isGold });
+      cells.push({
+        day: d, ghost: false,
+        deadline: isDeadline(cur.y, cur.m, d),
+        today: isToday(cur.y, cur.m, d),
+      });
     }
     const tail = (firstDow + dim) % 7;
     if (tail > 0) for (let i = 1; i <= 7 - tail; i++) cells.push({ day: i, ghost: true });
@@ -129,8 +150,6 @@ function CalendarModal({ visible, onClose }) {
   };
 
   const cells = buildCells();
-  const upcomingLabel1 = `${CAL_MONTHS[cur.m]} 16 – ${CAL_DAY_NAMES[new Date(cur.y, cur.m, 16).getDay()]}`;
-  const upcomingLabel2 = `${CAL_MONTHS[cur.m]} 24 – ${CAL_DAY_NAMES[new Date(cur.y, cur.m, 24).getDay()]}`;
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
@@ -139,84 +158,101 @@ function CalendarModal({ visible, onClose }) {
           <TouchableOpacity style={calStyles.closeBtn} onPress={onClose} activeOpacity={0.8}>
             <Text style={calStyles.closeBtnText}>✕</Text>
           </TouchableOpacity>
+
           <View style={calStyles.body}>
 
-            {/* Calendar */}
+            {/* ── Left: Calendar Panel ── */}
             <View style={calStyles.calPanel}>
+              {/* Nav header */}
               <View style={calStyles.calNav}>
                 <TouchableOpacity style={calStyles.navBtn} onPress={() => shiftMonth(-1)} activeOpacity={0.8}>
                   <Text style={calStyles.navArrow}>‹</Text>
                 </TouchableOpacity>
-                <Text style={calStyles.monthLabel}>{CAL_MONTHS[cur.m]} {cur.y}</Text>
+                <Text style={calStyles.monthLabel}>{CAL_MONTHS[cur.m].toUpperCase()} {cur.y} DEADLINES</Text>
                 <TouchableOpacity style={calStyles.navBtn} onPress={() => shiftMonth(1)} activeOpacity={0.8}>
                   <Text style={calStyles.navArrow}>›</Text>
                 </TouchableOpacity>
               </View>
+
+              {/* Day-of-week headers */}
               <View style={calStyles.grid}>
                 {CAL_DOWS.map((d) => (
                   <View key={d} style={calStyles.dowCell}>
                     <Text style={calStyles.dowText}>{d}</Text>
                   </View>
                 ))}
-                {cells.map((cell, idx) => (
-                  <TouchableOpacity
-                    key={idx}
-                    style={[calStyles.dayCell, cell.ghost && calStyles.dayCellGhost, !cell.ghost && cell.gold && calStyles.dayCellGold]}
-                    onPress={() => !cell.ghost && pickDay(cell.day)}
-                    activeOpacity={cell.ghost ? 1 : 0.75}
-                    disabled={cell.ghost}
-                  >
-                    <Text style={[calStyles.dayText, cell.ghost && calStyles.dayTextGhost, !cell.ghost && cell.gold && calStyles.dayTextGold]}>
-                      {cell.day}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
+
+                {/* Day cells */}
+                {cells.map((cell, idx) => {
+                  const showTooltip = tooltip?.day === cell.day && !cell.ghost;
+                  return (
+                    <View key={idx} style={calStyles.dayCellWrap}>
+                      <TouchableOpacity
+                        style={[
+                          calStyles.dayCell,
+                          cell.ghost && calStyles.dayCellGhost,
+                          !cell.ghost && cell.today && calStyles.dayCellToday,
+                          !cell.ghost && cell.deadline && calStyles.dayCellDeadline,
+                        ]}
+                        onPress={() => !cell.ghost && pickDay(cell.day)}
+                        activeOpacity={cell.ghost ? 1 : 0.75}
+                        disabled={cell.ghost}
+                      >
+                        <Text style={[
+                          calStyles.dayText,
+                          cell.ghost && calStyles.dayTextGhost,
+                          !cell.ghost && cell.today && calStyles.dayTextToday,
+                          !cell.ghost && cell.deadline && calStyles.dayTextDeadline,
+                        ]}>
+                          {cell.day}
+                        </Text>
+                        {!cell.ghost && (cell.today || cell.deadline) && (
+                          <Text style={calStyles.dayCellSub}>
+                            {cell.today ? 'Deadline' : 'Standard\nWorkday'}
+                          </Text>
+                        )}
+                        {!cell.ghost && !cell.today && !cell.deadline && (
+                          <Text style={calStyles.dayCellSub}>{'Standard\nWorkday'}</Text>
+                        )}
+                      </TouchableOpacity>
+                      {/* Tooltip popover */}
+                      {showTooltip && (
+                        <View style={calStyles.tooltip}>
+                          <Text style={calStyles.tooltipTitle}>
+                            {CAL_MONTHS[cur.m]} {cell.day} – {deadlines[cell.day]}
+                          </Text>
+                        </View>
+                      )}
+                    </View>
+                  );
+                })}
               </View>
             </View>
 
-            {/* Side panel */}
+            {/* ── Right: Annual Compliance Timeline ── */}
             <View style={calStyles.sidePanel}>
-              <View style={calStyles.sideHeader}>
-                <View style={{ flex: 1 }}>
-                  <Text style={calStyles.selDateText}>{selDateLabel}</Text>
-                  <Text style={calStyles.todayLabel}>{isToday ? 'Today' : ' '}</Text>
-                </View>
-                <View style={calStyles.badge}>
-                  <Text style={calStyles.badgeText}>Annual Timeline</Text>
-                </View>
+              <View style={calStyles.sidePanelHeader}>
+                <Text style={calStyles.sidePanelTitle}>ANNUAL COMPLIANCE{'\n'}TIMELINE - {cur.y}</Text>
               </View>
 
-              <Text style={calStyles.sectionTitle}>Today</Text>
-              <TextInput
-                style={calStyles.input}
-                placeholder="Add note or event…"
-                placeholderTextColor="#aab4cc"
-                value={todayEvt}
-                onChangeText={setTodayEvt}
-              />
+              <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
+                {COMPLIANCE_TIMELINE.map((item, idx) => (
+                  <View
+                    key={idx}
+                    style={[calStyles.timelineRow, item.highlight && calStyles.timelineRowHighlight]}
+                  >
+                    <View style={[calStyles.timelineDot, item.highlight && calStyles.timelineDotHighlight]} />
+                    <Text style={[calStyles.timelineMonth, item.highlight && calStyles.timelineMonthHighlight]}>
+                      {item.month}
+                    </Text>
+                    <Text style={[calStyles.timelineLabel, item.highlight && calStyles.timelineLabelHighlight]}>
+                      {item.label}
+                    </Text>
+                  </View>
+                ))}
+              </ScrollView>
 
-              <View style={calStyles.divider} />
-
-              <Text style={calStyles.sectionTitle}>Upcoming</Text>
-              <TextInput
-                style={calStyles.input}
-                placeholder="Add event…"
-                placeholderTextColor="#aab4cc"
-                value={evt1}
-                onChangeText={setEvt1}
-              />
-              <Text style={calStyles.evtDateLbl}>{upcomingLabel1}</Text>
-              <TextInput
-                style={calStyles.input}
-                placeholder="Add event…"
-                placeholderTextColor="#aab4cc"
-                value={evt2}
-                onChangeText={setEvt2}
-              />
-              <Text style={calStyles.evtDateLbl}>{upcomingLabel2}</Text>
-
-              <View style={{ flex: 1 }} />
-
+              {/* Time selector */}
               <View style={calStyles.timeRow}>
                 <Text style={calStyles.timeLabel}>Time</Text>
                 <TouchableOpacity
@@ -462,75 +498,122 @@ export default function HomeScreen({ navigation }) {
 // ─── CALENDAR STYLES ──────────────────────────────────────────────────────────
 const calStyles = StyleSheet.create({
   backdrop: {
-    flex: 1, backgroundColor: 'rgba(0,0,0,0.6)',
+    flex: 1, backgroundColor: 'rgba(0,0,0,0.65)',
     justifyContent: 'center', alignItems: 'center', padding: 16,
   },
   modal: {
-    backgroundColor: COLORS.navy, borderRadius: 16,
-    width: isMobile ? '100%' : 680, maxWidth: 680, padding: 16,
+    backgroundColor: COLORS.navy, borderRadius: 20,
+    width: isMobile ? '100%' : 740, maxWidth: 740, padding: 16,
   },
   closeBtn: {
     alignSelf: 'flex-end', width: 28, height: 28, borderRadius: 14,
-    backgroundColor: 'rgba(255,255,255,0.15)',
+    backgroundColor: 'rgba(255,255,255,0.18)',
     alignItems: 'center', justifyContent: 'center', marginBottom: 10,
   },
   closeBtnText: { color: COLORS.white, fontSize: 14, fontWeight: '700' },
   body: { flexDirection: isMobile ? 'column' : 'row', gap: 12 },
+
+  /* ── Left: Calendar panel ── */
   calPanel: {
     flex: isMobile ? undefined : 1,
     backgroundColor: COLORS.white, borderRadius: 14,
-    padding: isMobile ? 14 : 18,
+    padding: isMobile ? 12 : 16,
   },
-  calNav: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 },
+  calNav: {
+    flexDirection: 'row', alignItems: 'center',
+    justifyContent: 'space-between', marginBottom: 16,
+  },
   navBtn: {
-    width: 34, height: 34, borderRadius: 17,
-    borderWidth: 1.5, borderColor: '#bbb', backgroundColor: '#f0f0f0',
+    width: 32, height: 32, borderRadius: 16,
+    borderWidth: 1.5, borderColor: '#bbb',
+    backgroundColor: '#f0f0f0',
     alignItems: 'center', justifyContent: 'center',
   },
-  navArrow: { fontSize: 20, color: '#333', lineHeight: 22, marginTop: -2 },
-  monthLabel: { fontSize: isMobile ? 17 : 20, fontWeight: '700', color: '#111' },
+  navArrow: { fontSize: 20, color: COLORS.navy, lineHeight: 22, marginTop: -2 },
+  monthLabel: {
+    fontSize: isMobile ? 13 : 15, fontWeight: '800',
+    color: COLORS.navy, letterSpacing: 1, textAlign: 'center',
+  },
   grid: { flexDirection: 'row', flexWrap: 'wrap' },
-  dowCell: { width: `${100 / 7}%`, alignItems: 'center', paddingBottom: 8 },
-  dowText: { fontSize: 10, fontWeight: '600', color: '#888', letterSpacing: 0.5 },
+  dowCell: { width: `${100 / 7}%`, alignItems: 'center', paddingBottom: 6 },
+  dowText: { fontSize: 10, fontWeight: '700', color: '#888', letterSpacing: 0.5 },
+
+  dayCellWrap: { width: `${100 / 7}%`, position: 'relative', marginBottom: 4 },
   dayCell: {
-    width: `${100 / 7}%`, aspectRatio: 1,
-    alignItems: 'center', justifyContent: 'center',
-    borderRadius: 8, marginBottom: 4, backgroundColor: '#e8e8e8',
+    flex: 1, minHeight: isMobile ? 40 : 50,
+    alignItems: 'center', justifyContent: 'flex-start', paddingTop: 5,
+    borderRadius: 8, backgroundColor: '#e8eaf0',
+    marginHorizontal: 1,
   },
   dayCellGhost: { backgroundColor: 'transparent' },
-  dayCellGold: { backgroundColor: COLORS.calGold },
-  dayText: { fontSize: isMobile ? 13 : 14, fontWeight: '600', color: '#222' },
-  dayTextGhost: { color: '#bbb' },
-  dayTextGold: { color: COLORS.white },
+  dayCellToday: { backgroundColor: COLORS.calGold },
+  dayCellDeadline: { backgroundColor: COLORS.calGold },
+  dayText: { fontSize: isMobile ? 12 : 13, fontWeight: '700', color: COLORS.navy },
+  dayTextGhost: { color: '#ccc' },
+  dayTextToday: { color: COLORS.white },
+  dayTextDeadline: { color: COLORS.white },
+  dayCellSub: {
+    fontSize: 7, color: '#666',
+    textAlign: 'center', lineHeight: 9, marginTop: 2,
+  },
+
+  /* Tooltip popover */
+  tooltip: {
+    position: 'absolute', top: '110%', left: '-20%', right: '-120%',
+    zIndex: 99, backgroundColor: COLORS.white, borderRadius: 8,
+    padding: 8, elevation: 10,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.2, shadowRadius: 6,
+  },
+  tooltipTitle: { fontSize: 11, fontWeight: '700', color: COLORS.navy, lineHeight: 15 },
+
+  /* ── Right: Annual Compliance Timeline panel ── */
   sidePanel: {
-    width: isMobile ? '100%' : 205,
+    width: isMobile ? '100%' : 220,
     backgroundColor: COLORS.white, borderRadius: 14,
-    padding: 16, minHeight: isMobile ? undefined : 340,
+    overflow: 'hidden',
+    maxHeight: isMobile ? 300 : 420,
   },
-  sideHeader: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 4, gap: 6 },
-  selDateText: { fontSize: 15, fontWeight: '700', color: COLORS.navy, flexShrink: 1 },
-  todayLabel: { fontSize: 12, fontWeight: '700', color: COLORS.navy, marginBottom: 10, marginTop: 1 },
-  badge: {
-    backgroundColor: COLORS.calGold, borderRadius: 20,
-    paddingHorizontal: 8, paddingVertical: 3, alignSelf: 'flex-start', flexShrink: 0,
+  sidePanelHeader: {
+    backgroundColor: COLORS.navy, paddingHorizontal: 14, paddingVertical: 12,
+    alignItems: 'center',
   },
-  badgeText: { color: COLORS.white, fontSize: 10, fontWeight: '700' },
-  sectionTitle: { fontSize: 12, fontWeight: '700', color: COLORS.navy, marginBottom: 5 },
-  input: {
-    borderWidth: 1.5, borderColor: '#d0d8e8', borderRadius: 8,
-    paddingHorizontal: 10, paddingVertical: 7,
-    fontSize: 12, color: COLORS.navy, backgroundColor: COLORS.white, marginBottom: 3,
+  sidePanelTitle: {
+    fontSize: 12, fontWeight: '800', color: COLORS.white,
+    textAlign: 'center', letterSpacing: 0.8, lineHeight: 17,
   },
-  evtDateLbl: { fontSize: 11, color: '#6a8bc0', marginBottom: 8 },
-  divider: { borderTopWidth: 1, borderTopColor: '#e0e8f0', marginVertical: 10 },
+
+  /* Timeline rows */
+  timelineRow: {
+    flexDirection: 'row', alignItems: 'center',
+    paddingHorizontal: 12, paddingVertical: 7,
+    borderBottomWidth: 1, borderBottomColor: '#eef0f5', gap: 8,
+  },
+  timelineRowHighlight: {
+    borderWidth: 1.5, borderColor: COLORS.calGold,
+    borderRadius: 8, marginHorizontal: 6, marginVertical: 2,
+    backgroundColor: '#fffdf6',
+  },
+  timelineDot: {
+    width: 8, height: 8, borderRadius: 4,
+    backgroundColor: COLORS.navy, flexShrink: 0,
+  },
+  timelineDotHighlight: { backgroundColor: COLORS.calGold },
+  timelineMonth: { fontSize: 10, fontWeight: '700', color: COLORS.navy, width: 38, flexShrink: 0 },
+  timelineMonthHighlight: { color: COLORS.calGold },
+  timelineLabel: { flex: 1, fontSize: 10, color: '#444', lineHeight: 14 },
+  timelineLabelHighlight: { fontWeight: '700', color: COLORS.navy },
+
+  /* Time row */
   timeRow: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    borderTopWidth: 1, borderTopColor: '#e0e8f0', paddingTop: 10, marginTop: 8,
+    borderTopWidth: 1, borderTopColor: '#e0e8f0',
+    paddingHorizontal: 12, paddingVertical: 9,
   },
-  timeLabel: { fontSize: 13, fontWeight: '700', color: COLORS.navy },
+  timeLabel: { fontSize: 12, fontWeight: '700', color: COLORS.navy },
   timeBtn: {
     backgroundColor: '#e8eaf5', borderWidth: 1.5, borderColor: '#c8d0e8',
-    borderRadius: 8, paddingHorizontal: 12, paddingVertical: 6,
+    borderRadius: 8, paddingHorizontal: 12, paddingVertical: 5,
   },
   timeBtnText: { fontSize: 12, fontWeight: '700', color: COLORS.navy },
 });
