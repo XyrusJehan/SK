@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View, Text, TextInput, ScrollView, TouchableOpacity,
   StyleSheet, SafeAreaView, StatusBar, Dimensions,
@@ -7,6 +7,7 @@ import {
 import { useRouter } from 'expo-router';
 import { useNav } from './navContext';
 import { useAuth } from './authContext';
+import { supabase } from '../../utils/supabase';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const isMobile = SCREEN_WIDTH < 768;
@@ -41,20 +42,10 @@ const DOCUMENT_FILTERS = [
 const YEAR_FILTERS = ['All Years', '2026', '2025', '2024'];
 
 // ─── PUBLISHED DOCUMENTS ─────────────────────────────────────────────────────
-const PUBLISHED_DOCS = [
-  { id: 'p1', title: 'Comprehensive Barangay Youth Development Plan (CBYDP) 2026', category: 'Planning', year: '2026', uploadedAt: 'April 21, 2026' },
-  { id: 'p2', title: 'Annual Barangay Youth Investment Program (ABYIP) 2026',      category: 'Planning', year: '2026', uploadedAt: 'April 21, 2026' },
-  { id: 'p3', title: 'Approved Annual Budget 2026',                                category: 'Budget',   year: '2026', uploadedAt: 'April 15, 2026' },
-  { id: 'p4', title: 'Comprehensive Barangay Youth Development Plan (CBYDP) 2026', category: 'Planning', year: '2026', uploadedAt: 'April 10, 2026' },
-  { id: 'p5', title: 'Quarterly Register of Cash in Bank (RCB)',                   category: 'Financial',year: '2026', uploadedAt: 'April 5, 2026'  },
-];
+// (Data now fetched from Supabase based on barangay_id)
 
 // ─── FEEDBACK DATA ────────────────────────────────────────────────────────────
-const FEEDBACK_ITEMS = [
-  { id: 'f1', name: 'Juan Dela Cruz',    comment: 'The CBYDP looks comprehensive. Great work!',    date: 'April 22, 2026', status: 'New' },
-  { id: 'f2', name: 'Maria Santos',      comment: 'Can we get an updated version of the Annual Budget?', date: 'April 20, 2026', status: 'Read' },
-  { id: 'f3', name: 'Pedro Reyes',       comment: 'Budget allocation for sports programs is noted.', date: 'April 18, 2026', status: 'Read' },
-];
+// (Data now fetched from Supabase based on barangay_id)
 
 // ─── ICONS ────────────────────────────────────────────────────────────────────
 const BellIcon = ({ hasNotif }) => (
@@ -113,7 +104,11 @@ const FeedbackRow = ({ item, idx }) => (
 export default function SKPortalScreen() {
   const router = useRouter();
   const { activeTab, setActiveTab } = useNav();
-  const { logout } = useAuth();
+  const { logout, user } = useAuth();
+
+  // Get user's barangay from auth context
+  const barangayName = user?.barangay?.barangay_name || 'Unknown Barangay';
+  const barangayId = user?.barangayId;
 
   const [activePortalTab, setActivePortalTab] = useState('Published');
   const [docFilter, setDocFilter]             = useState('All Documents');
@@ -132,6 +127,98 @@ export default function SKPortalScreen() {
   const [uploadYear, setUploadYear]             = useState('');
   const [showUploadCatDropdown, setShowUploadCatDropdown] = useState(false);
   const [showUploadYearDropdown, setShowUploadYearDropdown] = useState(false);
+  const [publishedDocs, setPublishedDocs] = useState([]);
+  const [feedbackItems, setFeedbackItems] = useState([]);
+
+  // Fetch published documents for this barangay
+  useEffect(() => {
+    const fetchPublishedDocs = async () => {
+      if (!barangayId) return;
+
+      try {
+        const { data: docs, error } = await supabase
+          .from('website_posts')
+          .select('*')
+          .eq('barangay_id', barangayId)
+          .eq('portal_status', 'published')
+          .order('published_at', { ascending: false });
+
+        if (error) {
+          console.error('Error fetching published docs:', error);
+          return;
+        }
+
+        const formattedDocs = docs?.map(doc => ({
+          id: doc.website_post_id,
+          title: doc.title || 'Untitled',
+          category: doc.document_category || 'Unknown',
+          year: doc.year || new Date(doc.published_at).getFullYear().toString(),
+          uploadedAt: new Date(doc.published_at).toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' }),
+        })) || [];
+
+        setPublishedDocs(formattedDocs);
+      } catch (error) {
+        console.error('Error:', error);
+      }
+    };
+
+    fetchPublishedDocs();
+  }, [barangayId]);
+
+  // Fetch feedback for this barangay's posts
+  useEffect(() => {
+    const fetchFeedback = async () => {
+      if (!barangayId) return;
+
+      try {
+        // First get website posts for this barangay
+        const { data: posts } = await supabase
+          .from('website_posts')
+          .select('website_post_id')
+          .eq('barangay_id', barangayId);
+
+        if (!posts || posts.length === 0) return;
+
+        const postIds = posts.map(p => p.website_post_id);
+
+        // Then get comments for these posts
+        const { data: comments, error } = await supabase
+          .from('resident_comments')
+          .select(`
+            comment_id,
+            content,
+            created_at,
+            is_read,
+            resident_id,
+            users (
+              first_name,
+              last_name
+            )
+          `)
+          .in('website_post_id', postIds)
+          .order('created_at', { ascending: false });
+
+        if (error) {
+          console.error('Error fetching feedback:', error);
+          return;
+        }
+
+        const formattedFeedback = comments?.map(c => ({
+          id: c.comment_id,
+          name: `${c.users?.first_name || 'Unknown'} ${c.users?.last_name || 'User'}`,
+          comment: c.content,
+          date: new Date(c.created_at).toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' }),
+          status: c.is_read ? 'Read' : 'New',
+        })) || [];
+
+        setFeedbackItems(formattedFeedback);
+      } catch (error) {
+        console.error('Error:', error);
+      }
+    };
+
+    fetchFeedback();
+  }, [barangayId]);
 
   const handleNavPress = (tab) => {
     setActiveTab(tab);
@@ -145,8 +232,9 @@ export default function SKPortalScreen() {
 
   const handleDocPress = (doc) => { setSelectedDoc(doc); setShowDocModal(true); };
 
-  // Filter published docs
-  const filteredDocs = PUBLISHED_DOCS.filter(d => {
+  // Filter published docs - use fetched data if available, fallback to mock data
+  const activeDocs = publishedDocs;
+  const filteredDocs = activeDocs.filter(d => {
     const matchesDoc  = docFilter === 'All Documents' || d.title.includes(docFilter.replace(' 2026','').trim());
     const matchesYear = yearFilter === 'All Years' || d.year === yearFilter;
     const matchesSearch = d.title.toLowerCase().includes(searchText.toLowerCase());
@@ -458,7 +546,7 @@ export default function SKPortalScreen() {
         <View style={styles.header}>
           <View style={{ flex: 1 }}>
             <Text style={styles.headerSub}>SANGGUNIANG KABATAAN</Text>
-            <Text style={styles.headerTitle}>BARANGAY SAN JOSE</Text>
+            <Text style={styles.headerTitle}>{barangayName.toUpperCase()}</Text>
             <Text style={styles.headerDocLabel}>Portal and Post Managemnet</Text>
           </View>
           <View style={styles.headerRight}>
@@ -615,7 +703,7 @@ export default function SKPortalScreen() {
         <>
           {/* Header row */}
           <View style={styles.feedbackHeaderRow}>
-            <Text style={styles.feedbackCount}>{FEEDBACK_ITEMS.length} feedback received</Text>
+            <Text style={styles.feedbackCount}>{feedbackItems.length} feedback received</Text>
             <View style={styles.searchBox}>
               <Text style={{ fontSize: 12, color: COLORS.midGray, marginRight: 4 }}>🔍</Text>
               <TextInput
@@ -628,10 +716,10 @@ export default function SKPortalScreen() {
 
           {/* Feedback list */}
           <View style={styles.feedbackCard}>
-            {FEEDBACK_ITEMS.map((item, idx) => (
+            {feedbackItems.map((item, idx) => (
               <React.Fragment key={item.id}>
                 <FeedbackRow item={item} idx={idx} />
-                {idx < FEEDBACK_ITEMS.length - 1 && <View style={styles.cardDivider} />}
+                {idx < feedbackItems.length - 1 && <View style={styles.cardDivider} />}
               </React.Fragment>
             ))}
           </View>

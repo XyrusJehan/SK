@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View, Text, TextInput, ScrollView, TouchableOpacity,
   StyleSheet, SafeAreaView, StatusBar, Dimensions,
@@ -7,6 +7,7 @@ import {
 import { useRouter } from 'expo-router';
 import { useNav } from './navContext';
 import { useAuth } from './authContext';
+import { supabase } from '../../utils/supabase';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const isMobile = SCREEN_WIDTH < 768;
@@ -30,13 +31,8 @@ const NAV_TABS      = ['Dashboard', 'Documents', 'Planning', 'Portal'];
 const PLANNING_TABS = ['Templates', 'Budget'];
 
 // ─── BUDGET DATA ──────────────────────────────────────────────────────────────
-const BUDGET_DATA = [
-  { id: '1', barangay: 'Barangay San Jose',      budget: 235000, action: 'formulate' },
-  { id: '2', barangay: 'Barangay San Roque',     budget: 235000, action: 'readonly' },
-  { id: '3', barangay: 'Barangay Apasan',        budget: 235000, action: 'readonly' },
-  { id: '4', barangay: 'Barangay Mamala',        budget: 235000, action: 'readonly' },
-  { id: '5', barangay: 'Barangay Ilayang Owain', budget: 235000, action: 'readonly' },
-];
+// (Data now fetched from Supabase based on barangay_id)
+const BUDGET_DATA = [];
 
 const EMPTY_ROWS = 4; // filler rows at bottom
 
@@ -66,11 +62,49 @@ const ExternalLinkIcon = () => (
 export default function SKPlanningBudgetScreen() {
   const router = useRouter();
   const { activeTab, setActiveTab } = useNav();
-  const { logout } = useAuth();
+  const { logout, user } = useAuth();
+
+  // Get user's barangay from auth context
+  const barangayName = user?.barangay?.barangay_name || 'Unknown Barangay';
+  const barangayId = user?.barangayId;
 
   const [searchText, setSearchText]         = useState('');
   const [notifCount]                        = useState(2);
   const [sidebarVisible, setSidebarVisible] = useState(false);
+  const [budgetData, setBudgetData]        = useState([]);
+
+  // Fetch budget allocations for this barangay
+  useEffect(() => {
+    const fetchBudget = async () => {
+      if (!barangayId) return;
+
+      try {
+        const { data: budget, error } = await supabase
+          .from('budget_allocations')
+          .select('*')
+          .eq('barangay_id', barangayId)
+          .order('fiscal_year', { ascending: false });
+
+        if (error) {
+          console.error('Error fetching budget:', error);
+          return;
+        }
+
+        const formattedBudget = budget?.map(b => ({
+          id: b.allocation_id?.toString() || '1',
+          barangay: barangayName,
+          budget: b.allocated_amount || 0,
+          action: 'readonly',
+        })) || [];
+
+        setBudgetData(formattedBudget);
+      } catch (error) {
+        console.error('Error:', error);
+      }
+    };
+
+    fetchBudget();
+  }, [barangayId, barangayName]);
 
   const handleNavPress = (tab) => {
     setActiveTab(tab);
@@ -152,7 +186,7 @@ export default function SKPlanningBudgetScreen() {
         <View style={styles.header}>
           <View style={{ flex: 1 }}>
             <Text style={styles.headerSub}>SANGGUNIANG KABATAAN</Text>
-            <Text style={styles.headerTitle}>BARANGAY SAN JOSE</Text>
+            <Text style={styles.headerTitle}>{barangayName.toUpperCase()}</Text>
             <Text style={styles.headerDocLabel}>Template and Budget Reference Documents</Text>
           </View>
           <TouchableOpacity style={styles.bellBtn} activeOpacity={0.7}>

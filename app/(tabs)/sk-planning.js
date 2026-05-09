@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   View, Text, TextInput, ScrollView, TouchableOpacity,
   StyleSheet, SafeAreaView, StatusBar, Dimensions,
@@ -7,6 +7,7 @@ import {
 import { useRouter } from 'expo-router';
 import { useNav } from './navContext';
 import { useAuth } from './authContext';
+import { supabase } from '../../utils/supabase';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const isMobile = SCREEN_WIDTH < 768;
@@ -77,22 +78,8 @@ const TEMPLATE_SECTIONS = [
   },
 ];
 
-// ─── ALL TEMPLATES — flat table data (shown when "All" filter is active) ─────
-const ALL_TEMPLATES = [
-  { id: 'a1', name: 'Comprehensive Barangay Youth Development Plan', type: 'Planning',  source: 'LYDO', dateReceived: 'April 21, 2026' },
-  { id: 'a2', name: 'Annual Barangay Youth Investment Program',       type: 'Planning',  source: 'LYDO', dateReceived: 'April 21, 2026' },
-  { id: 'a3', name: 'Registry of Cash Receipts and Deposits',         type: 'Planning',  source: 'LYDO', dateReceived: 'April 21, 2026' },
-  { id: 'a4', name: 'Monthly Itemized List',                          type: 'Financial', source: 'LYDO', dateReceived: 'April 21, 2026' },
-  { id: 'a5', name: 'Comprehensive Barangay Youth Development Plan',  type: 'Planning',  source: 'LYDO', dateReceived: 'April 21, 2026' },
-  { id: 'a6', name: 'SK PPA Template',                                type: 'Planning',  source: 'LYDO', dateReceived: 'April 21, 2026' },
-  { id: 'a7', name: 'Program of Work',                                type: 'Planning',  source: 'LYDO', dateReceived: 'April 21, 2026' },
-  { id: 'a8', name: 'Approved Annual Budget',                         type: 'Budgeting', source: 'LYDO', dateReceived: 'April 21, 2026' },
-  { id: 'a9', name: 'SK Supplemental Budget',                         type: 'Budgeting', source: 'LYDO', dateReceived: 'April 21, 2026' },
-  { id:'a10', name: 'Registry of Cash Disbursements',                 type: 'Financial', source: 'LYDO', dateReceived: 'April 21, 2026' },
-  { id:'a11', name: 'Quarterly Financial Reports',                    type: 'Financial', source: 'LYDO', dateReceived: 'April 21, 2026' },
-  { id:'a12', name: 'Barangay Youth Investment Monitoring Form',       type: 'Monitoring',source: 'LYDO', dateReceived: 'April 21, 2026' },
-  { id:'a13', name: 'Monthly/Quarterly Accomplishment Report',         type: 'Monitoring',source: 'LYDO', dateReceived: 'April 21, 2026' },
-];
+// ─── ALL TEMPLATES — (now fetched from Supabase based on barangay_id) ─────
+// (Data fetched via useEffect)
 
 // ─── ICONS ────────────────────────────────────────────────────────────────────
 const BellIcon = ({ hasNotif }) => (
@@ -163,7 +150,11 @@ const TemplateSection = ({ section, onEdit }) => {
 export default function SKPlanningScreen() {
   const router = useRouter();
   const { activeTab, setActiveTab } = useNav();
-  const { logout } = useAuth();
+  const { logout, user } = useAuth();
+
+  // Get user's barangay from auth context
+  const barangayName = user?.barangay?.barangay_name || 'Unknown Barangay';
+  const barangayId = user?.barangayId;
 
   const [activePlanningTab, setActivePlanningTab] = useState('Templates');
   const [searchText, setSearchText]               = useState('');
@@ -172,6 +163,83 @@ export default function SKPlanningScreen() {
   const [sidebarVisible, setSidebarVisible]       = useState(false);
   const [selectedItem, setSelectedItem]           = useState(null);
   const [showEditModal, setShowEditModal]         = useState(false);
+  const [templates, setTemplates]                = useState([]);
+  const [budgetData, setBudgetData]               = useState(null);
+
+  // Fetch templates distributed to this barangay
+  useEffect(() => {
+    const fetchTemplates = async () => {
+      if (!barangayId) return;
+
+      try {
+        // Get templates distributed to this barangay
+        const { data: distributions, error } = await supabase
+          .from('template_distributions')
+          .select(`
+            distributed_at,
+            is_acknowledged,
+            template_id,
+            templates (
+              template_id,
+              title,
+              description,
+              template_category,
+              document_type,
+              status,
+              created_at
+            )
+          `)
+          .eq('barangay_id', barangayId);
+
+        if (error) {
+          console.error('Error fetching templates:', error);
+          return;
+        }
+
+        const formattedTemplates = distributions?.map(d => ({
+          id: d.templates?.template_id,
+          name: d.templates?.title || 'Untitled Template',
+          type: d.templates?.template_category || 'Unknown',
+          source: 'LYDO',
+          dateReceived: new Date(d.templates?.created_at || d.distributed_at).toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' }),
+        })) || [];
+
+        setTemplates(formattedTemplates);
+      } catch (error) {
+        console.error('Error:', error);
+      }
+    };
+
+    fetchTemplates();
+  }, [barangayId]);
+
+  // Fetch budget allocation for this barangay
+  useEffect(() => {
+    const fetchBudget = async () => {
+      if (!barangayId) return;
+
+      try {
+        const { data: budget, error } = await supabase
+          .from('budget_allocations')
+          .select('*')
+          .eq('barangay_id', barangayId)
+          .order('fiscal_year', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (error) {
+          console.error('Error fetching budget:', error);
+          return;
+        }
+
+        setBudgetData(budget);
+      } catch (error) {
+        console.error('Error:', error);
+      }
+    };
+
+    fetchBudget();
+  }, [barangayId]);
 
   const handleNavPress = (tab) => {
     setActiveTab(tab);
@@ -310,7 +378,7 @@ export default function SKPlanningScreen() {
         <View style={styles.header}>
           <View style={{ flex: 1 }}>
             <Text style={styles.headerSub}>SANGGUNIANG KABATAAN</Text>
-            <Text style={styles.headerTitle}>BARANGAY SAN JOSE</Text>
+            <Text style={styles.headerTitle}>{barangayName.toUpperCase()}</Text>
             <Text style={styles.headerDocLabel}>Template and Budget Reference Documents</Text>
           </View>
           <View style={styles.headerRight}>
@@ -402,7 +470,7 @@ export default function SKPlanningScreen() {
                 <Text style={[styles.thText, styles.colDate]}>Date Received</Text>
               </View>
               {/* Table Rows */}
-              {ALL_TEMPLATES
+              {templates
                 .filter(t => t.name.toLowerCase().includes(searchText.toLowerCase()))
                 .map((t, idx) => (
                   <TouchableOpacity
@@ -416,10 +484,9 @@ export default function SKPlanningScreen() {
                     <Text style={[styles.tdCell, styles.colSource]}>{t.source}</Text>
                     <Text style={[styles.tdCell, styles.colDate]}>{t.dateReceived}</Text>
                   </TouchableOpacity>
-                ))
-              }
-              {/* Empty filler rows to match screenshot */}
-              {Array(Math.max(0, 4 - ALL_TEMPLATES.filter(t =>
+                ))}
+              {/* Empty filler rows */}
+              {Array(Math.max(0, 4 - templates.filter(t =>
                 t.name.toLowerCase().includes(searchText.toLowerCase())).length
               )).fill(null).map((_, i) => (
                 <View key={`empty-${i}`} style={[styles.tableRow, styles.tableRowEmpty]} />
