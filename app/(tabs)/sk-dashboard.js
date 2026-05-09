@@ -51,6 +51,14 @@ const ACTIVITIES = [
   },
 ];
 
+// ─── DOC STATS ────────────────────────────────────────────────────────────────
+const DOC_STATS = [
+  { id: 'total',     label: 'Total Documents', value: 48, icon: '🗂️',  color: '#133E75', light: '#E3EDF9' },
+  { id: 'published', label: 'Published',        value: 31, icon: '✅',  color: '#1A6B38', light: '#E8F5E9' },
+  { id: 'drafts',    label: 'Drafts',            value: 12, icon: '📝',  color: '#A04010', light: '#FDF2EA' },
+  { id: 'archived',  label: 'Archived',          value: 5,  icon: '🗃️', color: '#5A2EA0', light: '#F2EEF9' },
+];
+
 // ─── ICON COMPONENTS ───────────────────────────────────────────────────────────
 const BellIcon = ({ hasNotif }) => (
   <View style={styles.bellWrapper}>
@@ -240,14 +248,32 @@ export default function HomeScreen({ navigation }) {
               <Text style={styles.headerTitle}>{barangayName.toUpperCase()}</Text>
             </View>
             {!isMobile && (
-              <TouchableOpacity style={styles.bellBtn} activeOpacity={0.7}>
-                <BellIcon hasNotif={notifCount > 0} />
-                {notifCount > 0 && (
-                  <View style={styles.notifBadge}>
-                    <Text style={styles.notifBadgeText}>{notifCount}</Text>
+              <View style={styles.headerActions}>
+                {/* Notification */}
+                <TouchableOpacity style={styles.headerActionBtn} activeOpacity={0.7}>
+                  <View style={{ position: 'relative' }}>
+                    <BellIcon hasNotif={notifCount > 0} />
+                    {notifCount > 0 && (
+                      <View style={styles.notifBadge}>
+                        <Text style={styles.notifBadgeText}>{notifCount}</Text>
+                      </View>
+                    )}
                   </View>
-                )}
-              </TouchableOpacity>
+                  <Text style={styles.headerActionLabel}>Notification</Text>
+                </TouchableOpacity>
+
+                {/* View Calendar */}
+                <TouchableOpacity style={styles.headerActionBtn} activeOpacity={0.7}>
+                  <Text style={styles.headerActionIcon}>📅</Text>
+                  <Text style={styles.headerActionLabel}>View Calendar</Text>
+                </TouchableOpacity>
+
+                {/* Archives */}
+                <TouchableOpacity style={[styles.headerActionBtn, styles.archivesBtn]} activeOpacity={0.7}>
+                  <Text style={styles.headerActionIcon}>🗃️</Text>
+                  <Text style={[styles.headerActionLabel, styles.archivesBtnText]}>Archives</Text>
+                </TouchableOpacity>
+              </View>
             )}
           </View>
 
@@ -261,6 +287,24 @@ export default function HomeScreen({ navigation }) {
               value={searchText}
               onChangeText={setSearchText}
             />
+          </View>
+
+          {/* ── STAT COUNTERS ── */}
+          <View style={styles.statsRow}>
+            {DOC_STATS.map((stat) => (
+              <View
+                key={stat.id}
+                style={[styles.statCard, { backgroundColor: stat.light, borderLeftColor: stat.color }]}
+              >
+                <View style={[styles.statIconWrap, { backgroundColor: stat.color }]}>
+                  <Text style={styles.statIcon}>{stat.icon}</Text>
+                </View>
+                <View style={styles.statInfo}>
+                  <Text style={[styles.statValue, { color: stat.color }]}>{stat.value}</Text>
+                  <Text style={styles.statLabel}>{stat.label}</Text>
+                </View>
+              </View>
+            ))}
           </View>
 
           {/* ── TASKS CARD ── */}
@@ -817,5 +861,84 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: COLORS.subText,
     marginTop: 1,
+  },
+
+  // ── Header right-side actions ──
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  headerActionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingVertical: 7,
+    paddingHorizontal: 12,
+    borderRadius: 20,
+    backgroundColor: COLORS.cardBg,
+    borderWidth: 1,
+    borderColor: COLORS.lightGray,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  archivesBtn: {
+    backgroundColor: '#133E75',
+    borderColor: '#133E75',
+  },
+  headerActionIcon: { fontSize: 16 },
+  headerActionLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: COLORS.darkText,
+  },
+  archivesBtnText: { color: COLORS.white },
+
+  // ── Stat counters ──
+  statsRow: {
+    flexDirection: isMobile ? 'column' : 'row',
+    gap: 12,
+    marginBottom: 20,
+  },
+  statCard: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    borderRadius: 14,
+    paddingVertical: 14,
+    paddingHorizontal: 14,
+    borderLeftWidth: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.07,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  statIconWrap: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  statIcon: { fontSize: 20 },
+  statInfo: { flex: 1 },
+  statValue: {
+    fontSize: isMobile ? 26 : 30,
+    fontWeight: '900',
+    lineHeight: isMobile ? 30 : 34,
+    letterSpacing: -0.5,
+  },
+  statLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: COLORS.subText,
+    marginTop: 2,
+    letterSpacing: 0.2,
   },
 });
