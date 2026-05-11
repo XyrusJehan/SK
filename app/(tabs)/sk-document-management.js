@@ -115,75 +115,116 @@ export default function SKDocumentManagementScreen() {
   const [documentToDelete, setDocumentToDelete] = useState(null);
   const [deleting, setDeleting] = useState(false);
 
-  // Fetch documents for this barangay - auto-fetch on screen focus
+  // Fetch documents for this barangay - reusable function
+  const fetchDocuments = useCallback(async () => {
+    if (!barangayId) {
+      console.log('No barangayId found, user:', user);
+      return;
+    }
+
+    try {
+      // Fetch documents with submitted_by
+      const { data: docs, error } = await supabase
+        .from('documents')
+        .select('document_id, title, folder_category, document_type, status, year, created_at, submitted_by')
+        .eq('barangay_id', barangayId)
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error('Error fetching documents:', error);
+        return;
+      }
+
+      // Get all user IDs to fetch
+      const userIds = [...new Set((docs || []).map(d => d.submitted_by).filter(Boolean))];
+
+      // Fetch users in one call
+      let usersMap = {};
+      if (userIds.length > 0) {
+        const { data: users } = await supabase
+          .from('users')
+          .select('user_id, first_name, last_name')
+          .in('user_id', userIds);
+
+        usersMap = (users || []).reduce((acc, u) => {
+          acc[u.user_id] = `${u.first_name} ${u.last_name}`;
+          return acc;
+        }, {});
+      }
+
+      // Fetch document versions for each document
+      const formattedDocs = await Promise.all((docs || []).map(async doc => {
+        // Get latest version
+        const { data: versions } = await supabase
+          .from('document_versions')
+          .select('version_id, file_url, created_at')
+          .eq('document_id', doc.document_id)
+          .order('version_number', { ascending: false })
+          .limit(1);
+
+        return {
+          id: doc.document_id,
+          title: doc.title || 'Untitled',
+          type: doc.document_type || 'Unknown',
+          category: doc.folder_category || 'planning',
+          status: doc.status || 'draft',
+          year: doc.year,
+          createdBy: usersMap[doc.submitted_by] || 'Unknown',
+          lastModified: doc.created_at || new Date().toISOString(),
+          fileUrl: versions?.[0]?.file_url || null,
+        };
+      }));
+
+      setDocuments(formattedDocs);
+    } catch (error) {
+      console.error('Error:', error);
+    }
+  }, [barangayId, supabase, user]);
+
+  // Auto-fetch on screen focus - always fetch fresh data
   useFocusEffect(
     useCallback(() => {
-      const fetchDocuments = async () => {
-        if (!barangayId) {
-          console.log('No barangayId found, user:', user);
-          return;
+      (async () => {
+        if (!barangayId) return;
+
+        const { data: docs } = await supabase
+          .from('documents')
+          .select('document_id, title, folder_category, document_type, status, year, created_at, submitted_by')
+          .eq('barangay_id', barangayId)
+          .order('created_at', { ascending: false });
+
+        if (!docs) return;
+
+        const userIds = [...new Set(docs.map(d => d.submitted_by).filter(Boolean))];
+        let usersMap = {};
+        if (userIds.length > 0) {
+          const { data: users } = await supabase.from('users').select('user_id, first_name, last_name').in('user_id', userIds);
+          usersMap = (users || []).reduce((acc, u) => { acc[u.user_id] = `${u.first_name} ${u.last_name}`; return acc; }, {});
         }
 
-        try {
-          // Fetch documents with submitted_by
-          const { data: docs, error } = await supabase
-            .from('documents')
-            .select('document_id, title, folder_category, document_type, status, year, created_at, submitted_by')
-            .eq('barangay_id', barangayId)
-            .order('created_at', { ascending: false });
+        const formattedDocs = await Promise.all(docs.map(async doc => {
+          const { data: versions } = await supabase
+            .from('document_versions')
+            .select('version_id, file_url, created_at')
+            .eq('document_id', doc.document_id)
+            .order('version_number', { ascending: false })
+            .limit(1);
 
-          if (error) {
-            console.error('Error fetching documents:', error);
-            return;
-          }
+          return {
+            id: doc.document_id,
+            title: doc.title || 'Untitled',
+            type: doc.document_type || 'Unknown',
+            category: doc.folder_category || 'planning',
+            status: doc.status || 'draft',
+            year: doc.year,
+            createdBy: usersMap[doc.submitted_by] || 'Unknown',
+            lastModified: doc.created_at || new Date().toISOString(),
+            fileUrl: versions?.[0]?.file_url || null,
+          };
+        }));
 
-          // Get all user IDs to fetch
-          const userIds = [...new Set((docs || []).map(d => d.submitted_by).filter(Boolean))];
-
-          // Fetch users in one call
-          let usersMap = {};
-          if (userIds.length > 0) {
-            const { data: users } = await supabase
-              .from('users')
-              .select('user_id, first_name, last_name')
-              .in('user_id', userIds);
-
-            usersMap = (users || []).reduce((acc, u) => {
-              acc[u.user_id] = `${u.first_name} ${u.last_name}`;
-              return acc;
-            }, {});
-          }
-
-          // Fetch document versions for each document
-          const formattedDocs = await Promise.all((docs || []).map(async doc => {
-            // Get latest version
-            const { data: versions } = await supabase
-              .from('document_versions')
-              .select('version_id, file_url, created_at')
-              .eq('document_id', doc.document_id)
-              .order('version_number', { ascending: false })
-              .limit(1);
-
-            return {
-              id: doc.document_id,
-              title: doc.title || 'Untitled',
-              type: doc.document_type || 'Unknown',
-              category: doc.folder_category || 'planning',
-              status: doc.status || 'draft',
-              year: doc.year,
-              createdBy: usersMap[doc.submitted_by] || 'Unknown',
-              lastModified: doc.created_at || new Date().toISOString(),
-              fileUrl: versions?.[0]?.file_url || null,
-            };
-          }));
-
-          setDocuments(formattedDocs);
-        } catch (error) {
-          console.error('Error:', error);
-        }
-      };
-
-      fetchDocuments();
+        setDocuments(formattedDocs);
+      })();
     }, [barangayId])
   );
 
@@ -231,16 +272,54 @@ export default function SKDocumentManagementScreen() {
         return;
       }
 
-      // Update local state
-      setDocuments(prev => prev.filter(d => d.id !== documentToDelete.id));
       setDeleteModalVisible(false);
       setDocumentToDelete(null);
+
+      // Force refresh by directly fetching fresh data
+      const { data: docs } = await supabase
+        .from('documents')
+        .select('document_id, title, folder_category, document_type, status, year, created_at, submitted_by')
+        .eq('barangay_id', barangayId)
+        .order('created_at', { ascending: false });
+
+      if (docs) {
+        const userIds = [...new Set(docs.map(d => d.submitted_by).filter(Boolean))];
+        let usersMap = {};
+        if (userIds.length > 0) {
+          const { data: users } = await supabase.from('users').select('user_id, first_name, last_name').in('user_id', userIds);
+          usersMap = (users || []).reduce((acc, u) => { acc[u.user_id] = `${u.first_name} ${u.last_name}`; return acc; }, {});
+        }
+
+        const formattedDocs = await Promise.all(docs.map(async doc => {
+          const { data: versions } = await supabase
+            .from('document_versions')
+            .select('version_id, file_url, created_at')
+            .eq('document_id', doc.document_id)
+            .order('version_number', { ascending: false })
+            .limit(1);
+
+          return {
+            id: doc.document_id,
+            title: doc.title || 'Untitled',
+            type: doc.document_type || 'Unknown',
+            category: doc.folder_category || 'planning',
+            status: doc.status || 'draft',
+            year: doc.year,
+            createdBy: usersMap[doc.submitted_by] || 'Unknown',
+            lastModified: doc.created_at || new Date().toISOString(),
+            fileUrl: versions?.[0]?.file_url || null,
+          };
+        }));
+
+        setDocuments(formattedDocs);
+      }
     } catch (error) {
       console.error('Error:', error);
       alert('An error occurred while deleting');
     }
     setDeleting(false);
   };
+ 
 
   // Filtered + sorted documents
   const visibleDocs = useMemo(() => {
@@ -621,9 +700,12 @@ export default function SKDocumentManagementScreen() {
               </View>
             </View>
           </View>
+          
         </Modal>
       </View>
+      
     </SafeAreaView>
+    
   );
 }
 
