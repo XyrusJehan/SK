@@ -316,9 +316,11 @@ export default function SKDocumentListScreen() {
           title: uploadTitle.trim(),
           folder_category: uploadCategory,
           document_type: uploadDocType,
-          status: 'draft',
+          status: 'saved',
           year: currentYear,
+          file_url: fileUrl,
           created_at: new Date().toISOString(),
+          saved_at: new Date().toISOString(),
         })
         .select();
 
