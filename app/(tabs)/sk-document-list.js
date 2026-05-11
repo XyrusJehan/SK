@@ -277,10 +277,11 @@ export default function SKDocumentListScreen() {
       const currentYear = new Date().getFullYear();
 
       let fileUrl = null;
+      let storagePath = null;
 
       // Upload file to Supabase storage if selected
       if (selectedFile) {
-        const fileName = `${barangayId}/${currentYear}/${Date.now()}_${selectedFile.name}`;
+        storagePath = `${barangayId}/${currentYear}/${Date.now()}_${selectedFile.name}`;
 
         // Fetch the file and convert to blob
         const response = await fetch(selectedFile.uri);
@@ -288,7 +289,7 @@ export default function SKDocumentListScreen() {
 
         const { data: uploadData, error: uploadError } = await supabase.storage
           .from('documents')
-          .upload(fileName, blob, {
+          .upload(storagePath, blob, {
             contentType: selectedFile.type || 'application/octet-stream',
           });
 
@@ -302,7 +303,7 @@ export default function SKDocumentListScreen() {
         // Get public URL
         const { data: urlData } = supabase.storage
           .from('documents')
-          .getPublicUrl(fileName);
+          .getPublicUrl(storagePath);
 
         fileUrl = urlData.publicUrl;
       }
@@ -319,6 +320,7 @@ export default function SKDocumentListScreen() {
           status: 'draft',
           year: currentYear,
           created_at: new Date().toISOString(),
+          original_file_path: storagePath,
         })
         .select();
 

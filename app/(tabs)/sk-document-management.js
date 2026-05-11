@@ -1,12 +1,13 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import {
   View, Text, TextInput, ScrollView, TouchableOpacity,
-  StyleSheet, SafeAreaView, StatusBar, Dimensions, Image, Modal,
+  StyleSheet, SafeAreaView, StatusBar, Dimensions, Image, Modal, Alert,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useNav } from './navContext';
 import { useAuth } from './authContext';
 import { supabase } from '../../utils/supabase';
+import DocumentEditor from '../../components/DocumentEditor';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const isMobile = SCREEN_WIDTH < 768;
@@ -54,24 +55,30 @@ const BellIcon = ({ hasNotif }) => (
   </View>
 );
 
-// Edit icon (pencil)
-const EditIcon = () => (
-  <View style={styles.actionIconWrap}>
-    <Text style={[styles.actionIconText, { color: COLORS.navy }]}>✏️</Text>
+// Edit icon (pencil) - improved visibility with background circle
+const EditIcon = ({ disabled }) => (
+  <View style={[styles.actionIconWrap, disabled && styles.actionIconDisabled]}>
+    <View style={[styles.iconCircle, !disabled && { backgroundColor: COLORS.gold }]}>
+      <Text style={[styles.actionIconText, disabled ? styles.actionIconTextDisabled : { color: COLORS.navy }]}>✏️</Text>
+    </View>
   </View>
 );
 
 // Delete icon (trash)
-const DeleteIcon = () => (
-  <View style={styles.actionIconWrap}>
-    <Text style={[styles.actionIconText, { color: COLORS.red }]}>🗑️</Text>
+const DeleteIcon = ({ disabled }) => (
+  <View style={[styles.actionIconWrap, disabled && styles.actionIconDisabled]}>
+    <View style={[styles.iconCircle, { backgroundColor: disabled ? COLORS.lightGray : COLORS.offWhite }]}>
+      <Text style={[styles.actionIconText, disabled ? styles.actionIconTextDisabled : { color: COLORS.red }]}>🗑️</Text>
+    </View>
   </View>
 );
 
 // View icon (eye)
 const ViewIcon = () => (
   <View style={styles.actionIconWrap}>
-    <Text style={[styles.actionIconText, { color: COLORS.teal }]}>👁️</Text>
+    <View style={[styles.iconCircle, { backgroundColor: COLORS.offWhite }]}>
+      <Text style={[styles.actionIconText, { color: COLORS.teal }]}>👁️</Text>
+    </View>
   </View>
 );
 
@@ -100,6 +107,7 @@ export default function SKDocumentManagementScreen() {
   // Get user's barangay from auth context
   const barangayName = user?.barangay?.barangay_name || 'Unknown Barangay';
   const barangayId = user?.barangayId;
+  const userId = user?.user_id;
 
   const [activeDocTab, setActiveDocTab] = useState('Document Management');
   const [activeStatusTab, setActiveStatusTab] = useState('All');
@@ -111,6 +119,11 @@ export default function SKDocumentManagementScreen() {
   const [sortDropdownOpen, setSortDropdownOpen] = useState(false);
   const [notifCount]                          = useState(2);
   const [documents, setDocuments]             = useState([]);
+
+  // Document editor state
+  const [editorVisible, setEditorVisible]      = useState(false);
+  const [editingDocument, setEditingDocument] = useState(null);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   // Fetch documents for this barangay
   useEffect(() => {
@@ -124,7 +137,7 @@ export default function SKDocumentManagementScreen() {
         // Fetch documents with submitted_by
         const { data: docs, error } = await supabase
           .from('documents')
-          .select('document_id, title, folder_category, document_type, status, year, created_at, submitted_by')
+          .select('document_id, title, folder_category, document_type, status, year, created_at, submitted_by, original_file_path')
           .eq('barangay_id', barangayId)
           .order('created_at', { ascending: false });
 
@@ -170,6 +183,7 @@ export default function SKDocumentManagementScreen() {
             createdBy: usersMap[doc.submitted_by] || 'Unknown',
             lastModified: doc.created_at || new Date().toISOString(),
             fileUrl: versions?.[0]?.file_url || null,
+            originalFilePath: doc.original_file_path || null,
           };
         }));
 
@@ -180,7 +194,7 @@ export default function SKDocumentManagementScreen() {
     };
 
     fetchDocuments();
-  }, [barangayId]);
+  }, [barangayId, refreshKey]);
 
   const handleNavPress = (tab) => {
     setActiveTab(tab);
@@ -195,6 +209,36 @@ export default function SKDocumentManagementScreen() {
     const d = new Date(dateStr);
     return d.toLocaleDateString('en-PH', { year: 'numeric', month: 'short', day: 'numeric' });
   };
+
+  // Open document editor for existing draft
+  const handleEditDocument = useCallback(async (doc) => {
+    console.log('Edit button clicked for doc:', doc);
+    console.log('Document status:', doc.status);
+    console.log('userId:', userId);
+
+    // Open with basic data from document list (skip service for now to test)
+    const editData = {
+      documentId: doc.id,
+      title: doc.title,
+      documentType: doc.type,
+      folderCategory: doc.category,
+      htmlContent: '',
+      originalFileUrl: doc.fileUrl || '',
+      originalFilePath: doc.originalFilePath,
+    };
+    console.log('Setting editingDocument:', editData);
+    setEditingDocument(editData);
+    console.log('Setting editorVisible to true');
+    setEditorVisible(true);
+  }, [userId]);
+
+  // Handle editor save callback
+  const handleEditorSave = useCallback((result) => {
+    setEditorVisible(false);
+    setEditingDocument(null);
+    // Refresh documents list by incrementing refresh key
+    setRefreshKey(k => k + 1);
+  }, []);
 
   // Filtered + sorted documents
   const visibleDocs = useMemo(() => {
@@ -499,11 +543,17 @@ export default function SKDocumentManagementScreen() {
 
               {/* Actions */}
               <View style={[styles.actionRow, { flex: 1 }]}>
-                <TouchableOpacity activeOpacity={0.7} onPress={() => {}}>
-                  <EditIcon />
+                <TouchableOpacity
+                  activeOpacity={0.5}
+                  onPress={() => {
+                    Alert.alert('Edit', `Opening editor for: ${doc.title}`);
+                    handleEditDocument(doc);
+                  }}
+                >
+                  <EditIcon disabled={false} />
                 </TouchableOpacity>
                 <TouchableOpacity activeOpacity={0.7} onPress={() => {}}>
-                  <DeleteIcon />
+                  <DeleteIcon disabled={false} />
                 </TouchableOpacity>
                 <TouchableOpacity activeOpacity={0.7} onPress={() => {}}>
                   <ViewIcon />
@@ -535,6 +585,19 @@ export default function SKDocumentManagementScreen() {
         )}
         {isMobile ? sidebarVisible && renderSidebar() : renderSidebar()}
         {renderContent()}
+
+        {/* Document Editor Modal */}
+        <DocumentEditor
+          visible={editorVisible}
+          onClose={() => {
+            setEditorVisible(false);
+            setEditingDocument(null);
+          }}
+          editData={editingDocument}
+          onSave={handleEditorSave}
+          barangayId={barangayId}
+          userId={userId}
+        />
       </View>
     </SafeAreaView>
   );
@@ -754,6 +817,12 @@ const styles = StyleSheet.create({
   actionRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: isMobile ? 2 : 4 },
   actionIconWrap: { padding: 4 },
   actionIconText: { fontSize: isMobile ? 14 : 16 },
+  actionIconDisabled: { opacity: 0.5 },
+  actionIconTextDisabled: { color: COLORS.midGray },
+  iconCircle: {
+    width: 32, height: 32, borderRadius: 16,
+    alignItems: 'center', justifyContent: 'center',
+  },
 
   // Empty state
   emptyState:   { alignItems: 'center', paddingVertical: 60 },
