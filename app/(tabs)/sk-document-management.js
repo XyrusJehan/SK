@@ -133,6 +133,7 @@ export default function SKDocumentManagementScreen() {
           id: doc.document_id,
           title: doc.title || 'Untitled',
           type: doc.document_type || 'Unknown',
+          status: doc.status || 'draft',
           createdBy: 'Unknown',
           lastModified: doc.created_at || new Date().toISOString(),
         })) || [];

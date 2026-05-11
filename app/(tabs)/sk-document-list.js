@@ -1,12 +1,13 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import {
   View, Text, TextInput, ScrollView, TouchableOpacity,
-  StyleSheet, SafeAreaView, StatusBar, Dimensions, Image,
+  StyleSheet, SafeAreaView, StatusBar, Dimensions, Image, Modal,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useNav } from './navContext';
 import { useAuth } from './authContext';
 import { supabase } from '../../utils/supabase';
+import * as DocumentPicker from 'expo-document-picker';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const isMobile = SCREEN_WIDTH < 768;
@@ -31,6 +32,47 @@ const COLORS = {
 // ─── TABS ─────────────────────────────────────────────────────────────────────
 const NAV_TABS      = ['Dashboard', 'Documents', 'Planning', 'Portal'];
 const DOCUMENT_TABS = ['Financial', 'Planning', 'Governance', 'Activities'];
+
+// Document types per folder category (from database schema)
+const DOCUMENT_TYPES = {
+  planning: [
+    'Comprehensive Barangay Youth Development Plan (CBYDP)',
+    'Annual Barangay Youth Investment Program (ABYIP)',
+    'SK PPK Template',
+    'Program of Work',
+    'Work Plans',
+    'Project Proposals',
+  ],
+  financial: [
+    'Approved Annual Budget',
+    'SK Supplemental Budget',
+    'Registry of Cash Receipts and Deposits',
+    'Registry of Cash Disbursements',
+    'Monthly Itemized List',
+    'Quarterly Financial Reports',
+    'Disbursement Vouchers',
+    'Liquidation Reports',
+  ],
+  governance: [
+    'Resolutions',
+    'Ordinances',
+  ],
+  performance: [
+    'Accomplishment Reports',
+    'Documentation',
+    'Event Reports',
+    'Minutes of Meetings',
+    'Barangay Youth Investment Monitoring Form',
+    'Monthly/Quarterly Accomplishment Report',
+  ],
+};
+
+const FOLDER_CATEGORIES = [
+  { label: 'Planning', value: 'planning' },
+  { label: 'Financial', value: 'financial' },
+  { label: 'Governance', value: 'governance' },
+  { label: 'Performance', value: 'performance' },
+];
 
 // ─── DOCUMENT DATA ────────────────────────────────────────────────────────────
 // (Data now fetched from Supabase based on barangay_id)
@@ -86,6 +128,19 @@ export default function SKDocumentListScreen() {
   const [dropdownOpen, setDropdownOpen]     = useState(false);
   const [notifCount]                        = useState(2);
   const [documents, setDocuments]           = useState([]);
+
+  // Upload modal state
+  const [uploadModalVisible, setUploadModalVisible] = useState(false);
+  const [uploadTitle, setUploadTitle] = useState('');
+  const [uploadCategory, setUploadCategory] = useState('planning');
+  const [uploadDocType, setUploadDocType] = useState('');
+  const [categoryDropdownOpen, setCategoryDropdownOpen] = useState(false);
+  const [docTypeDropdownOpen, setDocTypeDropdownOpen] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [selectedFile, setSelectedFile] = useState(null);
+
+  // Get document types for selected category
+  const currentDocTypes = DOCUMENT_TYPES[uploadCategory] || [];
 
   // Fetch documents for this barangay filtered by category
   useEffect(() => {
@@ -182,6 +237,140 @@ export default function SKDocumentListScreen() {
     if (tab === 'Portal')    router.push('/(tabs)/sk-portal');
   };
 
+  // Handle upload form submission
+  // File picker function
+  const pickDocument = async () => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'],
+        copyToCacheDirectory: true,
+      });
+
+      if (result.canceled) {
+        return;
+      }
+
+      const file = result.assets[0];
+      setSelectedFile({
+        uri: file.uri,
+        name: file.name,
+        type: file.mimeType,
+        size: file.size,
+      });
+    } catch (error) {
+      console.error('Error picking document:', error);
+    }
+  };
+
+  const handleUpload = async () => {
+    if (!uploadTitle.trim() || !uploadDocType) {
+      alert('Please fill in all fields');
+      return;
+    }
+    if (!barangayId || !user?.userId) {
+      alert('User information missing');
+      return;
+    }
+
+    setUploading(true);
+    try {
+      const currentYear = new Date().getFullYear();
+
+      let fileUrl = null;
+
+      // Upload file to Supabase storage if selected
+      if (selectedFile) {
+        const fileName = `${barangayId}/${currentYear}/${Date.now()}_${selectedFile.name}`;
+
+        // Fetch the file and convert to blob
+        const response = await fetch(selectedFile.uri);
+        const blob = await response.blob();
+
+        const { data: uploadData, error: uploadError } = await supabase.storage
+          .from('documents')
+          .upload(fileName, blob, {
+            contentType: selectedFile.type || 'application/octet-stream',
+          });
+
+        if (uploadError) {
+          console.error('Error uploading file:', uploadError);
+          alert('Failed to upload file: ' + uploadError.message);
+          setUploading(false);
+          return;
+        }
+
+        // Get public URL
+        const { data: urlData } = supabase.storage
+          .from('documents')
+          .getPublicUrl(fileName);
+
+        fileUrl = urlData.publicUrl;
+      }
+
+      // Create document record
+      const { data: docData, error } = await supabase
+        .from('documents')
+        .insert({
+          barangay_id: barangayId,
+          submitted_by: user.userId,
+          title: uploadTitle.trim(),
+          folder_category: uploadCategory,
+          document_type: uploadDocType,
+          status: 'draft',
+          year: currentYear,
+          created_at: new Date().toISOString(),
+        })
+        .select();
+
+      if (error) {
+        console.error('Error uploading document:', error);
+        alert('Failed to upload document: ' + error.message);
+        setUploading(false);
+        return;
+      }
+
+      const documentId = docData[0]?.document_id;
+
+      // Create document version if file was uploaded
+      if (documentId && fileUrl) {
+        await supabase
+          .from('document_versions')
+          .insert({
+            document_id: documentId,
+            version_number: 1,
+            file_url: fileUrl,
+            action: 'submitted',
+            actioned_by: user.userId,
+          });
+      }
+
+      // Reset form and close modal
+      setUploadTitle('');
+      setUploadCategory('planning');
+      setUploadDocType('');
+      setSelectedFile(null);
+      setUploadModalVisible(false);
+      setUploading(false);
+
+      // Navigate to document management to see the new draft
+      router.push('/(tabs)/sk-document-management');
+    } catch (error) {
+      console.error('Error:', error);
+      alert('An error occurred while uploading');
+      setUploading(false);
+    }
+  };
+
+  // Reset upload form
+  const resetUploadForm = () => {
+    setUploadTitle('');
+    setUploadCategory('planning');
+    setUploadDocType('');
+    setCategoryDropdownOpen(false);
+    setDocTypeDropdownOpen(false);
+    setSelectedFile(null);
+  };
+
   // ── Sidebar ──
   const renderSidebar = () => (
     <View style={styles.sidebar}>
@@ -241,7 +430,7 @@ export default function SKDocumentListScreen() {
             <Text style={styles.headerTitle}>{barangayName.toUpperCase()}</Text>
           </View>
           {/* Upload Button */}
-          <TouchableOpacity style={styles.uploadBtn} activeOpacity={0.8}>
+          <TouchableOpacity style={styles.uploadBtn} onPress={() => setUploadModalVisible(true)} activeOpacity={0.8}>
             <Text style={styles.uploadBtnText}>Upload</Text>
             <Text style={styles.uploadIcon}>↑</Text>
           </TouchableOpacity>
@@ -266,7 +455,7 @@ export default function SKDocumentListScreen() {
           )}
         </View>
         {isMobile && (
-          <TouchableOpacity style={styles.uploadBtnMobile} activeOpacity={0.8}>
+          <TouchableOpacity style={styles.uploadBtnMobile} onPress={() => setUploadModalVisible(true)} activeOpacity={0.8}>
             <Text style={styles.uploadBtnText}>Upload ↑</Text>
           </TouchableOpacity>
         )}
@@ -422,8 +611,155 @@ export default function SKDocumentListScreen() {
         )}
         {isMobile ? sidebarVisible && renderSidebar() : renderSidebar()}
         {renderContent()}
-      </View>
-    </SafeAreaView>
+
+      {/* Upload Modal */}
+      <Modal
+        visible={uploadModalVisible}
+        animationType="fade"
+        transparent={true}
+        onRequestClose={() => setUploadModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Upload Document</Text>
+              <TouchableOpacity onPress={() => { setUploadModalVisible(false); resetUploadForm(); }} activeOpacity={0.7}>
+                <Text style={styles.modalClose}>✕</Text>
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={styles.modalBody} showsVerticalScrollIndicator={false}>
+              {/* Document Title */}
+              <Text style={styles.modalLabel}>Document Title</Text>
+              <TextInput
+                style={styles.modalInput}
+                placeholder="Enter document title"
+                placeholderTextColor={COLORS.midGray}
+                value={uploadTitle}
+                onChangeText={setUploadTitle}
+              />
+
+              {/* Folder Category Dropdown */}
+              <Text style={styles.modalLabel}>Folder Category</Text>
+              <View style={styles.modalCategoryDropdownWrapper}>
+                <TouchableOpacity
+                  style={styles.modalDropdown}
+                  onPress={() => { setCategoryDropdownOpen(!categoryDropdownOpen); setDocTypeDropdownOpen(false); }}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.modalDropdownText}>
+                    {FOLDER_CATEGORIES.find(c => c.value === uploadCategory)?.label || 'Select Category'}
+                  </Text>
+                  <Text style={styles.modalDropdownArrow}>{categoryDropdownOpen ? '▲' : '▼'}</Text>
+                </TouchableOpacity>
+                {categoryDropdownOpen && (
+                  <View style={styles.modalDropdownMenu}>
+                    {FOLDER_CATEGORIES.map(cat => (
+                      <TouchableOpacity
+                        key={cat.value}
+                        style={[styles.modalDropdownItem, uploadCategory === cat.value && styles.modalDropdownItemActive]}
+                        onPress={() => { setUploadCategory(cat.value); setUploadDocType(''); setCategoryDropdownOpen(false); }}
+                        activeOpacity={0.8}
+                      >
+                        <Text style={[styles.modalDropdownItemText, uploadCategory === cat.value && styles.modalDropdownItemTextActive]}>
+                          {cat.label}
+                        </Text>
+                        {uploadCategory === cat.value && <Text style={styles.modalDropdownCheck}>✓</Text>}
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                )}
+              </View>
+
+              {/* Document Type Dropdown */}
+              <Text style={styles.modalLabel}>Document Type</Text>
+              <View style={styles.modalDropdownWrapper}>
+                <TouchableOpacity
+                  style={[styles.modalDropdown, !uploadDocType && styles.modalDropdownPlaceholder]}
+                  onPress={() => { if (uploadCategory) { setDocTypeDropdownOpen(!docTypeDropdownOpen); setCategoryDropdownOpen(false); } }}
+                  activeOpacity={0.8}
+                >
+                  <Text style={[styles.modalDropdownText, !uploadDocType && styles.modalDropdownPlaceholderText]}>
+                    {uploadDocType || 'Select Document Type'}
+                  </Text>
+                  <Text style={styles.modalDropdownArrow}>{docTypeDropdownOpen ? '▲' : '▼'}</Text>
+                </TouchableOpacity>
+                {docTypeDropdownOpen && (
+                  <ScrollView style={styles.modalDropdownMenu} showsVerticalScrollIndicator={false}>
+                    {currentDocTypes.map(type => (
+                      <TouchableOpacity
+                        key={type}
+                        style={[styles.modalDropdownItem, uploadDocType === type && styles.modalDropdownItemActive]}
+                        onPress={() => { setUploadDocType(type); setDocTypeDropdownOpen(false); }}
+                        activeOpacity={0.8}
+                      >
+                        <Text style={[styles.modalDropdownItemText, uploadDocType === type && styles.modalDropdownItemTextActive]}>
+                          {type}
+                        </Text>
+                        {uploadDocType === type && <Text style={styles.modalDropdownCheck}>✓</Text>}
+                      </TouchableOpacity>
+                    ))}
+                  </ScrollView>
+                )}
+              </View>
+
+              {/* Year Display */}
+              <Text style={styles.modalLabel}>Year</Text>
+              <View style={styles.modalYearDisplay}>
+                <Text style={styles.modalYearText}>{new Date().getFullYear()}</Text>
+              </View>
+
+              {/* File Picker */}
+              <Text style={styles.modalLabel}>Attach File</Text>
+              <TouchableOpacity
+                style={styles.filePickerBtn}
+                onPress={pickDocument}
+                activeOpacity={0.8}
+              >
+                {selectedFile ? (
+                  <View style={styles.selectedFileContainer}>
+                    <Text style={styles.filePickerIcon}>📄</Text>
+                    <Text style={styles.selectedFileName} numberOfLines={1}>
+                      {selectedFile.name}
+                    </Text>
+                    <TouchableOpacity
+                      onPress={(e) => { e.stopPropagation(); setSelectedFile(null); }}
+                      style={styles.removeFileBtn}
+                    >
+                      <Text style={styles.removeFileText}>✕</Text>
+                    </TouchableOpacity>
+                  </View>
+                ) : (
+                  <View style={styles.filePickerContent}>
+                    <Text style={styles.filePickerIcon}>📎</Text>
+                    <Text style={styles.filePickerText}>Select Document</Text>
+                  </View>
+                )}
+              </TouchableOpacity>
+            </ScrollView>
+
+            <View style={styles.modalFooter}>
+              <TouchableOpacity
+                style={styles.modalCancelBtn}
+                onPress={() => { setUploadModalVisible(false); resetUploadForm(); }}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.modalCancelBtnText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalUploadBtn, uploading && styles.modalUploadBtnDisabled]}
+                onPress={handleUpload}
+                disabled={uploading}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.modalUploadBtnText}>{uploading ? 'Uploading...' : 'Upload'}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+    </View>
+  </SafeAreaView>
   );
 }
 
@@ -637,4 +973,93 @@ const styles = StyleSheet.create({
   emptyIcon:    { fontSize: 36, marginBottom: 10 },
   emptyText:    { fontSize: 14, fontWeight: '700', color: COLORS.darkText, marginBottom: 4 },
   emptySubText: { fontSize: 12, color: COLORS.midGray },
+
+  // ── Upload Modal ──
+  modalOverlay: {
+    ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center',
+  },
+  modalContent: {
+    width: '90%', maxWidth: 500, maxHeight: '85%', backgroundColor: COLORS.white,
+    borderRadius: 16, overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25, shadowRadius: 10, elevation: 10,
+  },
+  modalHeader: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: 20, paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: COLORS.lightGray,
+    backgroundColor: COLORS.navy,
+  },
+  modalTitle: { fontSize: 18, fontWeight: '800', color: COLORS.white },
+  modalClose: { fontSize: 18, color: COLORS.white, padding: 4 },
+  modalBody: { padding: 20 },
+  modalLabel: { fontSize: 13, fontWeight: '700', color: COLORS.darkText, marginBottom: 8, marginTop: 12 },
+  modalInput: {
+    backgroundColor: COLORS.offWhite, borderRadius: 8, borderWidth: 1, borderColor: COLORS.lightGray,
+    paddingHorizontal: 14, paddingVertical: 12, fontSize: 14, color: COLORS.darkText,
+  },
+  modalDropdownWrapper: { position: 'relative', marginBottom: 12, zIndex: 100 },
+  modalCategoryDropdownWrapper: { position: 'relative', marginBottom: 12, zIndex: 200 },
+  modalDropdown: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    backgroundColor: COLORS.offWhite, borderRadius: 8, borderWidth: 1, borderColor: COLORS.lightGray,
+    paddingHorizontal: 14, paddingVertical: 12,
+  },
+  modalDropdownPlaceholder: {},
+  modalDropdownPlaceholderText: { color: COLORS.midGray },
+  modalDropdownText: { fontSize: 14, color: COLORS.darkText, flex: 1 },
+  modalDropdownArrow: { fontSize: 10, color: COLORS.subText },
+  // Dropdown menus positioned absolutely below their trigger in the wrapper
+  modalDropdownMenu: {
+    position: 'absolute', top: 46, left: 0, right: 0, zIndex: 101,
+    backgroundColor: COLORS.white, borderRadius: 8, borderWidth: 1, borderColor: COLORS.lightGray,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.15, shadowRadius: 8, elevation: 5,
+    maxHeight: 200,
+  },
+  modalDropdownItem: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingVertical: 12, paddingHorizontal: 14, borderBottomWidth: 1, borderBottomColor: COLORS.lightGray,
+  },
+  modalDropdownItemActive: { backgroundColor: '#EEF3FB' },
+  modalDropdownItemText: { fontSize: 13, color: COLORS.darkText },
+  modalDropdownItemTextActive: { color: COLORS.navy, fontWeight: '700' },
+  modalDropdownCheck: { fontSize: 14, color: COLORS.navy, fontWeight: '800' },
+  modalYearDisplay: {
+    backgroundColor: COLORS.offWhite, borderRadius: 8, borderWidth: 1, borderColor: COLORS.lightGray,
+    paddingHorizontal: 14, paddingVertical: 12,
+  },
+  modalYearText: { fontSize: 14, color: COLORS.darkText },
+  // File picker styles
+  filePickerBtn: {
+    backgroundColor: COLORS.offWhite, borderRadius: 8, borderWidth: 1, borderColor: COLORS.lightGray,
+    borderStyle: 'dashed', paddingHorizontal: 14, paddingVertical: 16,
+    marginBottom: 12,
+  },
+  filePickerContent: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+  },
+  filePickerIcon: { fontSize: 18 },
+  filePickerText: { fontSize: 14, color: COLORS.subText, fontWeight: '500' },
+  selectedFileContainer: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+  },
+  selectedFileName: {
+    flex: 1, fontSize: 14, color: COLORS.darkText, fontWeight: '500',
+  },
+  removeFileBtn: {
+    padding: 4,
+  },
+  removeFileText: { fontSize: 14, color: COLORS.midGray },
+  modalFooter: {
+    flexDirection: 'row', gap: 12, paddingHorizontal: 20, paddingVertical: 16,
+    borderTopWidth: 1, borderTopColor: COLORS.lightGray, backgroundColor: COLORS.offWhite,
+  },
+  modalCancelBtn: {
+    flex: 1, paddingVertical: 14, borderRadius: 8, borderWidth: 1, borderColor: COLORS.midGray,
+    alignItems: 'center', backgroundColor: COLORS.white,
+  },
+  modalCancelBtnText: { fontSize: 14, fontWeight: '700', color: COLORS.subText },
+  modalUploadBtn: {
+    flex: 1, paddingVertical: 14, borderRadius: 8, alignItems: 'center', backgroundColor: COLORS.navy,
+  },
+  modalUploadBtnDisabled: { backgroundColor: COLORS.midGray },
+  modalUploadBtnText: { fontSize: 14, fontWeight: '700', color: COLORS.white },
 });
