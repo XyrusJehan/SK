@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   View, Text, TextInput, ScrollView, TouchableOpacity,
   StyleSheet, SafeAreaView, StatusBar, Dimensions, Image, Modal,
@@ -6,6 +6,7 @@ import {
 import { useRouter } from 'expo-router';
 import { useNav } from './navContext';
 import { useAuth } from './authContext';
+import { supabase } from '../../utils/supabase';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const isMobile = SCREEN_WIDTH < 768;
@@ -29,38 +30,13 @@ const COLORS = {
 // ─── CONSTANTS ────────────────────────────────────────────────────────────────
 const NAV_TABS       = ['Dashboard', 'Documents', 'Planning', 'Portal'];
 const DOCUMENT_TABS  = ['Folder', 'Document Management'];
-const STATUS_TABS    = ['Drafts', 'Saved', 'Submitted', 'Approved'];
+const STATUS_TABS    = ['All', 'Drafts', 'Saved', 'Submitted', 'Approved'];
 const DRAFT_TYPES    = ['All Types', 'Planning', 'Financial', 'Governance', 'Performance'];
 const SORT_OPTIONS   = ['Newest', 'Oldest', 'Title A-Z', 'Title Z-A'];
 
 // ─── MOCK DATA ────────────────────────────────────────────────────────────────
+// (Data now fetched from Supabase based on barangay_id)
 const MOCK_DOCUMENTS = {
-  Drafts: [
-    { id: 'd1', title: 'Annual Budget 2025 Draft',         type: 'Financial',    createdBy: 'Juan dela Cruz',   lastModified: '2025-04-10' },
-    { id: 'd2', title: 'ABYIP 2025-2026 Draft',            type: 'Planning',     createdBy: 'Maria Santos',     lastModified: '2025-04-08' },
-    { id: 'd3', title: 'Resolution No. 2025-05 Draft',     type: 'Governance',   createdBy: 'Pedro Reyes',      lastModified: '2025-04-05' },
-    { id: 'd4', title: 'Q2 Accomplishment Report Draft',   type: 'Performance',  createdBy: 'Ana Mendoza',      lastModified: '2025-04-02' },
-    { id: 'd5', title: 'Work Plan Q3 2025 Draft',          type: 'Planning',     createdBy: 'Jose Garcia',      lastModified: '2025-03-30' },
-  ],
-  Saved: [
-    { id: 's1', title: 'Monthly Itemized List - March',    type: 'Financial',    createdBy: 'Juan dela Cruz',   lastModified: '2025-03-31' },
-    { id: 's2', title: 'CBYDP 2025 Final',                 type: 'Planning',     createdBy: 'Maria Santos',     lastModified: '2025-03-20' },
-    { id: 's3', title: 'Ordinance No. 2025-02 Final',      type: 'Governance',   createdBy: 'Pedro Reyes',      lastModified: '2025-03-15' },
-  ],
-  Submitted: [
-    { id: 'sb1', title: 'Liquidation Report Q1 2025',      type: 'Financial',    createdBy: 'Ana Mendoza',      lastModified: '2025-04-05' },
-    { id: 'sb2', title: 'Youth Summit Proposal',           type: 'Planning',     createdBy: 'Jose Garcia',      lastModified: '2025-03-10' },
-    { id: 'sb3', title: 'SK Assembly Minutes - March',     type: 'Performance',  createdBy: 'Maria Santos',     lastModified: '2025-03-28' },
-    { id: 'sb4', title: 'Disbursement Voucher - Q1',       type: 'Financial',    createdBy: 'Juan dela Cruz',   lastModified: '2025-03-15' },
-  ],
-  Approved: [
-    { id: 'ap1', title: 'Annual Budget 2024',              type: 'Financial',    createdBy: 'Juan dela Cruz',   lastModified: '2024-12-31' },
-    { id: 'ap2', title: 'ABYIP 2024-2025',                 type: 'Planning',     createdBy: 'Maria Santos',     lastModified: '2024-12-20' },
-    { id: 'ap3', title: 'Resolution No. 2024-12',          type: 'Governance',   createdBy: 'Pedro Reyes',      lastModified: '2024-12-05' },
-    { id: 'ap4', title: 'Accomplishment Report Annual 2024', type: 'Performance', createdBy: 'Ana Mendoza',     lastModified: '2025-01-15' },
-    { id: 'ap5', title: 'Sports Fest Report 2024',         type: 'Performance',  createdBy: 'Jose Garcia',      lastModified: '2024-11-30' },
-    { id: 'ap6', title: 'Ordinance No. 2024-03',           type: 'Governance',   createdBy: 'Pedro Reyes',      lastModified: '2024-06-15' },
-  ],
 };
 
 // ─── ICON COMPONENTS ──────────────────────────────────────────────────────────
@@ -119,10 +95,14 @@ const TypeBadge = ({ type }) => {
 export default function SKDocumentManagementScreen() {
   const router = useRouter();
   const { setActiveTab } = useNav();
-  const { logout } = useAuth();
+  const { logout, user } = useAuth();
+
+  // Get user's barangay from auth context
+  const barangayName = user?.barangay?.barangay_name || 'Unknown Barangay';
+  const barangayId = user?.barangayId;
 
   const [activeDocTab, setActiveDocTab] = useState('Document Management');
-  const [activeStatusTab, setActiveStatusTab] = useState('Drafts');
+  const [activeStatusTab, setActiveStatusTab] = useState('All');
   const [searchText, setSearchText]           = useState('');
   const [draftType, setDraftType]             = useState('All Types');
   const [sortBy, setSortBy]                   = useState('Newest');
@@ -130,6 +110,77 @@ export default function SKDocumentManagementScreen() {
   const [typeDropdownOpen, setTypeDropdownOpen] = useState(false);
   const [sortDropdownOpen, setSortDropdownOpen] = useState(false);
   const [notifCount]                          = useState(2);
+  const [documents, setDocuments]             = useState([]);
+
+  // Fetch documents for this barangay
+  useEffect(() => {
+    const fetchDocuments = async () => {
+      if (!barangayId) {
+        console.log('No barangayId found, user:', user);
+        return;
+      }
+
+      try {
+        // Fetch documents with submitted_by
+        const { data: docs, error } = await supabase
+          .from('documents')
+          .select('document_id, title, folder_category, document_type, status, year, created_at, submitted_by')
+          .eq('barangay_id', barangayId)
+          .order('created_at', { ascending: false });
+
+        if (error) {
+          console.error('Error fetching documents:', error);
+          return;
+        }
+
+        // Get all user IDs to fetch
+        const userIds = [...new Set((docs || []).map(d => d.submitted_by).filter(Boolean))];
+
+        // Fetch users in one call
+        let usersMap = {};
+        if (userIds.length > 0) {
+          const { data: users } = await supabase
+            .from('users')
+            .select('user_id, first_name, last_name')
+            .in('user_id', userIds);
+
+          usersMap = (users || []).reduce((acc, u) => {
+            acc[u.user_id] = `${u.first_name} ${u.last_name}`;
+            return acc;
+          }, {});
+        }
+
+        // Fetch document versions for each document
+        const formattedDocs = await Promise.all((docs || []).map(async doc => {
+          // Get latest version
+          const { data: versions } = await supabase
+            .from('document_versions')
+            .select('version_id, file_url, created_at')
+            .eq('document_id', doc.document_id)
+            .order('version_number', { ascending: false })
+            .limit(1);
+
+          return {
+            id: doc.document_id,
+            title: doc.title || 'Untitled',
+            type: doc.document_type || 'Unknown',
+            category: doc.folder_category || 'planning',
+            status: doc.status || 'draft',
+            year: doc.year,
+            createdBy: usersMap[doc.submitted_by] || 'Unknown',
+            lastModified: doc.created_at || new Date().toISOString(),
+            fileUrl: versions?.[0]?.file_url || null,
+          };
+        }));
+
+        setDocuments(formattedDocs);
+      } catch (error) {
+        console.error('Error:', error);
+      }
+    };
+
+    fetchDocuments();
+  }, [barangayId]);
 
   const handleNavPress = (tab) => {
     setActiveTab(tab);
@@ -147,11 +198,20 @@ export default function SKDocumentManagementScreen() {
 
   // Filtered + sorted documents
   const visibleDocs = useMemo(() => {
-    let docs = MOCK_DOCUMENTS[activeStatusTab] || [];
+    // Filter by status tab (draft, saved, submitted, approved)
+    const statusMap = { 'All': null, 'Drafts': 'draft', 'Saved': 'saved', 'Submitted': 'submitted', 'Approved': 'approved' };
+    const statusFilter = statusMap[activeStatusTab];
+    let docs = statusFilter !== null && statusFilter ? documents.filter(d => d.status === statusFilter) : documents;
 
-    // Filter by type
+    // Filter by folder category
     if (draftType !== 'All Types') {
-      docs = docs.filter(d => d.type === draftType);
+      const categoryMap = {
+        'Planning': 'planning',
+        'Financial': 'financial',
+        'Governance': 'governance',
+        'Performance': 'performance',
+      };
+      docs = docs.filter(d => d.category === categoryMap[draftType]);
     }
 
     // Filter by search
@@ -159,8 +219,8 @@ export default function SKDocumentManagementScreen() {
       const q = searchText.toLowerCase();
       docs = docs.filter(d =>
         d.title.toLowerCase().includes(q) ||
-        d.type.toLowerCase().includes(q) ||
-        d.createdBy.toLowerCase().includes(q)
+        d.type?.toLowerCase().includes(q) ||
+        d.createdBy?.toLowerCase().includes(q)
       );
     }
 
@@ -235,7 +295,7 @@ export default function SKDocumentManagementScreen() {
         <View style={styles.header}>
           <View style={{ flex: 1 }}>
             <Text style={styles.headerSub}>SANGGUNIANG KABATAAN</Text>
-            <Text style={styles.headerTitle}>BARANGAY SAN JOSE</Text>
+            <Text style={styles.headerTitle}>{barangayName.toUpperCase()}</Text>
           </View>
           <TouchableOpacity style={styles.bellBtn} activeOpacity={0.7}>
             <BellIcon hasNotif={notifCount > 0} />
@@ -364,7 +424,9 @@ export default function SKDocumentManagementScreen() {
       <View style={styles.statusTabsRow}>
         {STATUS_TABS.map(tab => {
           const active = activeStatusTab === tab;
-          const count  = MOCK_DOCUMENTS[tab]?.length || 0;
+          const statusMap = { 'Drafts': 'draft', 'Saved': 'saved', 'Submitted': 'submitted', 'Approved': 'approved' };
+          const statusFilter = statusMap[tab];
+          const count = statusFilter ? documents.filter(d => d.status === statusFilter).length : 0;
           return (
             <TouchableOpacity
               key={tab}
@@ -404,12 +466,17 @@ export default function SKDocumentManagementScreen() {
               style={[styles.tableRow, idx % 2 === 1 && styles.tableRowAlt]}
             >
               {/* Title */}
-              <Text
-                style={[styles.docTitle, { flex: isMobile ? 2 : 3 }]}
-                numberOfLines={isMobile ? 2 : 1}
-              >
-                {doc.title}
-              </Text>
+              <View style={{ flex: isMobile ? 2 : 3, flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                {doc.fileUrl && (
+                  <Text style={{ fontSize: 12 }}>📎</Text>
+                )}
+                <Text
+                  style={styles.docTitle}
+                  numberOfLines={isMobile ? 2 : 1}
+                >
+                  {doc.title}
+                </Text>
+              </View>
 
               {/* Type badge (desktop only) */}
               {!isMobile && (

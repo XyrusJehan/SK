@@ -6,26 +6,10 @@ import {
 import { useRouter } from 'expo-router';
 import { useNav } from './navContext';
 import { useAuth } from './authContext';
+import { supabase } from '../../utils/supabase';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const isMobile = SCREEN_WIDTH < 768;
-
-const TASKS = [
-  { id: '1', description: 'The ABYIP for 2026 should be published within this month.', action: 'Upload', urgent: true },
-  { id: '2', description: 'The ABYIB proposal for 2026 should be completed before January 7, 2027.', action: 'Create', urgent: false },
-];
-
-const ACTIVITIES = [
-  { id: '1', label: 'Uploaded Quarterly Registers of Cash in Bank', time: '3:00 PM', date: '1/02/2026', type: 'upload' },
-  { id: '2', label: 'Created Comprehensive Barangay Youth Development Plan', time: '9:00 AM', date: '1/02/2026', type: 'create' },
-];
-
-const DOC_STATS = [
-  { id: 'total',     label: 'Total Documents', value: 48, icon: '🗂️', color: '#133E75', light: '#E3EDF9' },
-  { id: 'published', label: 'Published',        value: 31, icon: '✅', color: '#1A6B38', light: '#E8F5E9' },
-  { id: 'drafts',    label: 'Drafts',            value: 12, icon: '📝', color: '#A04010', light: '#FDF2EA' },
-  { id: 'archived',  label: 'Archived',          value: 5,  icon: '🗃️',color: '#5A2EA0', light: '#F2EEF9' },
-];
 
 const COLORS = {
   maroon: '#8B0000', maroonDark: '#6B0000', maroonLight: '#A50000',
@@ -282,6 +266,9 @@ export default function HomeScreen({ navigation }) {
   const [notifCount] = useState(2);
   const [sidebarVisible, setSidebarVisible] = useState(false);
   const [calendarVisible, setCalendarVisible] = useState(false); // ← NEW
+  const [docStats, setDocStats] = useState({ total: 0, published: 0, drafts: 0, archived: 0 });
+  const [recentActivities, setRecentActivities] = useState([]);
+  const [tasks, setTasks] = useState([]);
 
   useEffect(() => {
     if (user && user.role !== 'sk') router.replace('/');
@@ -298,6 +285,106 @@ export default function HomeScreen({ navigation }) {
     }
   }, [user, barangayId]);
 
+  // Fetch documents filtered by barangay_id
+  useEffect(() => {
+    const fetchDocuments = async () => {
+      if (!barangayId) return;
+
+      try {
+        // Fetch all documents for this barangay
+        const { data: documents, error } = await supabase
+          .from('documents')
+          .select('status')
+          .eq('barangay_id', barangayId);
+
+        if (error) {
+          console.error('Error fetching documents:', error);
+          return;
+        }
+
+        // Calculate stats
+        const total = documents?.length || 0;
+        const published = documents?.filter(d => d.status === 'published').length || 0;
+        const drafts = documents?.filter(d => d.status === 'draft').length || 0;
+        const archived = documents?.filter(d => d.status === 'archived').length || 0;
+
+        setDocStats({ total, published, drafts, archived });
+      } catch (error) {
+        console.error('Error:', error);
+      }
+    };
+
+    fetchDocuments();
+  }, [barangayId]);
+
+  // Fetch recent activities/documents for this barangay
+  useEffect(() => {
+    const fetchActivities = async () => {
+      if (!barangayId) return;
+
+      try {
+        const { data: documents, error } = await supabase
+          .from('documents')
+          .select('title, status, created_at')
+          .eq('barangay_id', barangayId)
+          .order('created_at', { ascending: false })
+          .limit(5);
+
+        if (error) {
+          console.error('Error fetching activities:', error);
+          return;
+        }
+
+        const activities = documents?.map(doc => ({
+          id: doc.title,
+          label: doc.title,
+          time: new Date(doc.created_at).toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit' }),
+          date: new Date(doc.created_at).toLocaleDateString('en-PH', { month: 'numeric', day: 'numeric', year: '2-digit' }),
+          type: doc.status === 'published' ? 'upload' : 'create',
+        })) || [];
+
+        setRecentActivities(activities);
+      } catch (error) {
+        console.error('Error:', error);
+      }
+    };
+
+    fetchActivities();
+  }, [barangayId]);
+
+  // Fetch tasks/deadlines for this barangay
+  useEffect(() => {
+    const fetchTasks = async () => {
+      if (!barangayId) return;
+
+      try {
+        const { data: deadlines, error } = await supabase
+          .from('submission_deadlines')
+          .select('*')
+          .eq('barangay_id', barangayId)
+          .order('deadline_date', { ascending: true });
+
+        if (error) {
+          console.error('Error fetching tasks:', error);
+          return;
+        }
+
+        const taskList = deadlines?.map(d => ({
+          id: d.deadline_id.toString(),
+          description: d.title || d.document_type,
+          action: 'Upload',
+          urgent: new Date(d.deadline_date) <= new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // urgent if within 7 days
+        })) || [];
+
+        setTasks(taskList);
+      } catch (error) {
+        console.error('Error:', error);
+      }
+    };
+
+    fetchTasks();
+  }, [barangayId]);
+
   const handleNavPress = (tab) => {
     if (tab === 'Dashboard') router.push('/(tabs)/sk-dashboard');
     else if (tab === 'Documents') router.push('/(tabs)/sk-document');
@@ -310,8 +397,8 @@ export default function HomeScreen({ navigation }) {
   const handleLogout = () => { logout(); router.replace('/'); };
 
   const sortedActivities = sortBy === 'Name'
-    ? [...ACTIVITIES].sort((a, b) => a.label.localeCompare(b.label))
-    : ACTIVITIES;
+    ? [...recentActivities].sort((a, b) => a.label.localeCompare(b.label))
+    : recentActivities;
 
   const renderSidebar = () => (
     <View style={styles.sidebar}>
@@ -423,7 +510,12 @@ export default function HomeScreen({ navigation }) {
 
           {/* Stats */}
           <View style={styles.statsRow}>
-            {DOC_STATS.map((stat) => (
+            {[
+              { id: 'total', label: 'Total Documents', value: docStats.total, icon: '🗂️', color: '#133E75', light: '#E3EDF9' },
+              { id: 'published', label: 'Published', value: docStats.published, icon: '✅', color: '#1A6B38', light: '#E8F5E9' },
+              { id: 'drafts', label: 'Drafts', value: docStats.drafts, icon: '📝', color: '#A04010', light: '#FDF2EA' },
+              { id: 'archived', label: 'Archived', value: docStats.archived, icon: '🗃️', color: '#5A2EA0', light: '#F2EEF9' },
+            ].map((stat) => (
               <View key={stat.id} style={[styles.statCard, { backgroundColor: stat.light, borderLeftColor: stat.color }]}>
                 <View style={[styles.statIconWrap, { backgroundColor: stat.color }]}>
                   <Text style={styles.statIcon}>{stat.icon}</Text>
@@ -441,13 +533,13 @@ export default function HomeScreen({ navigation }) {
             <View style={styles.cardHeader}>
               <View style={styles.cardHeaderAccent} />
               <Text style={styles.cardTitle}>Tasks</Text>
-              <View style={styles.taskBadge}><Text style={styles.taskBadgeText}>{TASKS.length}</Text></View>
+              <View style={styles.taskBadge}><Text style={styles.taskBadgeText}>{tasks.length}</Text></View>
             </View>
             <View style={styles.tableHead}>
               <Text style={[styles.tableHeadCell, { flex: 1 }]}>Task</Text>
               <Text style={styles.tableHeadCell}>Action</Text>
             </View>
-            {TASKS.map((task, idx) => (
+            {tasks.map((task, idx) => (
               <View key={task.id} style={[styles.tableRow, idx % 2 === 0 && styles.tableRowAlt]}>
                 <View style={styles.taskDescRow}>
                   {task.urgent && <View style={styles.urgentDot} />}

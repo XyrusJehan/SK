@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View, Text, TextInput, ScrollView, TouchableOpacity,
   StyleSheet, SafeAreaView, StatusBar, Dimensions,
@@ -7,6 +7,7 @@ import {
 import { useRouter } from 'expo-router';
 import { useNav } from './navContext';
 import { useAuth } from './authContext';
+import { supabase } from '../../utils/supabase';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const isMobile = SCREEN_WIDTH < 768;
@@ -149,12 +150,43 @@ const DocumentCard = ({ group, onItemPress }) => {
 export default function SKDocumentScreen() {
   const router = useRouter();
   const { activeTab, setActiveTab } = useNav();
-  const { logout } = useAuth();
+  const { logout, user } = useAuth();
+
+  // Get user's barangay from auth context
+  const barangayName = user?.barangay?.barangay_name || 'Unknown Barangay';
+  const barangayId = user?.barangayId;
 
   const [activeDocTab, setActiveDocTab]     = useState('Folder');
   const [searchText, setSearchText]         = useState('');
   const [notifCount]                        = useState(2);
   const [sidebarVisible, setSidebarVisible] = useState(false);
+  const [documents, setDocuments]           = useState([]);
+
+  // Fetch documents for this barangay
+  useEffect(() => {
+    const fetchDocuments = async () => {
+      if (!barangayId) return;
+
+      try {
+        const { data: docs, error } = await supabase
+          .from('documents')
+          .select('document_id, title, folder_category, document_type, status, year, created_at')
+          .eq('barangay_id', barangayId)
+          .order('created_at', { ascending: false });
+
+        if (error) {
+          console.error('Error fetching documents:', error);
+          return;
+        }
+
+        setDocuments(docs || []);
+      } catch (error) {
+        console.error('Error:', error);
+      }
+    };
+
+    fetchDocuments();
+  }, [barangayId]);
 
   const handleNavPress = (tab) => {
     setActiveTab(tab);
@@ -239,7 +271,7 @@ export default function SKDocumentScreen() {
         <View style={styles.header}>
           <View style={{ flex: 1 }}>
             <Text style={styles.headerSub}>SANGGUNIANG KABATAAN</Text>
-            <Text style={styles.headerTitle}>BARANGAY SAN JOSE</Text>
+            <Text style={styles.headerTitle}>{barangayName.toUpperCase()}</Text>
           </View>
           <TouchableOpacity style={styles.bellBtn} activeOpacity={0.7}>
             <BellIcon hasNotif={notifCount > 0} />
