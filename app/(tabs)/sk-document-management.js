@@ -30,7 +30,7 @@ const COLORS = {
 // ─── CONSTANTS ────────────────────────────────────────────────────────────────
 const NAV_TABS       = ['Dashboard', 'Documents', 'Planning', 'Portal'];
 const DOCUMENT_TABS  = ['Folder', 'Document Management'];
-const STATUS_TABS    = ['Drafts', 'Saved', 'Submitted', 'Approved'];
+const STATUS_TABS    = ['All', 'Drafts', 'Saved', 'Submitted', 'Approved'];
 const DRAFT_TYPES    = ['All Types', 'Planning', 'Financial', 'Governance', 'Performance'];
 const SORT_OPTIONS   = ['Newest', 'Oldest', 'Title A-Z', 'Title Z-A'];
 
@@ -102,7 +102,7 @@ export default function SKDocumentManagementScreen() {
   const barangayId = user?.barangayId;
 
   const [activeDocTab, setActiveDocTab] = useState('Document Management');
-  const [activeStatusTab, setActiveStatusTab] = useState('Drafts');
+  const [activeStatusTab, setActiveStatusTab] = useState('All');
   const [searchText, setSearchText]           = useState('');
   const [draftType, setDraftType]             = useState('All Types');
   const [sortBy, setSortBy]                   = useState('Newest');
@@ -115,12 +115,16 @@ export default function SKDocumentManagementScreen() {
   // Fetch documents for this barangay
   useEffect(() => {
     const fetchDocuments = async () => {
-      if (!barangayId) return;
+      if (!barangayId) {
+        console.log('No barangayId found, user:', user);
+        return;
+      }
 
       try {
+        // Fetch documents with submitted_by
         const { data: docs, error } = await supabase
           .from('documents')
-          .select('document_id, title, folder_category, document_type, status, year, created_at')
+          .select('document_id, title, folder_category, document_type, status, year, created_at, submitted_by')
           .eq('barangay_id', barangayId)
           .order('created_at', { ascending: false });
 
@@ -129,14 +133,45 @@ export default function SKDocumentManagementScreen() {
           return;
         }
 
-        const formattedDocs = docs?.map(doc => ({
-          id: doc.document_id,
-          title: doc.title || 'Untitled',
-          type: doc.document_type || 'Unknown',
-          status: doc.status || 'draft',
-          createdBy: 'Unknown',
-          lastModified: doc.created_at || new Date().toISOString(),
-        })) || [];
+        // Get all user IDs to fetch
+        const userIds = [...new Set((docs || []).map(d => d.submitted_by).filter(Boolean))];
+
+        // Fetch users in one call
+        let usersMap = {};
+        if (userIds.length > 0) {
+          const { data: users } = await supabase
+            .from('users')
+            .select('user_id, first_name, last_name')
+            .in('user_id', userIds);
+
+          usersMap = (users || []).reduce((acc, u) => {
+            acc[u.user_id] = `${u.first_name} ${u.last_name}`;
+            return acc;
+          }, {});
+        }
+
+        // Fetch document versions for each document
+        const formattedDocs = await Promise.all((docs || []).map(async doc => {
+          // Get latest version
+          const { data: versions } = await supabase
+            .from('document_versions')
+            .select('version_id, file_url, created_at')
+            .eq('document_id', doc.document_id)
+            .order('version_number', { ascending: false })
+            .limit(1);
+
+          return {
+            id: doc.document_id,
+            title: doc.title || 'Untitled',
+            type: doc.document_type || 'Unknown',
+            category: doc.folder_category || 'planning',
+            status: doc.status || 'draft',
+            year: doc.year,
+            createdBy: usersMap[doc.submitted_by] || 'Unknown',
+            lastModified: doc.created_at || new Date().toISOString(),
+            fileUrl: versions?.[0]?.file_url || null,
+          };
+        }));
 
         setDocuments(formattedDocs);
       } catch (error) {
@@ -164,13 +199,19 @@ export default function SKDocumentManagementScreen() {
   // Filtered + sorted documents
   const visibleDocs = useMemo(() => {
     // Filter by status tab (draft, saved, submitted, approved)
-    const statusMap = { 'Drafts': 'draft', 'Saved': 'saved', 'Submitted': 'submitted', 'Approved': 'approved' };
+    const statusMap = { 'All': null, 'Drafts': 'draft', 'Saved': 'saved', 'Submitted': 'submitted', 'Approved': 'approved' };
     const statusFilter = statusMap[activeStatusTab];
-    let docs = statusFilter ? documents.filter(d => d.status === statusFilter) : documents;
+    let docs = statusFilter !== null && statusFilter ? documents.filter(d => d.status === statusFilter) : documents;
 
-    // Filter by type
+    // Filter by folder category
     if (draftType !== 'All Types') {
-      docs = docs.filter(d => d.type === draftType);
+      const categoryMap = {
+        'Planning': 'planning',
+        'Financial': 'financial',
+        'Governance': 'governance',
+        'Performance': 'performance',
+      };
+      docs = docs.filter(d => d.category === categoryMap[draftType]);
     }
 
     // Filter by search
@@ -425,12 +466,17 @@ export default function SKDocumentManagementScreen() {
               style={[styles.tableRow, idx % 2 === 1 && styles.tableRowAlt]}
             >
               {/* Title */}
-              <Text
-                style={[styles.docTitle, { flex: isMobile ? 2 : 3 }]}
-                numberOfLines={isMobile ? 2 : 1}
-              >
-                {doc.title}
-              </Text>
+              <View style={{ flex: isMobile ? 2 : 3, flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                {doc.fileUrl && (
+                  <Text style={{ fontSize: 12 }}>📎</Text>
+                )}
+                <Text
+                  style={styles.docTitle}
+                  numberOfLines={isMobile ? 2 : 1}
+                >
+                  {doc.title}
+                </Text>
+              </View>
 
               {/* Type badge (desktop only) */}
               {!isMobile && (
