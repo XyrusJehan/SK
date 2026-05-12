@@ -33,7 +33,7 @@ const InputField = ({ label, placeholder, value, onChangeText, secureTextEntry, 
   const isPassword = secureTextEntry;
 
   return (
-    <View style={style}>
+    <View style={[{ overflow: 'hidden' }, style]}>
       <Text style={styles.label}>{label}</Text>
       <View style={[styles.inputWrap, focused && styles.inputWrapFocus]}>
         <TextInput
@@ -50,7 +50,7 @@ const InputField = ({ label, placeholder, value, onChangeText, secureTextEntry, 
         />
         {isPassword && (
           <TouchableOpacity onPress={() => setShow(!show)} style={styles.eyeBtn}>
-            <Text style={styles.eyeIcon}>{show ? '⌣' : '👁'}</Text>
+            <Text style={styles.eyeIcon}>{show ? '🙈' : '👁'}</Text>
           </TouchableOpacity>
         )}
       </View>
@@ -339,17 +339,17 @@ const styles = StyleSheet.create({
   },
 
   // Seal
-  sealWrap: { alignItems: 'center', marginBottom: isMobile ? 24 : 36 },
+  sealWrap: { alignItems: 'center', marginBottom: isMobile ? 20 : 28 },
   logoImage: {
-    width: isMobile ? 120 : 140,
-    height: isMobile ? 120 : 140,
+    width: isMobile ? 100 : 120,
+    height: isMobile ? 100 : 120,
   },
 
   // Name Row
-  nameRow: { flexDirection: 'row', gap: isMobile ? 6 : 8 },
-  nameFieldLarge: { flex: 1 },
-  nameFieldSmall: { width: isMobile ? 50 : 60 },
-  nameFieldStack: { flex: 1 },
+  nameRow: { flexDirection: 'row', gap: isMobile ? 6 : 8, width: '100%' },
+  nameFieldLarge: { flex: 1, minWidth: 0 },
+  nameFieldSmall: { width: 56 },
+  nameFieldStack: { flex: 1, minWidth: 0 },
 
   // Labels & Inputs
   label: { fontSize: 12, fontWeight: '700', color: COLORS.label, marginBottom: 5, marginTop: 2 },
@@ -358,6 +358,7 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.white, borderRadius: 9,
     borderWidth: 2, borderColor: 'transparent',
     paddingHorizontal: 12, height: 46,
+    alignSelf: 'stretch',
   },
   inputWrapFocus: { borderColor: COLORS.gold },
   input: { flex: 1, fontSize: 13, color: '#1A1A1A', padding: 0 },
