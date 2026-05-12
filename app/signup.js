@@ -3,7 +3,7 @@ import {
   View, Text, TextInput, TouchableOpacity,
   StyleSheet, SafeAreaView, StatusBar,
   KeyboardAvoidingView, Platform, ScrollView,
-  Dimensions, Image, Modal,
+  Dimensions, Image, ImageBackground, Modal,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuth } from './(tabs)/authContext';
@@ -50,7 +50,7 @@ const InputField = ({ label, placeholder, value, onChangeText, secureTextEntry, 
         />
         {isPassword && (
           <TouchableOpacity onPress={() => setShow(!show)} style={styles.eyeBtn}>
-            <Text style={styles.eyeIcon}>{show ? '🙈' : '👁'}</Text>
+            <Text style={styles.eyeIcon}>{show ? '⌣' : '👁'}</Text>
           </TouchableOpacity>
         )}
       </View>
@@ -100,196 +100,163 @@ export default function SignUpScreen() {
 
   return (
     <>
-    <SafeAreaView style={styles.safe}>
-      <StatusBar barStyle="light-content" backgroundColor={COLORS.navyDark} />
+      <SafeAreaView style={styles.safe}>
+        <StatusBar barStyle="light-content" backgroundColor={COLORS.navyDark} />
 
-      {/* ── Success Modal ── */}
-      <Modal
-        visible={showSuccessModal}
-        transparent
-        animationType="fade"
-        onRequestClose={() => {}}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalCard}>
-            {/* Green checkmark circle */}
-            <View style={styles.successIconWrap}>
-              <View style={styles.successIconCircle}>
-                <Text style={styles.successIconCheck}>✓</Text>
-              </View>
-            </View>
+        {/* Full-screen background image */}
+        <ImageBackground
+          source={require('./../assets/images/municipal-hall.png')}
+          style={styles.bgImage}
+          resizeMode="cover"
+          imageStyle={styles.bgImageStyle}
+        >
+          {/* Navy overlay at 60% opacity */}
+          <View style={styles.overlay} />
 
-            <Text style={styles.modalTitle}>SIGN-UP SUCCESSFUL!</Text>
-            <Text style={styles.modalBody}>
-              Thanks! your account is now created. Please wait for the Admin reviews and approves your registration. You will receive an email once it's finalized.
-            </Text>
+          <KeyboardAvoidingView
+            style={{ flex: 1 }}
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          >
+            <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+              <View style={styles.card}>
 
-            <TouchableOpacity
-              style={styles.modalBtn}
-              onPress={() => {
-                setShowSuccessModal(false);
-                router.replace('/');
-              }}
-              activeOpacity={0.85}
-            >
-              <Text style={styles.modalBtnText}>OK, GOT IT</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
+                {/* Seal */}
+                <View style={styles.sealWrap}>
+                  <Image
+                    source={require('./../assets/images/rizal-logo.png')}
+                    style={styles.logoImage}
+                    resizeMode="contain"
+                  />
+                </View>
 
-      <KeyboardAvoidingView
-        style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      >
-        <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
-          <View style={styles.card}>
+                {/* Name Row */}
+                <View style={styles.nameRow}>
+                  <InputField
+                    label="Last Name"
+                    placeholder="Last Name"
+                    value={lastName}
+                    onChangeText={setLastName}
+                    style={isMobile ? styles.nameFieldStack : styles.nameFieldLarge}
+                  />
+                  <InputField
+                    label="First Name"
+                    placeholder="First Name"
+                    value={firstName}
+                    onChangeText={setFirstName}
+                    style={isMobile ? styles.nameFieldStack : styles.nameFieldLarge}
+                  />
+                  {!isMobile && (
+                    <InputField
+                      label="M.I."
+                      placeholder="M.I."
+                      value={middleInitial}
+                      onChangeText={(t) => setMiddleInitial(t.slice(0, 2).toUpperCase())}
+                      style={styles.nameFieldSmall}
+                    />
+                  )}
+                </View>
 
-            {/* Seal */}
-            <View style={styles.sealWrap}>
-              <Image
-                source={require('./../assets/images/rizal-logo.png')}
-                style={styles.logoImage}
-                resizeMode="contain"
-              />
-            </View>
+                {/* Mobile: Middle Initial below */}
+                {isMobile && (
+                  <InputField
+                    label="M.I."
+                    placeholder="M.I."
+                    value={middleInitial}
+                    onChangeText={(t) => setMiddleInitial(t.slice(0, 2).toUpperCase())}
+                    style={{ marginTop: 14 }}
+                  />
+                )}
 
-            {/* Name Row */}
-            <View style={styles.nameRow}>
-              <InputField
-                label="Last Name"
-                placeholder="Last Name"
-                value={lastName}
-                onChangeText={setLastName}
-                style={isMobile ? styles.nameFieldStack : styles.nameFieldLarge}
-              />
-              <InputField
-                label="First Name"
-                placeholder="First Name"
-                value={firstName}
-                onChangeText={setFirstName}
-                style={isMobile ? styles.nameFieldStack : styles.nameFieldLarge}
-              />
-              {!isMobile && (
+                {/* Email */}
                 <InputField
-                  label="M.I."
-                  placeholder="M.I."
-                  value={middleInitial}
-                  onChangeText={(t) => setMiddleInitial(t.slice(0, 2).toUpperCase())}
-                  style={styles.nameFieldSmall}
+                  label="E-mail"
+                  placeholder="Enter your E-mail"
+                  value={email}
+                  onChangeText={(text) => { setEmail(text); setError(''); }}
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                  style={{ marginTop: 14 }}
                 />
-              )}
-            </View>
 
-            {/* Mobile: Middle Initial below */}
-            {isMobile && (
-              <InputField
-                label="M.I."
-                placeholder="M.I."
-                value={middleInitial}
-                onChangeText={(t) => setMiddleInitial(t.slice(0, 2).toUpperCase())}
-                style={{ marginTop: 14 }}
-              />
-            )}
+                {/* Password */}
+                <InputField
+                  label="Password"
+                  placeholder="Password"
+                  value={password}
+                  onChangeText={(text) => { setPassword(text); setError(''); }}
+                  secureTextEntry
+                  autoCapitalize="none"
+                  style={{ marginTop: 14 }}
+                />
 
-            {/* Email */}
-            <InputField
-              label="E-mail"
-              placeholder="Enter your E-mail"
-              value={email}
-              onChangeText={(text) => {
-                setEmail(text);
-                setError('');
-              }}
-              keyboardType="email-address"
-              autoCapitalize="none"
-              style={{ marginTop: 14 }}
-            />
+                {/* Confirm Password */}
+                <InputField
+                  label="Confirm Password"
+                  placeholder="Confirm Password"
+                  value={confirmPassword}
+                  onChangeText={(text) => { setConfirmPassword(text); setError(''); }}
+                  secureTextEntry
+                  autoCapitalize="none"
+                  style={{ marginTop: 14 }}
+                />
 
-            {/* Password */}
-            <InputField
-              label="Password"
-              placeholder="Password"
-              value={password}
-              onChangeText={(text) => {
-                setPassword(text);
-                setError('');
-              }}
-              secureTextEntry
-              autoCapitalize="none"
-              style={{ marginTop: 14 }}
-            />
+                {/* Password match indicator */}
+                {confirmPassword.length > 0 && (
+                  <Text style={[
+                    styles.matchHint,
+                    { color: password === confirmPassword ? COLORS.success : COLORS.error }
+                  ]}>
+                    {password === confirmPassword ? '✓ Passwords match' : '✗ Passwords do not match'}
+                  </Text>
+                )}
 
-            {/* Confirm Password */}
-            <InputField
-              label="Confirm Password"
-              placeholder="Confirm Password"
-              value={confirmPassword}
-              onChangeText={(text) => {
-                setConfirmPassword(text);
-                setError('');
-              }}
-              secureTextEntry
-              autoCapitalize="none"
-              style={{ marginTop: 14 }}
-            />
+                {/* Error */}
+                {error !== '' && (
+                  <View style={styles.errorBox}>
+                    <Text style={styles.errorText}>{error}</Text>
+                  </View>
+                )}
 
-            {/* Password match indicator */}
-            {confirmPassword.length > 0 && (
-              <Text style={[
-                styles.matchHint,
-                { color: password === confirmPassword ? COLORS.success : COLORS.error }
-              ]}>
-                {password === confirmPassword ? '✓ Passwords match' : '✗ Passwords do not match'}
-              </Text>
-            )}
+                {/* Terms Checkbox */}
+                <TouchableOpacity
+                  style={styles.termsRow}
+                  onPress={() => setAgreed(!agreed)}
+                  activeOpacity={0.8}
+                >
+                  <View style={[styles.checkbox, agreed && styles.checkboxChecked]}>
+                    {agreed && <Text style={styles.checkMark}>✓</Text>}
+                  </View>
+                  <Text style={styles.termsText}>
+                    I agree to the{' '}
+                    <Text style={styles.termsLink}>terms of services</Text>
+                    {' '}and{' '}
+                    <Text style={styles.termsLink}>privacy policy</Text>
+                  </Text>
+                </TouchableOpacity>
 
-            {/* Error */}
-            {error !== '' && (
-              <View style={styles.errorBox}>
-                <Text style={styles.errorText}>{error}</Text>
+                {/* Sign Up Button */}
+                <TouchableOpacity
+                  style={[styles.signUpBtn, (!agreed || isLoading) && styles.signUpBtnDisabled]}
+                  onPress={handleSignUp}
+                  activeOpacity={agreed ? 0.85 : 1}
+                  disabled={isLoading}
+                >
+                  <Text style={styles.signUpBtnText}>{isLoading ? 'Creating Account...' : 'Sign Up'}</Text>
+                </TouchableOpacity>
+
+                {/* Login link */}
+                <View style={styles.loginRow}>
+                  <Text style={styles.subText}>Already have an account? </Text>
+                  <TouchableOpacity onPress={() => router.back()}>
+                    <Text style={styles.linkText}>Login</Text>
+                  </TouchableOpacity>
+                </View>
+
               </View>
-            )}
-
-            {/* Terms Checkbox */}
-            <TouchableOpacity
-              style={styles.termsRow}
-              onPress={() => setAgreed(!agreed)}
-              activeOpacity={0.8}
-            >
-              <View style={[styles.checkbox, agreed && styles.checkboxChecked]}>
-                {agreed && <Text style={styles.checkMark}>✓</Text>}
-              </View>
-              <Text style={styles.termsText}>
-                I agree to the{' '}
-                <Text style={styles.termsLink}>terms of services</Text>
-                {' '}and{' '}
-                <Text style={styles.termsLink}>privacy policy</Text>
-              </Text>
-            </TouchableOpacity>
-
-            {/* Sign Up Button */}
-            <TouchableOpacity
-              style={[styles.signUpBtn, (!agreed || isLoading) && styles.signUpBtnDisabled]}
-              onPress={handleSignUp}
-              activeOpacity={agreed ? 0.85 : 1}
-              disabled={isLoading}
-            >
-              <Text style={styles.signUpBtnText}>{isLoading ? 'Creating Account...' : 'Sign Up'}</Text>
-            </TouchableOpacity>
-
-            {/* Login link */}
-            <View style={styles.loginRow}>
-              <Text style={styles.subText}>Already have an account? </Text>
-              <TouchableOpacity onPress={() => router.back()}>
-                <Text style={styles.linkText}>Login</Text>
-              </TouchableOpacity>
-            </View>
-
-          </View>
-        </ScrollView>
-      </KeyboardAvoidingView>
-    </SafeAreaView>
+            </ScrollView>
+          </KeyboardAvoidingView>
+        </ImageBackground>
+      </SafeAreaView>
 
       {/* Success Modal */}
       <Modal
@@ -328,6 +295,25 @@ export default function SignUpScreen() {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: COLORS.navyDark },
+
+  // Background image fills the entire screen
+  bgImage: {
+    flex: 1,
+    width: '100%',
+    height: '100%',
+  },
+  // Shift image up slightly and extend height to avoid bottom cutoff
+  bgImageStyle: {
+    top: -40,
+    height: '110%',
+  },
+
+  // Navy overlay at 60% opacity
+  overlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(30, 58, 110, 0.60)',
+  },
+
   scroll: {
     flexGrow: 1,
     justifyContent: 'center',
@@ -335,25 +321,28 @@ const styles = StyleSheet.create({
     padding: 20,
     paddingVertical: 32,
   },
+
   card: {
     width: '100%',
     maxWidth: 440,
-    backgroundColor: COLORS.navy,
+    backgroundColor: 'rgba(22, 45, 85, 0.75)',
     borderRadius: 20,
     padding: isMobile ? 16 : 28,
     paddingTop: isMobile ? 20 : 36,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.3,
+    shadowOpacity: 0.4,
     shadowRadius: 20,
     elevation: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
   },
 
   // Seal
-  sealWrap: { alignItems: 'center', marginBottom: isMobile ? 20 : 28 },
+  sealWrap: { alignItems: 'center', marginBottom: isMobile ? 24 : 36 },
   logoImage: {
-    width: isMobile ? 100 : 120,
-    height: isMobile ? 100 : 120,
+    width: isMobile ? 120 : 140,
+    height: isMobile ? 120 : 140,
   },
 
   // Name Row
@@ -490,4 +479,13 @@ const styles = StyleSheet.create({
     color: COLORS.white,
     letterSpacing: 1,
   },
+
+  // Legacy modal styles (kept for safety)
+  successIconWrap: { alignItems: 'center', marginBottom: 16 },
+  successIconCircle: {
+    width: 64, height: 64, borderRadius: 32,
+    backgroundColor: '#2EAA57',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  successIconCheck: { fontSize: 32, color: COLORS.white, fontWeight: '900' },
 });
