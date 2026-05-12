@@ -15,6 +15,7 @@ import {
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useNav } from './navContext';
 import { useAuth } from './authContext';
+import { supabase } from '../../utils/supabase';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const isMobile = SCREEN_WIDTH < 768;
@@ -230,6 +231,9 @@ const DocumentRow = ({ doc, accentColor, onMenu, isAlt }) => (
       <Text style={[styles.docName, isMobile && styles.docNameMobile]} numberOfLines={2}>
         {doc.name}
       </Text>
+      {doc.barangayName && (
+        <Text style={styles.barangayLabel}>{doc.barangayName}</Text>
+      )}
       {doc.status === 'Authorized' && (
         <View style={[styles.statusBadge, { backgroundColor: accentColor + '20', borderColor: accentColor + '60' }]}>
           <Text style={[styles.statusText, { color: accentColor }]}>Authorized</Text>
@@ -272,11 +276,79 @@ export default function LYDODocumentListScreen({ navigation }) {
   const [dropdownOptions, setDropdownOptions]   = useState([]);
   const [dropdownAccent, setDropdownAccent]     = useState(COLORS.navy);
   const [activeDocumentTab, setActiveDocumentTab] = useState('Barangay Document');
+  const [documents, setDocuments]               = useState([]);
 
   // Set initial view based on route params from lydo-document
   useEffect(() => {
     setActiveTab('Documents');
   }, []);
+
+  // Fetch all documents from all barangays
+  useEffect(() => {
+    const fetchDocuments = async () => {
+      try {
+        // Map tab categories to folder_category values
+        const categoryMap = {
+          'Planning': 'planning',
+          'Financial': 'financial',
+          'Governance': 'governance',
+          'Performance': 'performance'
+        };
+
+        let query = supabase
+          .from('documents')
+          .select(`
+            document_id,
+            title,
+            folder_category,
+            document_type,
+            status,
+            year,
+            created_at,
+            file_url,
+            barangay:barangays(barangay_name)
+          `)
+          .order('created_at', { ascending: false });
+
+        // Filter by barangay if provided
+        if (params.barangayId) {
+          query = query.eq('barangay_id', params.barangayId);
+        }
+
+        // Filter by year if provided
+        if (params.year) {
+          query = query.eq('year', params.year);
+        }
+
+        const { data: docs, error } = await query;
+
+        if (error) {
+          console.error('Error fetching documents:', error);
+          return;
+        }
+
+        const formattedDocs = docs?.map(doc => ({
+          id: doc.document_id,
+          name: doc.title || 'Untitled',
+          category: doc.folder_category === 'performance' ? 'Performance' :
+                    doc.folder_category === 'planning' ? 'Planning' :
+                    doc.folder_category === 'financial' ? 'Financial' :
+                    doc.folder_category === 'governance' ? 'Governance' : 'Performance',
+          subType: doc.document_type || '',
+          date: doc.created_at ? new Date(doc.created_at).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
+          status: doc.status === 'approved' || doc.status === 'published' ? 'Authorized' : null,
+          hasFile: !!doc.file_url,
+          barangayName: doc.barangay?.barangay_name || 'Unknown'
+        })) || [];
+
+        setDocuments(formattedDocs);
+      } catch (error) {
+        console.error('Error:', error);
+      }
+    };
+
+    fetchDocuments();
+  }, [params.barangayId, params.year]);
 
   useEffect(() => {
     if (params.category) {
@@ -334,7 +406,7 @@ export default function LYDODocumentListScreen({ navigation }) {
 
   // ── Filter + sort documents ──
   const getFilteredDocs = () => {
-    let docs = ALL_DOCUMENTS;
+    let docs = documents;
 
     // Filter by category
     if (activeCategory !== 'All') {
@@ -347,7 +419,7 @@ export default function LYDODocumentListScreen({ navigation }) {
     // Search
     if (searchText.trim()) {
       const q = searchText.toLowerCase();
-      docs = docs.filter(d => d.name.toLowerCase().includes(q) || d.subType.toLowerCase().includes(q));
+      docs = docs.filter(d => d.name.toLowerCase().includes(q) || d.subType.toLowerCase().includes(q) || d.barangayName.toLowerCase().includes(q));
     }
     // Sort
     if (sortBy === 'Newest') {
@@ -564,7 +636,10 @@ export default function LYDODocumentListScreen({ navigation }) {
           <Text style={[styles.listHeadingTitle, { color: accentColor }]}>
             {selectedSubType ?? selectedGroup?.title ?? 'All Documents'}
           </Text>
-          <Text style={styles.listHeadingCount}>{filteredDocs.length} document{filteredDocs.length !== 1 ? 's' : ''}</Text>
+          <Text style={styles.listHeadingCount}>
+            {filteredDocs.length} document{filteredDocs.length !== 1 ? 's' : ''}
+            {params.barangayId ? ` • ${params.year || ''}` : ''}
+          </Text>
         </View>
         {/* Mobile upload button */}
         {isMobile && (
@@ -935,6 +1010,7 @@ const styles = StyleSheet.create({
   docName: { fontSize: 12, color: COLORS.darkText, lineHeight: 17, flex: 1 },
   docNameMobile: { fontSize: 11 },
   statusBadge: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10, borderWidth: 1 },
+  barangayLabel: { fontSize: 10, color: COLORS.subText, marginTop: 2 },
   statusText: { fontSize: 10, fontWeight: '700' },
   fileIconWrap: { paddingHorizontal: 4 },
   docDate: { width: 68, fontSize: 11, color: COLORS.subText, textAlign: 'right', fontWeight: '600' },

@@ -14,6 +14,7 @@ import {
 import { useRouter } from 'expo-router';
 import { useNav } from './navContext';
 import { useAuth } from './authContext';
+import { supabase } from '../../utils/supabase';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const isMobile = SCREEN_WIDTH < 768;
@@ -64,20 +65,9 @@ const COLORS = {
 };
 
 // ─── BARANGAY DATA ─────────────────────────────────────────────────────────────
-const BARANGAYS = [
-  { id: '1', name: 'San Roque'  },
-  { id: '2', name: 'San Isidro' },
-  { id: '3', name: 'San Bueno'  },
-  { id: '4', name: 'Banot'      },
-  { id: '5', name: 'Mamala'     },
-  { id: '6', name: 'Taquico'    },
-  { id: '7', name: 'Bayongon'   },
-  { id: '8', name: 'Apasan'     },
-];
+// (Now fetched from Supabase - see useEffect below)
 
 // ─── YEAR FOLDERS per barangay ────────────────────────────────────────────────
-const YEAR_FOLDERS = ['2022 Documents', '2023 Documents', '2024 Documents'];
-
 // ─── DOCUMENT GROUPS (shown after selecting a year) ───────────────────────────
 const DOCUMENT_GROUPS = [
   {
@@ -222,7 +212,7 @@ const Breadcrumb = ({ barangay, year, onPressDocuments, onPressBarangay }) => (
         <Text style={styles.breadcrumbSep}> › </Text>
         <TouchableOpacity onPress={onPressBarangay}>
           <Text style={[styles.breadcrumbLink, !year && styles.breadcrumbCurrent]}>
-            {barangay.name}
+            {barangay.barangay_name}
           </Text>
         </TouchableOpacity>
       </>
@@ -280,8 +270,33 @@ export default function LYDODocumentsScreen({ navigation }) {
   const [notifCount]                            = useState(2);
   const [sidebarVisible, setSidebarVisible]     = useState(false);
   const [activeDocumentTab, setActiveDocumentTab] = useState('Barangay Document');
+  const [barangays, setBarangays]               = useState([]);
+  const [documentYears, setDocumentYears]     = useState([]);
 
   useEffect(() => { setActiveTab('Documents'); }, []);
+
+  // Fetch all barangays from database
+  useEffect(() => {
+    const fetchBarangays = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('barangays')
+          .select('barangay_id, barangay_name, municipality, province')
+          .order('barangay_name');
+
+        if (error) {
+          console.error('Error fetching barangays:', error);
+          return;
+        }
+
+        setBarangays(data || []);
+      } catch (error) {
+        console.error('Error:', error);
+      }
+    };
+
+    fetchBarangays();
+  }, []);
 
   // ── Navigation helpers ──
   const goToFolders = () => {
@@ -296,6 +311,30 @@ export default function LYDODocumentsScreen({ navigation }) {
     setSelectedYear(null);
     setView('years');
     setSearchText('');
+
+    // Fetch distinct years from documents for this barangay
+    const fetchYears = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('documents')
+          .select('year')
+          .eq('barangay_id', barangay.barangay_id)
+          .order('year', { ascending: false });
+
+        if (error) {
+          console.error('Error fetching years:', error);
+          return;
+        }
+
+        // Get unique years
+        const years = [...new Set(data?.map(d => d.year).filter(Boolean))];
+        setDocumentYears(years);
+      } catch (error) {
+        console.error('Error:', error);
+      }
+    };
+
+    fetchYears();
   };
 
   const goToDocs = (year) => {
@@ -325,12 +364,12 @@ export default function LYDODocumentsScreen({ navigation }) {
   };
 
   // ── Filtered data ──
-  const filteredBarangays = BARANGAYS.filter(b =>
-    b.name.toLowerCase().includes(searchText.toLowerCase())
+  const filteredBarangays = barangays.filter(b =>
+    b.barangay_name.toLowerCase().includes(searchText.toLowerCase())
   );
 
-  const filteredYears = YEAR_FOLDERS.filter(y =>
-    y.toLowerCase().includes(searchText.toLowerCase())
+  const filteredYears = documentYears.filter(y =>
+    y.toString().includes(searchText)
   );
 
   const filteredGroups = DOCUMENT_GROUPS.filter(g =>
@@ -459,13 +498,13 @@ export default function LYDODocumentsScreen({ navigation }) {
           <View style={isMobile ? styles.folderGridMobile : styles.folderGrid}>
             {filteredBarangays.map(item => (
               <TouchableOpacity
-                key={item.id}
+                key={item.barangay_id}
                 style={styles.folderCard}
                 onPress={() => goToYears(item)}
                 activeOpacity={0.75}
               >
                 <FolderIcon size={isMobile ? 60 : 68} />
-                <Text style={styles.folderName} numberOfLines={2}>{item.name}</Text>
+                <Text style={styles.folderName} numberOfLines={2}>{item.barangay_name}</Text>
               </TouchableOpacity>
             ))}
           </View>
@@ -477,7 +516,7 @@ export default function LYDODocumentsScreen({ navigation }) {
         <>
           {/* Subtitle */}
           <Text style={styles.barangaySubtitle}>
-            Barangay {selectedBarangay?.name} Documents
+            Barangay {selectedBarangay?.barangay_name} Documents
           </Text>
 
           {/* Breadcrumb */}
@@ -510,7 +549,7 @@ export default function LYDODocumentsScreen({ navigation }) {
         <>
           {/* Subtitle */}
           <Text style={styles.barangaySubtitle}>
-            Barangay {selectedBarangay?.name} Documents
+            Barangay {selectedBarangay?.barangay_name} Documents
           </Text>
 
           {/* Breadcrumb */}
@@ -533,7 +572,12 @@ export default function LYDODocumentsScreen({ navigation }) {
                   onItemPress={(item, g) => {
                     router.push({
                       pathname: '/(tabs)/lydo-document-list',
-                      params: { category: g.category, subType: item }
+                      params: {
+                        category: g.category,
+                        subType: item,
+                        barangayId: selectedBarangay?.barangay_id,
+                        year: selectedYear
+                      }
                     });
                   }}
                 />
