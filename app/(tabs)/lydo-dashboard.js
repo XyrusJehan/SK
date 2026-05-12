@@ -15,6 +15,7 @@ import {
 import { useRouter } from 'expo-router';
 import { useNav } from './navContext';
 import { useAuth } from './authContext';
+import { supabase } from '../../utils/supabase';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const isMobile = SCREEN_WIDTH < 768;
@@ -27,17 +28,6 @@ const TASKS = [
     action: 'Send Reminder',
     urgent: true,
   },
-];
-
-const ACTIVITIES = [
-  { id: '1', label: 'Created Ordinance',                               time: '3:00 PM', date: '1/02/2026', type: 'create' },
-  { id: '2', label: 'Uploaded ordinance in the web',                   time: '9:00 AM', date: '1/02/2026', type: 'upload' },
-  { id: '3', label: 'Barangay San Roque uploaded file in share folder', time: '',        date: '',          type: 'share'  },
-];
-
-const STATS = [
-  { id: 'brgy',    label: 'Total Barangay',    value: 14 },
-  { id: 'pending', label: 'Pending Documents', value: 14 },
 ];
 
 // ─── ICON COMPONENTS ──────────────────────────────────────────────────────────
@@ -100,12 +90,100 @@ export default function LYDOHomeScreen({ navigation }) {
   }, [user]);
 
   useEffect(() => {
-    setActiveTab('Home');
+    setActiveTab('Dashboard');
   }, []);
   const [sortBy, setSortBy]           = useState('Newest');
   const [notifCount]                  = useState(3);
-  const [pendingCount, setPendingCount] = useState(14);
+  const [pendingCount, setPendingCount] = useState(0);
   const [sidebarVisible, setSidebarVisible] = useState(false);
+  const [activities, setActivities]   = useState([]);
+  const [totalBarangays, setTotalBarangays] = useState(0);
+
+  // Fetch statistics and recent activities
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        // Get total barangays
+        const { data: brgyData, error: brgyError } = await supabase
+          .from('barangays')
+          .select('barangay_id', { count: 'exact' });
+
+        if (brgyError) {
+          console.error('Error fetching barangays:', brgyError);
+        } else {
+          setTotalBarangays(brgyData?.length || 0);
+        }
+
+        // Get pending documents count (draft or saved status)
+        const { data: pendingData, error: pendingError } = await supabase
+          .from('documents')
+          .select('document_id', { count: 'exact' })
+          .in('status', ['draft', 'saved']);
+
+        if (pendingError) {
+          console.error('Error fetching pending:', pendingError);
+        } else {
+          setPendingCount(pendingData?.length || 0);
+        }
+
+        // Get recent activities from documents table
+        const { data: docsData, error: docsError } = await supabase
+          .from('documents')
+          .select(`
+            document_id,
+            title,
+            status,
+            created_at,
+            saved_at,
+            submitted_at,
+            barangay:barangays(barangay_name)
+          `)
+          .order('created_at', { ascending: false })
+          .limit(20);
+
+        if (docsError) {
+          console.error('Error fetching activities:', docsError);
+        } else {
+          // Transform into activities
+          const formattedActivities = docsData?.map(doc => {
+            // Determine action type based on status
+            let actionType = 'create';
+            let actionLabel = 'Created document';
+
+            if (doc.status === 'submitted' || doc.status === 'approved') {
+              actionType = 'upload';
+              actionLabel = 'Submitted document';
+            } else if (doc.status === 'draft') {
+              actionType = 'create';
+              actionLabel = 'Draft document';
+            } else if (doc.status === 'saved') {
+              actionType = 'save';
+              actionLabel = 'Saved document';
+            }
+
+            const date = doc.submitted_at || doc.saved_at || doc.created_at;
+            const dateObj = date ? new Date(date) : new Date();
+
+            return {
+              id: doc.document_id,
+              label: actionLabel,
+              barangay: doc.barangay?.barangay_name || 'Unknown',
+              time: dateObj.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
+              date: dateObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+              type: actionType,
+              title: doc.title
+            };
+          }) || [];
+
+          setActivities(formattedActivities);
+        }
+      } catch (error) {
+        console.error('Error:', error);
+      }
+    };
+
+    fetchData();
+  }, []);
 
   const today = new Date().toLocaleDateString('en-US', {
     month: 'long', day: 'numeric', year: 'numeric',
@@ -113,8 +191,8 @@ export default function LYDOHomeScreen({ navigation }) {
 
   const sortedActivities =
     sortBy === 'Name'
-      ? [...ACTIVITIES].sort((a, b) => a.label.localeCompare(b.label))
-      : ACTIVITIES;
+      ? [...activities].sort((a, b) => a.label.localeCompare(b.label))
+      : activities;
 
   const handleNav = (tab) => {
     setActiveTab(tab);
@@ -147,7 +225,7 @@ export default function LYDOHomeScreen({ navigation }) {
         />
       </View>
       <View style={styles.sidebarSpacer} />
-      {['Home', 'Documents', 'Monitor'].map((tab) => {
+      {['Dashboard', 'Documents', 'Monitor'].map((tab) => {
         const active = activeTab === tab;
         return (
           <TouchableOpacity
@@ -233,14 +311,18 @@ export default function LYDOHomeScreen({ navigation }) {
 
           {/* ── STAT CARDS ── */}
           <View style={isMobile ? styles.statsColumn : styles.statsRow}>
-            {STATS.map((s) => (
-              <View key={s.id} style={styles.statCard}>
-                <Text style={styles.statLabel}>{s.label}</Text>
-                <Text style={styles.statValue}>
-                  {s.id === 'pending' ? pendingCount : s.value}
-                </Text>
-              </View>
-            ))}
+            <View style={styles.statCard}>
+              <Text style={styles.statLabel}>TOTAL BARANGAYS</Text>
+              <Text style={styles.statValue}>{totalBarangays}</Text>
+            </View>
+            <View style={styles.statCard}>
+              <Text style={styles.statLabel}>PENDING DOCUMENTS</Text>
+              <Text style={styles.statValue}>{pendingCount}</Text>
+            </View>
+            <View style={styles.statCard}>
+              <Text style={styles.statLabel}>APPROVED DOCUMENTS</Text>
+              <Text style={styles.statValue}>0</Text>
+            </View>
           </View>
 
           {/* Today */}
@@ -333,8 +415,8 @@ export default function LYDOHomeScreen({ navigation }) {
                 </View>
                 {act.time ? (
                   <View style={styles.activityTime}>
-                    <Text style={styles.activityTimeText}>{act.time}</Text>
-                    <Text style={styles.activityDateText}>{act.date}</Text>
+                    <Text style={styles.activityTimeText}>{act.barangay}</Text>
+                    <Text style={styles.activityDateText}>{act.date} • {act.time}</Text>
                   </View>
                 ) : null}
               </View>

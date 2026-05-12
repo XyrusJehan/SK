@@ -36,7 +36,7 @@ const COLORS = {
 };
 
 // ─── NAV TABS ─────────────────────────────────────────────────────────────────
-const NAV_TABS = ['Home', 'Documents', 'Monitor'];
+const NAV_TABS = ['Dashboard', 'Documents', 'Monitor'];
 const DOCUMENT_TABS = ['Barangay Folders', 'Reports', 'Templates'];
 
 // ─── TEMPLATE STATUS ──────────────────────────────────────────────────────────
@@ -211,7 +211,7 @@ export default function LYDODocumentTemplatesScreen() {
   const handleNavPress = (tab) => {
     setActiveTab(tab);
     setSidebarVisible(false);
-    if (tab === 'Home') router.push('/(tabs)/lydo-home');
+    if (tab === 'Dashboard') router.push('/(tabs)/lydo-dashboard');
     else if (tab === 'Documents') router.push('/(tabs)/lydo-document');
     else if (tab === 'Monitor') router.push('/(tabs)/lydo-monitor');
   };

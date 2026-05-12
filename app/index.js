@@ -55,7 +55,7 @@ export default function LoginScreen() {
       // Use setTimeout to ensure state propagates before navigation
       setTimeout(() => {
         if (result.user.role === 'lydo') {
-          router.replace('/lydo-home');
+          router.replace('/lydo-dashboard');
         } else if (result.user.role === 'sk') {
           router.replace('/sk-dashboard');
         } else {
