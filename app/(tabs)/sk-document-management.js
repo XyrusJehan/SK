@@ -1,9 +1,9 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import {
   View, Text, TextInput, ScrollView, TouchableOpacity,
   StyleSheet, SafeAreaView, StatusBar, Dimensions, Image, Modal,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { useNav } from './navContext';
 import { useAuth } from './authContext';
 import { supabase } from '../../utils/supabase';
@@ -111,48 +111,98 @@ export default function SKDocumentManagementScreen() {
   const [sortDropdownOpen, setSortDropdownOpen] = useState(false);
   const [notifCount]                          = useState(2);
   const [documents, setDocuments]             = useState([]);
+  const [deleteModalVisible, setDeleteModalVisible] = useState(false);
+  const [documentToDelete, setDocumentToDelete] = useState(null);
+  const [deleting, setDeleting] = useState(false);
 
-  // Fetch documents for this barangay
-  useEffect(() => {
-    const fetchDocuments = async () => {
-      if (!barangayId) {
-        console.log('No barangayId found, user:', user);
+  // Fetch documents for this barangay - reusable function
+  const fetchDocuments = useCallback(async () => {
+    if (!barangayId) {
+      console.log('No barangayId found, user:', user);
+      return;
+    }
+
+    try {
+      // Fetch documents with submitted_by
+      const { data: docs, error } = await supabase
+        .from('documents')
+        .select('document_id, title, folder_category, document_type, status, year, created_at, submitted_by')
+        .eq('barangay_id', barangayId)
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error('Error fetching documents:', error);
         return;
       }
 
-      try {
-        // Fetch documents with submitted_by
-        const { data: docs, error } = await supabase
+      // Get all user IDs to fetch
+      const userIds = [...new Set((docs || []).map(d => d.submitted_by).filter(Boolean))];
+
+      // Fetch users in one call
+      let usersMap = {};
+      if (userIds.length > 0) {
+        const { data: users } = await supabase
+          .from('users')
+          .select('user_id, first_name, last_name')
+          .in('user_id', userIds);
+
+        usersMap = (users || []).reduce((acc, u) => {
+          acc[u.user_id] = `${u.first_name} ${u.last_name}`;
+          return acc;
+        }, {});
+      }
+
+      // Fetch document versions for each document
+      const formattedDocs = await Promise.all((docs || []).map(async doc => {
+        // Get latest version
+        const { data: versions } = await supabase
+          .from('document_versions')
+          .select('version_id, file_url, created_at')
+          .eq('document_id', doc.document_id)
+          .order('version_number', { ascending: false })
+          .limit(1);
+
+        return {
+          id: doc.document_id,
+          title: doc.title || 'Untitled',
+          type: doc.document_type || 'Unknown',
+          category: doc.folder_category || 'planning',
+          status: doc.status || 'draft',
+          year: doc.year,
+          createdBy: usersMap[doc.submitted_by] || 'Unknown',
+          lastModified: doc.created_at || new Date().toISOString(),
+          fileUrl: versions?.[0]?.file_url || null,
+        };
+      }));
+
+      setDocuments(formattedDocs);
+    } catch (error) {
+      console.error('Error:', error);
+    }
+  }, [barangayId, supabase, user]);
+
+  // Auto-fetch on screen focus - always fetch fresh data
+  useFocusEffect(
+    useCallback(() => {
+      (async () => {
+        if (!barangayId) return;
+
+        const { data: docs } = await supabase
           .from('documents')
           .select('document_id, title, folder_category, document_type, status, year, created_at, submitted_by')
           .eq('barangay_id', barangayId)
           .order('created_at', { ascending: false });
 
-        if (error) {
-          console.error('Error fetching documents:', error);
-          return;
-        }
+        if (!docs) return;
 
-        // Get all user IDs to fetch
-        const userIds = [...new Set((docs || []).map(d => d.submitted_by).filter(Boolean))];
-
-        // Fetch users in one call
+        const userIds = [...new Set(docs.map(d => d.submitted_by).filter(Boolean))];
         let usersMap = {};
         if (userIds.length > 0) {
-          const { data: users } = await supabase
-            .from('users')
-            .select('user_id, first_name, last_name')
-            .in('user_id', userIds);
-
-          usersMap = (users || []).reduce((acc, u) => {
-            acc[u.user_id] = `${u.first_name} ${u.last_name}`;
-            return acc;
-          }, {});
+          const { data: users } = await supabase.from('users').select('user_id, first_name, last_name').in('user_id', userIds);
+          usersMap = (users || []).reduce((acc, u) => { acc[u.user_id] = `${u.first_name} ${u.last_name}`; return acc; }, {});
         }
 
-        // Fetch document versions for each document
-        const formattedDocs = await Promise.all((docs || []).map(async doc => {
-          // Get latest version
+        const formattedDocs = await Promise.all(docs.map(async doc => {
           const { data: versions } = await supabase
             .from('document_versions')
             .select('version_id, file_url, created_at')
@@ -174,13 +224,9 @@ export default function SKDocumentManagementScreen() {
         }));
 
         setDocuments(formattedDocs);
-      } catch (error) {
-        console.error('Error:', error);
-      }
-    };
-
-    fetchDocuments();
-  }, [barangayId]);
+      })();
+    }, [barangayId])
+  );
 
   const handleNavPress = (tab) => {
     setActiveTab(tab);
@@ -195,6 +241,85 @@ export default function SKDocumentManagementScreen() {
     const d = new Date(dateStr);
     return d.toLocaleDateString('en-PH', { year: 'numeric', month: 'short', day: 'numeric' });
   };
+
+  // Handle delete confirmation
+  const handleDeletePress = (doc) => {
+    setDocumentToDelete(doc);
+    setDeleteModalVisible(true);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!documentToDelete) return;
+
+    setDeleting(true);
+    try {
+      // Delete document versions first
+      await supabase
+        .from('document_versions')
+        .delete()
+        .eq('document_id', documentToDelete.id);
+
+      // Delete the document
+      const { error } = await supabase
+        .from('documents')
+        .delete()
+        .eq('document_id', documentToDelete.id);
+
+      if (error) {
+        console.error('Error deleting document:', error);
+        alert('Failed to delete document: ' + error.message);
+        setDeleting(false);
+        return;
+      }
+
+      setDeleteModalVisible(false);
+      setDocumentToDelete(null);
+
+      // Force refresh by directly fetching fresh data
+      const { data: docs } = await supabase
+        .from('documents')
+        .select('document_id, title, folder_category, document_type, status, year, created_at, submitted_by')
+        .eq('barangay_id', barangayId)
+        .order('created_at', { ascending: false });
+
+      if (docs) {
+        const userIds = [...new Set(docs.map(d => d.submitted_by).filter(Boolean))];
+        let usersMap = {};
+        if (userIds.length > 0) {
+          const { data: users } = await supabase.from('users').select('user_id, first_name, last_name').in('user_id', userIds);
+          usersMap = (users || []).reduce((acc, u) => { acc[u.user_id] = `${u.first_name} ${u.last_name}`; return acc; }, {});
+        }
+
+        const formattedDocs = await Promise.all(docs.map(async doc => {
+          const { data: versions } = await supabase
+            .from('document_versions')
+            .select('version_id, file_url, created_at')
+            .eq('document_id', doc.document_id)
+            .order('version_number', { ascending: false })
+            .limit(1);
+
+          return {
+            id: doc.document_id,
+            title: doc.title || 'Untitled',
+            type: doc.document_type || 'Unknown',
+            category: doc.folder_category || 'planning',
+            status: doc.status || 'draft',
+            year: doc.year,
+            createdBy: usersMap[doc.submitted_by] || 'Unknown',
+            lastModified: doc.created_at || new Date().toISOString(),
+            fileUrl: versions?.[0]?.file_url || null,
+          };
+        }));
+
+        setDocuments(formattedDocs);
+      }
+    } catch (error) {
+      console.error('Error:', error);
+      alert('An error occurred while deleting');
+    }
+    setDeleting(false);
+  };
+ 
 
   // Filtered + sorted documents
   const visibleDocs = useMemo(() => {
@@ -502,7 +627,7 @@ export default function SKDocumentManagementScreen() {
                 <TouchableOpacity activeOpacity={0.7} onPress={() => {}}>
                   <EditIcon />
                 </TouchableOpacity>
-                <TouchableOpacity activeOpacity={0.7} onPress={() => {}}>
+                <TouchableOpacity activeOpacity={0.7} onPress={() => handleDeletePress(doc)}>
                   <DeleteIcon />
                 </TouchableOpacity>
                 <TouchableOpacity activeOpacity={0.7} onPress={() => {}}>
@@ -535,8 +660,52 @@ export default function SKDocumentManagementScreen() {
         )}
         {isMobile ? sidebarVisible && renderSidebar() : renderSidebar()}
         {renderContent()}
+
+        {/* Delete Confirmation Modal */}
+        <Modal
+          visible={deleteModalVisible}
+          animationType="fade"
+          transparent={true}
+          onRequestClose={() => setDeleteModalVisible(false)}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Delete Document</Text>
+                <TouchableOpacity onPress={() => setDeleteModalVisible(false)} activeOpacity={0.7}>
+                  <Text style={styles.modalClose}>✕</Text>
+                </TouchableOpacity>
+              </View>
+              <View style={styles.modalBody}>
+                <Text style={styles.modalBodyText}>
+                  Are you sure you want to delete "{documentToDelete?.title}"? This action cannot be undone.
+                </Text>
+              </View>
+              <View style={styles.modalFooter}>
+                <TouchableOpacity
+                  style={styles.modalCancelBtn}
+                  onPress={() => setDeleteModalVisible(false)}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.modalCancelBtnText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.modalDeleteBtn, deleting && styles.modalDeleteBtnDisabled]}
+                  onPress={handleConfirmDelete}
+                  disabled={deleting}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.modalDeleteBtnText}>{deleting ? 'Deleting...' : 'Delete'}</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+          
+        </Modal>
       </View>
+      
     </SafeAreaView>
+    
   );
 }
 
@@ -760,4 +929,37 @@ const styles = StyleSheet.create({
   emptyIcon:    { fontSize: 36, marginBottom: 10 },
   emptyText:    { fontSize: 14, fontWeight: '700', color: COLORS.darkText, marginBottom: 4 },
   emptySubText: { fontSize: 12, color: COLORS.midGray },
+
+  // Delete Modal
+  modalOverlay: {
+    ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center',
+  },
+  modalContent: {
+    width: '90%', maxWidth: 400, backgroundColor: COLORS.white,
+    borderRadius: 16, overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25, shadowRadius: 10, elevation: 10,
+  },
+  modalHeader: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: 20, paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: COLORS.lightGray,
+    backgroundColor: COLORS.navy,
+  },
+  modalTitle: { fontSize: 18, fontWeight: '800', color: COLORS.white },
+  modalClose: { fontSize: 18, color: COLORS.white, padding: 4 },
+  modalBody: { padding: 20 },
+  modalBodyText: { fontSize: 14, color: COLORS.darkText, lineHeight: 20 },
+  modalFooter: {
+    flexDirection: 'row', gap: 12, paddingHorizontal: 20, paddingVertical: 16,
+    borderTopWidth: 1, borderTopColor: COLORS.lightGray, backgroundColor: COLORS.offWhite,
+  },
+  modalCancelBtn: {
+    flex: 1, paddingVertical: 14, borderRadius: 8, borderWidth: 1, borderColor: COLORS.midGray,
+    alignItems: 'center', backgroundColor: COLORS.white,
+  },
+  modalCancelBtnText: { fontSize: 14, fontWeight: '700', color: COLORS.subText },
+  modalDeleteBtn: {
+    flex: 1, paddingVertical: 14, borderRadius: 8, alignItems: 'center', backgroundColor: COLORS.red,
+  },
+  modalDeleteBtnDisabled: { backgroundColor: COLORS.midGray },
+  modalDeleteBtnText: { fontSize: 14, fontWeight: '700', color: COLORS.white },
 });

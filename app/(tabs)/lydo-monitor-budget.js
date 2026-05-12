@@ -26,7 +26,7 @@ const COLORS = {
   maroon:    '#8B0000',
 };
 
-const NAV_TABS     = ['Home', 'Documents', 'Monitor'];
+const NAV_TABS     = ['Dashboard', 'Documents', 'Monitor'];
 const MONITOR_TABS = ['Consultation', 'Budget', 'Report', 'Accounts'];
 
 // ─── FLOW STEPS ───────────────────────────────────────────────────────────────
@@ -285,7 +285,7 @@ export default function LYDOMonitorBudgetScreen() {
   const handleNavPress = (tab) => {
     setActiveTab(tab);
     setSidebarVisible(false);
-    if (tab === 'Home')      router.push('/(tabs)/lydo-home');
+    if (tab === 'Dashboard')      router.push('/(tabs)/lydo-dashboard');
     if (tab === 'Documents') router.push('/(tabs)/lydo-document');
     if (tab === 'Monitor')   router.push('/(tabs)/lydo-monitor');
   };

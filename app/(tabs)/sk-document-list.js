@@ -280,7 +280,11 @@ export default function SKDocumentListScreen() {
 
       // Upload file to Supabase storage if selected
       if (selectedFile) {
-        const fileName = `${barangayId}/${currentYear}/${Date.now()}_${selectedFile.name}`;
+        // Sanitize filename - remove special chars and replace spaces
+        const sanitizedName = selectedFile.name
+          .replace(/[^\w\s.-]/g, '')
+          .replace(/\s+/g, '_');
+        const fileName = `${barangayId}_${currentYear}_${Date.now()}_${sanitizedName}`;
 
         // Fetch the file and convert to blob
         const response = await fetch(selectedFile.uri);
@@ -316,9 +320,11 @@ export default function SKDocumentListScreen() {
           title: uploadTitle.trim(),
           folder_category: uploadCategory,
           document_type: uploadDocType,
-          status: 'draft',
+          status: 'saved',
           year: currentYear,
+          file_url: fileUrl,
           created_at: new Date().toISOString(),
+          saved_at: new Date().toISOString(),
         })
         .select();
 
