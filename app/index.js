@@ -161,14 +161,6 @@ export default function LoginScreen() {
               >
                 <Text style={styles.loginBtnText}>{isLoading ? 'Logging in...' : 'Login'}</Text>
               </TouchableOpacity>
-
-              {/* Sign Up Link */}
-              <View style={styles.signupRow}>
-                <Text style={styles.subText}>Don't have an account? </Text>
-                <TouchableOpacity onPress={() => router.push('/signup')}>
-                  <Text style={styles.linkText}>Sign Up</Text>
-                </TouchableOpacity>
-              </View>
             </View>
           </ScrollView>
         </KeyboardAvoidingView>
