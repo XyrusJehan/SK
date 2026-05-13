@@ -27,7 +27,7 @@ const COLORS = {
 };
 
 // ─── TABS ─────────────────────────────────────────────────────────────────────
-const NAV_TABS      = ['Dashboard', 'Documents', 'Planning', 'Portal'];
+const NAV_TABS      = ['Dashboard', 'Documents', 'Planning', 'Portal', 'Account'];
 const PLANNING_TABS = ['Templates', 'Budget'];
 
 // ─── BUDGET DATA ──────────────────────────────────────────────────────────────
@@ -113,6 +113,7 @@ export default function SKPlanningBudgetScreen() {
     if (tab === 'Documents') router.push('/(tabs)/sk-document');
     if (tab === 'Planning')  router.push('/(tabs)/sk-planning');
     if (tab === 'Portal')    router.push('/(tabs)/sk-portal');
+    if (tab === 'Account')   router.push('/(tabs)/sk-account');
   };
 
   const handleLogout = () => { logout(); router.replace('/'); };
