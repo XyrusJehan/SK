@@ -13,7 +13,7 @@ const ROLE_MAP = {
 };
 
 // Simple hash function for password hashing
-function hashPassword(password) {
+export function hashPassword(password) {
   let hash = 0;
   for (let i = 0; i < password.length; i++) {
     const char = password.charCodeAt(i);

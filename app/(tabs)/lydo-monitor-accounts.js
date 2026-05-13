@@ -6,7 +6,7 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useNav } from './navContext';
-import { useAuth } from './authContext';
+import { useAuth, hashPassword } from './authContext';
 import { supabase } from '../../utils/supabase';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -753,7 +753,7 @@ export default function LYDOMonitorAccountScreen() {
         last_name:      form.lastName,
         middle_initial: form.middleInitial,
         email:          form.email,
-        password:       form.password,
+        password:       hashPassword(form.password),
         position:       dbPos,
         barangay_id:    barangay?.barangay_id || null,
         role_id:        roleData?.role_id || null,

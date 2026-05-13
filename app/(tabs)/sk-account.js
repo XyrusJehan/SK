@@ -6,7 +6,7 @@ import {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
 import { useNav } from './navContext';
-import { useAuth } from './authContext';
+import { useAuth, hashPassword } from './authContext';
 import { supabase } from '../../utils/supabase';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -20,17 +20,6 @@ const COLORS = {
   teal: '#2A7B7B', cardBg: '#FFFFFF', shadow: 'rgba(0,0,0,0.08)',
   navy: '#133E75',
 };
-
-// ─── PASSWORD HASH FUNCTION ────────────────────────────────────────────────
-function hashPassword(password) {
-  let hash = 0;
-  for (let i = 0; i < password.length; i++) {
-    const char = password.charCodeAt(i);
-    hash = ((hash << 5) - hash) + char;
-    hash = hash & hash;
-  }
-  return 'hash_' + Math.abs(hash).toString(16) + '_' + password.length.toString();
-}
 
 // ─── FORMAT FUNCTIONS ───────────────────────────────────────────────────────
 function formatRole(role) {
