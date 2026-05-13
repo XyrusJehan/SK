@@ -677,6 +677,7 @@ export default function LYDOMonitorAccountScreen() {
             middleInitial: user.middle_initial || '',
             name: `${user.first_name || ''} ${user.last_name || ''}`.trim(),
             email: user.email || '',
+            password: user.password || '',
             barangay: user.barangays?.barangay_name || '—',
             barangayId: user.barangay_id,
             roleName,
@@ -922,14 +923,15 @@ export default function LYDOMonitorAccountScreen() {
           </View>
         ) : (
           filtered.map((acc, idx) => (
-            <AccountListRow key={acc.id} account={acc} isEven={idx % 2 !== 0} />
+            <AccountListRow
+              key={acc.id}
+              account={acc}
+              isEven={idx % 2 !== 0}
+              isPasswordVisible={visiblePasswords.has(acc.id)}
+              onTogglePassword={togglePasswordVisibility}
+            />
           ))
         )}
-
-        {/* Fill empty rows */}
-        {!loading && [...Array(Math.max(0, 6 - filtered.length))].map((_, i) => (
-          <View key={`empty-${i}`} style={[styles.tableRow, (filtered.length + i) % 2 !== 0 && styles.tableRowEven, styles.emptyRow]} />
-        ))}
       </View>
 
       {/* Create Account Modal */}
