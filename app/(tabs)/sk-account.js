@@ -479,7 +479,8 @@ export default function AccountScreen() {
                     </TouchableOpacity>
                     {profileSuccess && (
                       <View style={styles.successIndicator}>
-                        <Text style={styles.successText}>Saved!</Text>
+                        <Text style={styles.successCheck}>✓</Text>
+                        <Text style={styles.successText}>Profile updated successfully</Text>
                       </View>
                     )}
                   </View>
@@ -572,7 +573,8 @@ export default function AccountScreen() {
                     </TouchableOpacity>
                     {passwordSuccess && (
                       <View style={styles.successIndicator}>
-                        <Text style={styles.successText}>Saved!</Text>
+                        <Text style={styles.successCheck}>✓</Text>
+                        <Text style={styles.successText}>Password updated successfully!</Text>
                       </View>
                     )}
                   </View>
@@ -768,13 +770,27 @@ const styles = StyleSheet.create({
   },
   successIndicator: {
     backgroundColor: '#22C55E',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 6,
+    paddingHorizontal: 22,
+    paddingVertical: 12,
+    borderRadius: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    shadowColor: '#22C55E',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 3,
   },
   successText: {
     color: COLORS.white,
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: '700',
+    letterSpacing: 0.5,
+  },
+  successCheck: {
+    color: COLORS.white,
+    fontSize: 14,
+    fontWeight: '900',
   },
 });
