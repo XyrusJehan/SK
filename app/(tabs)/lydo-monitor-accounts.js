@@ -47,6 +47,14 @@ const POSITION_DISPLAY = {
   'chairman': 'SK Chairperson',
   'secretary': 'SK Secretary',
   'treasurer': 'SK Treasurer',
+  'sk_federation': 'SK Federation',
+};
+
+const POSITION_CODES = {
+  'Chairman': 'CHR',
+  'Secretary': 'SEC',
+  'Treasurer': 'TRS',
+  'SK Federation': 'SF',
 };
 
 const ROLE_DISPLAY = {
@@ -295,31 +303,52 @@ const CreateAccountModal = ({ visible, onClose, onSave, barangays }) => {
   const [form, setForm] = useState({
     lastName: '', firstName: '', middleInitial: '',
     position: '', role: 'SK',
-    barangay: '', email: '', password: '', confirmPassword: '',
+    barangay: '', email: '', password: '',
   });
   const [confirmed, setConfirmed] = useState(false);
   const [showPosDd, setShowPosDd] = useState(false);
   const [showBrgyDd, setShowBrgyDd] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
-  const positionOpts = ['Chairman', 'Secretary', 'Treasurer'];
+  const positionOpts = ['Chairman', 'Secretary', 'Treasurer', 'SK Federation'];
   const barangayOpts = barangays.map(b => b.barangay_name);
 
   const set = (key, val) => setForm(f => ({ ...f, [key]: val }));
 
+  // Auto-generate password based on barangay, position, and year
+  const generatePassword = (barangayName, position) => {
+    if (!position) return '';
+    const year = new Date().getFullYear();
+    // Remove "Barangay " prefix and use full name, uppercase, no spaces
+    const brgyCode = barangayName
+      ? barangayName.replace(/^Barangay\s+/i, '').replace(/\s+/g, '').toUpperCase()
+      : 'FEDR';
+    const positionCode = POSITION_CODES[position] || '';
+    const randomChars = Math.random().toString(36).substring(2, 5).toUpperCase();
+    return `${brgyCode}${year}${positionCode}${randomChars}`;
+  };
+
+  // Update password when barangay or position changes
+  useEffect(() => {
+    if (form.barangay && form.position) {
+      const generatedPassword = generatePassword(form.barangay, form.position);
+      set('password', generatedPassword);
+    }
+  }, [form.barangay, form.position]);
+
   // ── Sub-components ──────────────────────────────────────────────────────────
-  const MField = ({ label, value, onChange, secure, placeholder, isVisible, onToggle }) => (
+  const MField = ({ label, value, onChange, secure, placeholder, isVisible, onToggle, editable = true }) => (
     <View style={M.fieldWrap}>
       <Text style={M.fieldLabel}>{label}</Text>
-      <View style={M.inputContainer}>
+      <View style={[M.inputContainer, !editable && M.inputDisabled]}>
         <TextInput
-          style={[M.input, secure && M.inputWithToggle]}
+          style={[M.input, secure && M.inputWithToggle, !editable && M.inputNoEdit]}
           value={value}
           onChangeText={onChange}
           placeholder={placeholder || ''}
           placeholderTextColor="rgba(0,0,0,0.3)"
           secureTextEntry={secure && !isVisible}
+          editable={editable}
         />
         {secure && (
           <TouchableOpacity style={M.toggleBtn} onPress={onToggle} activeOpacity={0.7}>
@@ -363,10 +392,14 @@ const CreateAccountModal = ({ visible, onClose, onSave, barangays }) => {
     </View>
   );
 
-  const PreviewRow = ({ label, value }) => (
+  const PreviewRow = ({ label, value, isPassword, showPassword }) => (
     <View style={M.previewRow}>
       <Text style={M.previewLabel}>{label} :</Text>
-      <Text style={M.previewVal}>{value || ''}</Text>
+      {isPassword ? (
+        <Text style={M.previewVal}>{showPassword ? value : '••••••••'}</Text>
+      ) : (
+        <Text style={M.previewVal}>{value || ''}</Text>
+      )}
     </View>
   );
 
@@ -430,9 +463,8 @@ const CreateAccountModal = ({ visible, onClose, onSave, barangays }) => {
                 </View>
               </View>
 
-              <MField label="Email"            value={form.email}           onChange={v => set('email', v)}           placeholder="e.g. juan@email.com" />
-              <MField label="Password"         value={form.password}        onChange={v => set('password', v)}        placeholder="Enter password"         secure isVisible={showPassword} onToggle={() => setShowPassword(v => !v)} />
-              <MField label="Confirm Password" value={form.confirmPassword} onChange={v => set('confirmPassword', v)} placeholder="Re-enter password"       secure isVisible={showConfirmPassword} onToggle={() => setShowConfirmPassword(v => !v)} />
+              <MField label="Email"                  value={form.email}           onChange={v => set('email', v)}           placeholder="e.g. juan@email.com" />
+              <MField label="Auto Generated Password" value={form.password}        onChange={() => {}}        placeholder="Auto-generated"       secure isVisible={showPassword} onToggle={() => setShowPassword(v => !v)} editable={false} />
             </View>
           </View>
 
@@ -457,7 +489,7 @@ const CreateAccountModal = ({ visible, onClose, onSave, barangays }) => {
                 <PreviewRow label="Position" value={form.position} />
                 <PreviewRow label="Role"     value={form.role} />
                 <PreviewRow label="Email"    value={form.email} />
-                <PreviewRow label="Password" value={form.password ? '••••••••' : ''} />
+                <PreviewRow label="Password" value={form.password} isPassword={true} showPassword={showPassword} />
               </View>
             </View>
 
@@ -520,6 +552,10 @@ const M = StyleSheet.create({
   inputWithToggle: { borderWidth: 0, borderRadius: 0 },
   toggleBtn:      { width: 34, height: 34, alignItems: 'center', justifyContent: 'center', borderLeftWidth: 1, borderLeftColor: '#C8C8C8' },
   toggleText:     { fontSize: 14 },
+
+  // Disabled state
+  inputDisabled:  { backgroundColor: '#E8E8E8' },
+  inputNoEdit:    { backgroundColor: '#E8E8E8', color: COLORS.subText },
 
   // Dropdown
   ddBtn:          { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: COLORS.white, borderRadius: 6, paddingHorizontal: 10, paddingVertical: 7, height: 34 },
@@ -665,7 +701,7 @@ export default function LYDOMonitorAccountScreen() {
         .order('last_name', { ascending: true });
 
       if (!userError) {
-        const validPositions = ['chairman', 'secretary', 'treasurer'];
+        const validPositions = ['chairman', 'secretary', 'treasurer', 'sk_federation'];
         const transformedAccounts = (userData || []).map(user => {
           const roleName = user.roles?.role_name || 'resident';
           const cleanPosition = validPositions.includes(user.position) ? user.position : null;
@@ -703,11 +739,11 @@ export default function LYDOMonitorAccountScreen() {
       const barangay = barangays.find(b => b.barangay_name === form.barangay);
 
       // Map display position to DB key
-      const posMap = { 'Chairman': 'chairman', 'Secretary': 'secretary', 'Treasurer': 'treasurer' };
+      const posMap = { 'Chairman': 'chairman', 'Secretary': 'secretary', 'Treasurer': 'treasurer', 'SK Federation': 'sk_federation' };
       const dbPos  = posMap[form.position] || null;
 
-      // SK Officials always get sk_official role
-      const dbRole = 'sk_official';
+      // SK Federation gets sk_federation role, others get sk_official role
+      const dbRole = form.position === 'SK Federation' ? 'sk_federation' : 'sk_official';
 
       const { data: roleData } = await supabase
         .from('roles').select('role_id').eq('role_name', dbRole).single();
@@ -903,7 +939,7 @@ export default function LYDOMonitorAccountScreen() {
             ['Role',          styles.colRole],
             ['Position',      styles.colPosition],
             ['Email',         styles.colEmail],
-            ['Password',      styles.colPassword],
+            ['Password', styles.colPassword],
           ].map(([col, colStyle]) => (
             <View key={col} style={colStyle}>
               <Text style={styles.tableHeaderText}>{col}</Text>
