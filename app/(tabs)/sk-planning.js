@@ -339,7 +339,7 @@ export default function SKPlanningScreen() {
               style={[styles.modalActionBtn, { backgroundColor: '#FDF5E6' }]}
               onPress={() => { Alert.alert('Replace', 'Replace coming soon.'); setShowEditModal(false); }}
             >
-              <Text style={[styles.modalActionText, { color: '#B45309' }]}>↔  Replace</Text>
+              <Text style={[styles.modalActionText, { color: '#B45309' }]}>↔  Create</Text>
             </TouchableOpacity>
           </View>
           <TouchableOpacity
