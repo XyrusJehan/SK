@@ -47,6 +47,14 @@ const POSITION_DISPLAY = {
   'chairman': 'SK Chairperson',
   'secretary': 'SK Secretary',
   'treasurer': 'SK Treasurer',
+  'sk_federation': 'SK Federation',
+};
+
+const POSITION_CODES = {
+  'Chairman': 'CHR',
+  'Secretary': 'SEC',
+  'Treasurer': 'TRS',
+  'SK Federation': 'SF',
 };
 
 const ROLE_DISPLAY = {
@@ -224,8 +232,9 @@ const FilterDropdown = ({ value, options, onSelect }) => {
   return (
     <View style={FD.wrap}>
       <TouchableOpacity style={FD.btn} onPress={() => setOpen(o => !o)} activeOpacity={0.8}>
-        <Text style={FD.label}>Filter by Barangay</Text>
-        <Text style={FD.arrow}>▾</Text>
+        <Text style={FD.label} numberOfLines={1}>{value}</Text>
+        <View style={FD.divider} />
+        <Text style={FD.arrow}>▼</Text>
       </TouchableOpacity>
       {open && (
         <View style={FD.menu}>
@@ -246,11 +255,12 @@ const FilterDropdown = ({ value, options, onSelect }) => {
 };
 
 const FD = StyleSheet.create({
-  wrap:          { position: 'relative', zIndex: 1000 },
-  btn:           { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: COLORS.white, borderRadius: 6, borderWidth: 1, borderColor: '#C8C8C8', paddingHorizontal: 12, paddingVertical: 7 },
-  label:         { fontSize: 12, color: COLORS.darkText, fontWeight: '500' },
-  arrow:         { fontSize: 9, color: COLORS.subText },
-  menu:          { position: 'absolute', top: 36, right: 0, minWidth: 200, backgroundColor: COLORS.white, borderRadius: 8, borderWidth: 1, borderColor: COLORS.lightGray, elevation: 20, shadowColor: '#000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.25, shadowRadius: 12, zIndex: 1001 },
+  wrap:          { position: 'relative', zIndex: 1000, alignSelf: 'flex-start' },
+  btn:           { flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.white, borderRadius: 6, borderWidth: 1, borderColor: '#B0B8C8', minWidth: 180, height: 36 },
+  label:         { flex: 1, fontSize: 13, color: COLORS.darkText, fontWeight: '400', paddingHorizontal: 12 },
+  divider:       { width: 1, height: '100%', backgroundColor: '#B0B8C8' },
+  arrow:         { fontSize: 10, color: COLORS.darkText, paddingHorizontal: 10 },
+  menu:          { position: 'absolute', top: 38, left: 0, minWidth: 200, backgroundColor: COLORS.white, borderRadius: 8, borderWidth: 1, borderColor: COLORS.lightGray, elevation: 20, shadowColor: '#000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.25, shadowRadius: 12, zIndex: 1001 },
   item:          { paddingHorizontal: 14, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: COLORS.lightGray },
   itemActive:    { backgroundColor: '#EEF3FB' },
   itemText:      { fontSize: 12, color: COLORS.darkText },
@@ -259,7 +269,7 @@ const FD = StyleSheet.create({
 
 // ─── STATUS PILL ──────────────────────────────────────────────────────────────
 const StatusPill = ({ status }) => {
-  if (status === 'pending') {
+  if (status === 'active') {
     return (
       <View style={STP.pill}>
         <Text style={STP.text}>Pending Verification</Text>
@@ -288,99 +298,338 @@ const STP = StyleSheet.create({
   text: { fontSize: isMobile ? 8 : 10, fontWeight: '700', color: COLORS.pending },
 });
 
-// ─── ACCOUNT ROW ─────────────────────────────────────────────────────────────
-const AccountRow = ({
-  account, checked, onToggle,
-  onBrgyChange, onRoleChange, onPositionChange,
-  onApprove, onReject,
-  isEven,
-  barangayOptions,
-  roleOptions,
-  positionOptions,
-  rowIndex,
-}) => (
-  <View style={[styles.tableRow, isEven && styles.tableRowEven, checked && styles.tableRowSelected]}>
+// ─── CREATE ACCOUNT MODAL ─────────────────────────────────────────────────────
+const CreateAccountModal = ({ visible, onClose, onSave, barangays }) => {
+  const [form, setForm] = useState({
+    lastName: '', firstName: '', middleInitial: '',
+    position: '', role: 'SK',
+    barangay: '', email: '', password: '',
+  });
+  const [confirmed, setConfirmed] = useState(false);
+  const [showPosDd, setShowPosDd] = useState(false);
+  const [showBrgyDd, setShowBrgyDd] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
-    {/* Select */}
-    <View style={styles.colSelect}>
-      <Checkbox checked={checked} onToggle={onToggle} />
-    </View>
+  const positionOpts = ['Chairman', 'Secretary', 'Treasurer', 'SK Federation'];
+  const barangayOpts = barangays.map(b => b.barangay_name);
 
-    {/* User Name */}
-    <View style={styles.colName}>
-      <Text style={styles.cellName}>{account.name || 'Pending Name'}</Text>
-      {account.email && <Text style={styles.cellEmail}>{account.email}</Text>}
-    </View>
+  const set = (key, val) => setForm(f => ({ ...f, [key]: val }));
 
-    {/* Barangay Dropdown */}
-    <View style={styles.colBarangay}>
-      <InlineDropdown
-        value={account.barangay || 'Select Barangay'}
-        options={barangayOptions}
-        onSelect={onBrgyChange}
-        width={isMobile ? 90 : 125}
-        id={`brgy-${account.id}-${rowIndex}`}
-      />
-    </View>
+  // Auto-generate password based on barangay, position, and year
+  const generatePassword = (barangayName, position) => {
+    if (!position) return '';
+    const year = new Date().getFullYear();
+    // Remove "Barangay " prefix and use full name, uppercase, no spaces
+    const brgyCode = barangayName
+      ? barangayName.replace(/^Barangay\s+/i, '').replace(/\s+/g, '').toUpperCase()
+      : 'FEDR';
+    const positionCode = POSITION_CODES[position] || '';
+    const randomChars = Math.random().toString(36).substring(2, 5).toUpperCase();
+    return `${brgyCode}${year}${positionCode}${randomChars}`;
+  };
 
-    {/* Role Dropdown */}
-    <View style={styles.colRole}>
-      <InlineDropdown
-        value={account.roleDisplay || 'Select Role'}
-        options={roleOptions}
-        onSelect={onRoleChange}
-        width={isMobile ? 70 : 100}
-        id={`role-${account.id}-${rowIndex}`}
-      />
-    </View>
+  // Update password when barangay or position changes
+  useEffect(() => {
+    if (form.barangay && form.position) {
+      const generatedPassword = generatePassword(form.barangay, form.position);
+      set('password', generatedPassword);
+    }
+  }, [form.barangay, form.position]);
 
-    {/* Position Dropdown - only for SK Officials */}
-    <View style={styles.colPosition}>
-      {account.roleName === 'sk_official' ? (
-        <InlineDropdown
-          value={account.displayPosition || 'Select Position'}
-          options={positionOptions}
-          onSelect={onPositionChange}
-          width={isMobile ? 70 : 110}
-          id={`pos-${account.id}-${rowIndex}`}
+  // ── Sub-components ──────────────────────────────────────────────────────────
+  const MField = ({ label, value, onChange, secure, placeholder, isVisible, onToggle, editable = true }) => (
+    <View style={M.fieldWrap}>
+      <Text style={M.fieldLabel}>{label}</Text>
+      <View style={[M.inputContainer, !editable && M.inputDisabled]}>
+        <TextInput
+          style={[M.input, secure && M.inputWithToggle, !editable && M.inputNoEdit]}
+          value={value}
+          onChangeText={onChange}
+          placeholder={placeholder || ''}
+          placeholderTextColor="rgba(0,0,0,0.3)"
+          secureTextEntry={secure && !isVisible}
+          editable={editable}
         />
+        {secure && (
+          <TouchableOpacity style={M.toggleBtn} onPress={onToggle} activeOpacity={0.7}>
+            <Text style={M.toggleText}>{isVisible ? '👁' : '⌣'}</Text>
+          </TouchableOpacity>
+        )}
+      </View>
+    </View>
+  );
+
+  const MDropdown = ({ label, value, options, open, setOpen, onSelect, placeholder, scrollable }) => (
+    <View style={[M.fieldWrap, { zIndex: open ? 999 : 1 }]}>
+      <Text style={M.fieldLabel}>{label}</Text>
+      <TouchableOpacity style={M.ddBtn} onPress={() => setOpen(o => !o)} activeOpacity={0.85}>
+        <Text style={[M.ddVal, !value && M.ddPlaceholder]}>{value || placeholder}</Text>
+        <Text style={M.ddArrow}>▼</Text>
+      </TouchableOpacity>
+      {open && (
+        <View style={[M.ddMenu, scrollable && M.ddMenuScrollable]}>
+          {scrollable ? (
+            <ScrollView
+              style={{ maxHeight: 5 * 37 }}
+              showsVerticalScrollIndicator={false}
+              nestedScrollEnabled={true}
+            >
+              {options.map(opt => (
+                <TouchableOpacity key={opt} style={M.ddItem} onPress={() => { onSelect(opt); setOpen(false); }} activeOpacity={0.75}>
+                  <Text style={M.ddItemText}>{opt}</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          ) : (
+            options.map(opt => (
+              <TouchableOpacity key={opt} style={M.ddItem} onPress={() => { onSelect(opt); setOpen(false); }} activeOpacity={0.75}>
+                <Text style={M.ddItemText}>{opt}</Text>
+              </TouchableOpacity>
+            ))
+          )}
+        </View>
+      )}
+    </View>
+  );
+
+  const PreviewRow = ({ label, value, isPassword, showPassword }) => (
+    <View style={M.previewRow}>
+      <Text style={M.previewLabel}>{label} :</Text>
+      {isPassword ? (
+        <Text style={M.previewVal}>{showPassword ? value : '••••••••'}</Text>
       ) : (
-        <Text style={styles.cellRole}>-</Text>
+        <Text style={M.previewVal}>{value || ''}</Text>
       )}
     </View>
+  );
 
-    {/* Sign-up Date */}
-    <View style={styles.colDate}>
-      <Text style={styles.cellDate}>{account.signUpDate}</Text>
-    </View>
+  if (!visible) return null;
+  return (
+    <View style={M.overlay}>
+      <View style={M.modal}>
 
-    {/* Status */}
-    <View style={styles.colStatus}>
-      <StatusPill status={account.status} />
-    </View>
-
-    {/* Action — Approve / Reject stacked */}
-    <View style={styles.colAction}>
-      {(account.status === 'pending' || account.status === 'inactive') && (
-        <TouchableOpacity
-          style={styles.approveBtn}
-          onPress={onApprove}
-          activeOpacity={0.85}
-        >
-          <Text style={styles.actionBtnText}>Approve</Text>
+        {/* ── Header ── */}
+        <TouchableOpacity style={M.closeBtn} onPress={onClose} activeOpacity={0.8}>
+          <Text style={M.closeX}>✕</Text>
         </TouchableOpacity>
-      )}
-      {(account.status === 'pending' || account.status === 'active') && (
-        <TouchableOpacity
-          style={styles.rejectBtn}
-          onPress={onReject}
-          activeOpacity={0.85}
-        >
-          <Text style={styles.actionBtnText}>Reject</Text>
-        </TouchableOpacity>
-      )}
-    </View>
+        <Text style={M.title}>CREATE ACCOUNT FOR SANGGUNIANG KABATAAN OFFICIALS</Text>
+        <View style={M.titleDivider} />
 
+        <ScrollView showsVerticalScrollIndicator={false} style={{ flex: 1 }}>
+
+          {/* ── Two-column form ── */}
+          <View style={M.formCols}>
+
+            {/* Left — Personal Details */}
+            <View style={M.col}>
+              <Text style={M.colHeading}>Personal Details</Text>
+              <View style={M.colDivider} />
+
+              <MDropdown
+                label="Barangay"
+                value={form.barangay}
+                options={barangayOpts}
+                open={showBrgyDd}
+                setOpen={setShowBrgyDd}
+                onSelect={v => set('barangay', v)}
+                placeholder="Select Barangay"
+                scrollable
+              />
+              <MField label="Last Name"      value={form.lastName}      onChange={v => set('lastName', v)}      placeholder="Enter last name" />
+              <MField label="First Name"     value={form.firstName}     onChange={v => set('firstName', v)}     placeholder="Enter first name" />
+              <MField label="Middle Initial" value={form.middleInitial} onChange={v => set('middleInitial', v)} placeholder="e.g. A" />
+            </View>
+
+            {/* Right — Account & Role */}
+            <View style={M.col}>
+              <Text style={M.colHeading}>Account & Role</Text>
+              <View style={M.colDivider} />
+
+              <MDropdown
+                label="Position"
+                value={form.position}
+                options={positionOpts}
+                open={showPosDd}
+                setOpen={setShowPosDd}
+                onSelect={v => set('position', v)}
+                placeholder="Select Position"
+              />
+
+              {/* Role — static display pill */}
+              <View style={M.fieldWrap}>
+                <Text style={M.fieldLabel}>Role</Text>
+                <View style={M.rolePill}>
+                  <Text style={M.rolePillText}>SK</Text>
+                </View>
+              </View>
+
+              <MField label="Email"                  value={form.email}           onChange={v => set('email', v)}           placeholder="e.g. juan@email.com" />
+              <MField label="Auto Generated Password" value={form.password}        onChange={() => {}}        placeholder="Auto-generated"       secure isVisible={showPassword} onToggle={() => setShowPassword(v => !v)} editable={false} />
+            </View>
+          </View>
+
+          {/* ── Preview summary card ── */}
+          <View style={M.previewCard}>
+            <View style={M.previewCols}>
+              {/* Left preview */}
+              <View style={M.previewCol}>
+                <Text style={M.previewHeading}>Personal Details</Text>
+                <PreviewRow label="Barangay"       value={form.barangay} />
+                <PreviewRow label="Last Name"      value={form.lastName} />
+                <PreviewRow label="First Name"     value={form.firstName} />
+                <PreviewRow label="Middle Initial" value={form.middleInitial} />
+              </View>
+
+              {/* Vertical divider */}
+              <View style={M.previewDivider} />
+
+              {/* Right preview */}
+              <View style={M.previewCol}>
+                <Text style={M.previewHeading}>Account & Role</Text>
+                <PreviewRow label="Position" value={form.position} />
+                <PreviewRow label="Role"     value={form.role} />
+                <PreviewRow label="Email"    value={form.email} />
+                <PreviewRow label="Password" value={form.password} isPassword={true} showPassword={showPassword} />
+              </View>
+            </View>
+
+            {/* Confirm Details checkbox */}
+            <View style={M.confirmRow}>
+              <Text style={M.confirmLabel}>Confirm Details</Text>
+              <TouchableOpacity
+                style={[M.confirmBox, confirmed && M.confirmBoxChecked]}
+                onPress={() => setConfirmed(c => !c)}
+                activeOpacity={0.8}
+              >
+                {confirmed && <Text style={M.confirmCheck}>✓</Text>}
+              </TouchableOpacity>
+            </View>
+          </View>
+
+        </ScrollView>
+
+        {/* ── Footer buttons ── */}
+        <View style={M.actions}>
+          <TouchableOpacity style={M.cancelBtn} onPress={onClose} activeOpacity={0.8}>
+            <Text style={M.cancelText}>Cancel</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[M.saveBtn, !confirmed && M.saveBtnDisabled]}
+            onPress={() => { if (confirmed) { onSave(form); onClose(); } }}
+            activeOpacity={confirmed ? 0.85 : 1}
+          >
+            <Text style={M.saveText}>Create Account</Text>
+          </TouchableOpacity>
+        </View>
+
+      </View>
+    </View>
+  );
+};
+
+const M = StyleSheet.create({
+  // Overlay & modal shell
+  overlay:        { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'center', alignItems: 'center', zIndex: 99999 },
+  modal:          { backgroundColor: COLORS.navy, borderRadius: 14, padding: 20, width: isMobile ? '96%' : 580, maxHeight: '92%', shadowColor: '#000', shadowOffset: {width:0,height:10}, shadowOpacity: 0.35, shadowRadius: 24, elevation: 24 },
+
+  // Header
+  closeBtn:       { position: 'absolute', top: 14, right: 16, zIndex: 10, padding: 4 },
+  closeX:         { fontSize: 18, color: COLORS.white, fontWeight: '300' },
+  title:          { fontSize: isMobile ? 12 : 13, fontWeight: '800', color: COLORS.white, letterSpacing: 0.5, marginBottom: 10, paddingRight: 30 },
+  titleDivider:   { height: 1, backgroundColor: 'rgba(255,255,255,0.25)', marginBottom: 14 },
+
+  // Two-column form
+  formCols:       { flexDirection: 'row', gap: 16, marginBottom: 14 },
+  col:            { flex: 1 },
+  colHeading:     { fontSize: 13, fontWeight: '700', color: COLORS.white, marginBottom: 6 },
+  colDivider:     { height: 1, backgroundColor: 'rgba(255,255,255,0.25)', marginBottom: 10 },
+
+  // Fields
+  fieldWrap:      { marginBottom: 10, position: 'relative' },
+  fieldLabel:     { fontSize: 11, color: 'rgba(255,255,255,0.75)', marginBottom: 4 },
+  inputContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.white, borderRadius: 6, borderWidth: 1, borderColor: '#C8C8C8' },
+  input:          { flex: 1, borderRadius: 6, paddingHorizontal: 10, paddingVertical: 7, fontSize: 12, color: COLORS.darkText, height: 34 },
+  inputWithToggle: { borderWidth: 0, borderRadius: 0 },
+  toggleBtn:      { width: 34, height: 34, alignItems: 'center', justifyContent: 'center', borderLeftWidth: 1, borderLeftColor: '#C8C8C8' },
+  toggleText:     { fontSize: 14 },
+
+  // Disabled state
+  inputDisabled:  { backgroundColor: '#E8E8E8' },
+  inputNoEdit:    { backgroundColor: '#E8E8E8', color: COLORS.subText },
+
+  // Dropdown
+  ddBtn:          { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: COLORS.white, borderRadius: 6, paddingHorizontal: 10, paddingVertical: 7, height: 34 },
+  ddVal:          { fontSize: 12, color: COLORS.darkText, flex: 1 },
+  ddPlaceholder:  { color: 'rgba(0,0,0,0.3)' },
+  ddArrow:        { fontSize: 9, color: COLORS.darkText },
+  ddMenu:         { position: 'absolute', top: 56, left: 0, right: 0, backgroundColor: COLORS.white, borderRadius: 8, borderWidth: 1, borderColor: COLORS.lightGray, zIndex: 9999, elevation: 40, shadowColor: '#000', shadowOffset: {width:0,height:4}, shadowOpacity: 0.2, shadowRadius: 8 },
+  ddMenuScrollable: { position: 'absolute', top: 56, left: 0, right: 0, backgroundColor: COLORS.white, borderRadius: 8, borderWidth: 1, borderColor: COLORS.lightGray, zIndex: 9999, elevation: 40, shadowColor: '#000', shadowOffset: {width:0,height:4}, shadowOpacity: 0.2, shadowRadius: 8, overflow: 'hidden' },
+  ddItem:         { paddingHorizontal: 12, paddingVertical: 9, borderBottomWidth: 1, borderBottomColor: COLORS.lightGray },
+  ddItemText:     { fontSize: 12, color: COLORS.darkText },
+
+  // Role static pill
+  rolePill:       { backgroundColor: COLORS.lightGray, borderRadius: 6, height: 34, alignItems: 'center', justifyContent: 'center' },
+  rolePillText:   { fontSize: 13, fontWeight: '600', color: COLORS.darkText },
+
+  // Preview card
+  previewCard:    { backgroundColor: COLORS.white, borderRadius: 10, padding: 14, marginBottom: 14 },
+  previewCols:    { flexDirection: 'row', gap: 0 },
+  previewCol:     { flex: 1, paddingRight: 10 },
+  previewHeading: { fontSize: 12, fontWeight: '700', color: COLORS.navy, marginBottom: 8, textAlign: 'center' },
+  previewDivider: { width: 1, backgroundColor: COLORS.lightGray, marginHorizontal: 8 },
+  previewRow:     { flexDirection: 'row', flexWrap: 'wrap', marginBottom: 5 },
+  previewLabel:   { fontSize: 11, color: COLORS.subText },
+  previewVal:     { fontSize: 11, color: COLORS.darkText, marginLeft: 4 },
+
+  // Confirm Details
+  confirmRow:     { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', marginTop: 10, gap: 8 },
+  confirmLabel:   { fontSize: 12, color: COLORS.subText },
+  confirmBox:     { width: 20, height: 20, borderRadius: 4, borderWidth: 1.5, borderColor: COLORS.midGray, backgroundColor: COLORS.white, alignItems: 'center', justifyContent: 'center' },
+  confirmBoxChecked: { backgroundColor: COLORS.navy, borderColor: COLORS.navy },
+  confirmCheck:   { fontSize: 12, color: COLORS.white, fontWeight: '800' },
+
+  // Footer
+  actions:        { flexDirection: 'row', gap: 10, marginTop: 4 },
+  cancelBtn:      { flex: 1, backgroundColor: COLORS.midGray, borderRadius: 8, paddingVertical: 12, alignItems: 'center' },
+  cancelText:     { fontSize: 13, fontWeight: '600', color: COLORS.white },
+  saveBtn:        { flex: 1, backgroundColor: COLORS.white, borderRadius: 8, paddingVertical: 12, alignItems: 'center' },
+  saveBtnDisabled:{ opacity: 0.45 },
+  saveText:       { fontSize: 13, fontWeight: '700', color: COLORS.navy },
+});
+
+// ─── ACCOUNT LIST ROW ─────────────────────────────────────────────────────────
+const AccountListRow = ({ account, isEven, isPasswordVisible, onTogglePassword }) => (
+  <View style={[styles.tableRow, isEven && styles.tableRowEven]}>
+    <View style={styles.colBrgy}>
+      <Text style={styles.cellText} numberOfLines={1}>{account.barangay || '—'}</Text>
+    </View>
+    <View style={styles.colLastName}>
+      <Text style={styles.cellText} numberOfLines={1}>{account.lastName || '—'}</Text>
+    </View>
+    <View style={styles.colFirstName}>
+      <Text style={styles.cellText} numberOfLines={1}>{account.firstName || '—'}</Text>
+    </View>
+    <View style={styles.colMiddleInitial}>
+      <Text style={styles.cellText} numberOfLines={1}>{account.middleInitial || '—'}</Text>
+    </View>
+    <View style={styles.colRole}>
+      <Text style={styles.cellText} numberOfLines={1}>{account.roleDisplay || '—'}</Text>
+    </View>
+    <View style={styles.colPosition}>
+      <Text style={styles.cellText} numberOfLines={1}>{account.displayPosition || '—'}</Text>
+    </View>
+    <View style={styles.colEmail}>
+      <Text style={styles.cellText} numberOfLines={1}>{account.email || '—'}</Text>
+    </View>
+    <TouchableOpacity
+      style={styles.colPassword}
+      onPress={() => onTogglePassword(account.id)}
+      activeOpacity={0.7}
+    >
+      <Text style={styles.cellText} numberOfLines={1}>
+        {isPasswordVisible ? (account.password || '—') : '••••••••'}
+      </Text>
+    </TouchableOpacity>
   </View>
 );
 
@@ -393,57 +642,54 @@ export default function LYDOMonitorAccountScreen() {
   const [activeMonitorTab, setActiveMonitorTab] = useState('Account');
   const [accounts, setAccounts]         = useState([]);
   const [barangays, setBarangays]       = useState([]);
-  const [roles, setRoles]               = useState([]);
   const [selectedIds, setSelectedIds]   = useState(new Set());
   const [filterBrgy, setFilterBrgy]     = useState('All Barangays');
+  const [searchText, setSearchText]     = useState('');
   const [notifCount]                    = useState(2);
   const [sidebarVisible, setSidebarVisible] = useState(false);
   const [loading, setLoading]           = useState(true);
+  const [showCreate, setShowCreate]     = useState(false);
+  const [visiblePasswords, setVisiblePasswords] = useState(new Set());
 
   // ── Fetch data from Supabase ─────────────────────────────────────────────────
   useEffect(() => {
     fetchData();
   }, []);
 
+  const togglePasswordVisibility = (userId) => {
+    setVisiblePasswords(prev => {
+      const next = new Set(prev);
+      if (next.has(userId)) {
+        next.delete(userId);
+      } else {
+        next.add(userId);
+      }
+      return next;
+    });
+  };
+
   const fetchData = async () => {
     try {
       setLoading(true);
 
-      // Fetch barangays
       const { data: barangayData, error: brgyError } = await supabase
         .from('barangays')
         .select('barangay_id, barangay_name')
         .order('barangay_name');
 
-      if (brgyError) {
-        console.error('Error fetching barangays:', brgyError);
-      } else {
+      if (!brgyError) {
         setBarangays(barangayData || []);
-        BARANGAY_OPTIONS = ['Select Barangay', ...(barangayData?.map(b => b.barangay_name) || [])];
-        FILTER_BARANGAY_OPTIONS.splice(1); // Clear existing
-        FILTER_BARANGAY_OPTIONS.push('All Barangays', ...(barangayData?.map(b => b.barangay_name) || []));
       }
 
-      // Fetch roles
-      const { data: roleData, error: roleError } = await supabase
-        .from('roles')
-        .select('role_id, role_name')
-        .in('role_name', ['sk_official', 'resident']);
-
-      if (roleError) {
-        console.error('Error fetching roles:', roleError);
-      } else {
-        setRoles(roleData || []);
-      }
-
-      // Fetch all users (pending, active, inactive) with their roles and barangays
       const { data: userData, error: userError } = await supabase
         .from('users')
         .select(`
           user_id,
           first_name,
           last_name,
+          middle_initial,
           email,
+          password,
           position,
           status,
           created_at,
@@ -452,30 +698,29 @@ export default function LYDOMonitorAccountScreen() {
           roles (role_name),
           barangays (barangay_name)
         `)
-        .order('created_at', { ascending: false });
+        .order('last_name', { ascending: true });
 
-      if (userError) {
-        console.error('Error fetching users:', userError);
-      } else {
-        // Transform user data to account format
+      if (!userError) {
+        const validPositions = ['chairman', 'secretary', 'treasurer', 'sk_federation'];
         const transformedAccounts = (userData || []).map(user => {
           const roleName = user.roles?.role_name || 'resident';
-          // Clean position value - only accept valid positions
-          const validPositions = ['chairman', 'secretary', 'treasurer'];
           const cleanPosition = validPositions.includes(user.position) ? user.position : null;
           return {
             id: user.user_id.toString(),
             userId: user.user_id,
-            name: `${user.first_name} ${user.last_name}`.trim() || '',
+            firstName: user.first_name || '',
+            lastName: user.last_name || '',
+            middleInitial: user.middle_initial || '',
+            name: `${user.first_name || ''} ${user.last_name || ''}`.trim(),
             email: user.email || '',
-            barangay: user.barangays?.barangay_name || 'Select Barangay',
+            password: user.password || '',
+            barangay: user.barangays?.barangay_name || '—',
             barangayId: user.barangay_id,
-            roleName: roleName,
+            roleName,
             roleDisplay: ROLE_DISPLAY[roleName] || roleName,
             roleId: user.role_id,
             position: cleanPosition,
-            displayPosition: cleanPosition ? (POSITION_DISPLAY[cleanPosition] || cleanPosition) : 'Select Position',
-            signUpDate: user.created_at ? new Date(user.created_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '',
+            displayPosition: cleanPosition ? (POSITION_DISPLAY[cleanPosition] || cleanPosition) : '—',
             status: user.status,
           };
         });
@@ -488,101 +733,61 @@ export default function LYDOMonitorAccountScreen() {
     }
   };
 
-  // ── Update user status in database ───────────────────────────────────────────
-  const updateUserStatus = async (userId, newStatus) => {
+  // ── Create account ───────────────────────────────────────────────────────────
+  const handleCreateAccount = async (form) => {
     try {
-      console.log('Updating userId:', userId, 'type:', typeof userId, 'to status:', newStatus);
+      const barangay = barangays.find(b => b.barangay_name === form.barangay);
 
-      // Ensure userId is a number
-      const numericUserId = Number(userId);
-      console.log('Numeric userId:', numericUserId);
+      // Map display position to DB key
+      const posMap = { 'Chairman': 'chairman', 'Secretary': 'secretary', 'Treasurer': 'treasurer', 'SK Federation': 'sk_federation' };
+      const dbPos  = posMap[form.position] || null;
 
-      const { data, error } = await supabase
-        .from('users')
-        .update({ status: newStatus })
-        .eq('user_id', numericUserId);
+      // SK Federation gets sk_federation role, others get sk_official role
+      const dbRole = form.position === 'SK Federation' ? 'sk_federation' : 'sk_official';
 
-      if (error) {
-        console.error('Error updating status:', error);
-        return false;
-      }
+      const { data: roleData } = await supabase
+        .from('roles').select('role_id').eq('role_name', dbRole).single();
 
-      console.log('Update result:', data);
-
-      // Update local state - create new array to trigger re-render
-      setAccounts(prev => {
-        const updated = prev.map(a =>
-          a.userId === numericUserId ? { ...a, status: newStatus } : a
-        );
-        return [...updated];
+      const { error } = await supabase.from('users').insert({
+        first_name:     form.firstName,
+        last_name:      form.lastName,
+        middle_initial: form.middleInitial,
+        email:          form.email,
+        password:       form.password,
+        position:       dbPos,
+        barangay_id:    barangay?.barangay_id || null,
+        role_id:        roleData?.role_id || null,
+        status:         'active',
       });
-      return true;
-    } catch (error) {
-      console.error('Error:', error);
-      return false;
-    }
-  };
-
-  // ── Update user barangay assignment ─────────────────────────────────────────
-  const updateUserBarangay = async (userId, barangayId) => {
-    try {
-      const { error } = await supabase
-        .from('users')
-        .update({ barangay_id: barangayId })
-        .eq('user_id', userId);
 
       if (error) {
-        console.error('Error updating barangay:', error);
-        return false;
+        Alert.alert('Error', 'Failed to create account');
+        console.error(error);
+      } else {
+        fetchData();
       }
-
-      // Update local state
-      const brgyName = barangays.find(b => b.barangay_id === barangayId)?.barangay_name || 'Select Barangay';
-      setAccounts(prev => prev.map(a =>
-        a.userId === userId ? { ...a, barangay: brgyName, barangayId } : a
-      ));
-      return true;
-    } catch (error) {
-      console.error('Error:', error);
-      return false;
+    } catch (err) {
+      console.error(err);
     }
   };
 
-  // ── Update user position (for SK officials) ─────────────────────────────────
-  const updateUserPosition = async (userId, position) => {
-    try {
-      // Skip if position is "Select Position"
-      if (position === 'Select Position' || !position) {
-        return false;
-      }
-
-      const { error } = await supabase
-        .from('users')
-        .update({ position: position })
-        .eq('user_id', userId);
-
-      if (error) {
-        console.error('Error updating position:', error);
-        return false;
-      }
-
-      // Update local state
-      const displayPosition = POSITION_DISPLAY[position] || position;
-      setAccounts(prev => prev.map(a =>
-        a.userId === userId ? { ...a, position, displayPosition } : a
-      ));
-      return true;
-    } catch (error) {
-      console.error('Error:', error);
-      return false;
-    }
-  };
+  // ── Filtering ────────────────────────────────────────────────────────────────
+  const filtered = accounts.filter(a => {
+    const brgyMatch = filterBrgy === 'All Barangays' || a.barangay === filterBrgy;
+    const q = searchText.toLowerCase();
+    const textMatch = !q ||
+      a.firstName.toLowerCase().includes(q) ||
+      a.lastName.toLowerCase().includes(q) ||
+      a.email.toLowerCase().includes(q) ||
+      a.barangay.toLowerCase().includes(q);
+    return brgyMatch && textMatch;
+  });
 
   // ── Navigation ──────────────────────────────────────────────────────────────
   const handleNavPress = (tab) => {
     setActiveTab(tab);
     setSidebarVisible(false);
-    if (tab === 'Dashboard')      router.push('/(tabs)/lydo-dashboard');
+    if (tab === 'Dashboard') router.push('/(tabs)/lydo-dashboard');
     if (tab === 'Documents') router.push('/(tabs)/lydo-document');
     if (tab === 'Monitor')   router.push('/(tabs)/lydo-monitor');
   };
@@ -594,168 +799,6 @@ export default function LYDOMonitorAccountScreen() {
     if (tab === 'Budget')       { router.push('/(tabs)/lydo-monitor-budget'); return; }
     if (tab === 'Report')       { router.push('/(tabs)/lydo-monitor-report'); return; }
     setActiveMonitorTab(tab);
-  };
-
-  // ── Row helpers ──────────────────────────────────────────────────────────────
-  const toggleSelect = (id) => {
-    setSelectedIds(prev => {
-      const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
-      return next;
-    });
-  };
-
-  const updateAccount = (id, patch) => {
-    setAccounts(prev => prev.map(a => a.id === id ? { ...a, ...patch } : a));
-  };
-
-  const handleApprove = async (id) => {
-    console.log('handleApprove called with id:', id);
-    const account = accounts.find(a => a.id === id);
-    if (!account) {
-      console.error('Account not found');
-      return;
-    }
-    console.log('Approving account:', account.name, 'userId:', account.userId);
-    const success = await updateUserStatus(account.userId, 'active');
-    if (success) {
-      console.log('Account approved successfully');
-      // Refresh the accounts list
-      fetchData();
-    }
-  };
-
-  const handleReject = async (id) => {
-    console.log('handleReject called with id:', id);
-    const account = accounts.find(a => a.id === id);
-    if (!account) {
-      console.error('Account not found');
-      return;
-    }
-    console.log('Rejecting account:', account.name, 'userId:', account.userId);
-    const success = await updateUserStatus(account.userId, 'inactive');
-    if (success) {
-      console.log('Account rejected successfully');
-      // Refresh the accounts list
-      fetchData();
-    }
-  };
-
-  // ── Handle barangay change from dropdown ───────────────────────────────────
-  const handleBarangayChange = async (id, barangayName) => {
-    // Skip if "Select Barangay" is selected
-    if (barangayName === 'Select Barangay' || !barangayName) {
-      return;
-    }
-    const account = accounts.find(a => a.id === id);
-    const barangay = barangays.find(b => b.barangay_name === barangayName);
-    if (barangay) {
-      await updateUserBarangay(account.userId, barangay.barangay_id);
-    }
-  };
-
-  // ── Handle position change from dropdown ──────────────────────────────────
-  const handlePositionChange = async (id, displayPosition) => {
-    // Skip if "Select Position" is selected
-    if (displayPosition === 'Select Position' || !displayPosition) {
-      return;
-    }
-    const account = accounts.find(a => a.id === id);
-    // Convert display value back to database value
-    const dbPosition = Object.keys(POSITION_DISPLAY).find(
-      key => POSITION_DISPLAY[key] === displayPosition
-    );
-    // Only update if we found a valid position
-    if (dbPosition) {
-      await updateUserPosition(account.userId, dbPosition);
-    }
-  };
-
-  // ── Handle role change ─────────────────────────────────────────────────────────
-  const updateUserRole = async (userId, newRoleName) => {
-    try {
-      // Get the role_id for the new role
-      const { data: roleData } = await supabase
-        .from('roles')
-        .select('role_id')
-        .eq('role_name', newRoleName)
-        .single();
-
-      if (roleData) {
-        const updates = { role_id: roleData.role_id };
-        // If changing to resident, clear position and barangay
-        if (newRoleName === 'resident') {
-          updates.position = null;
-          updates.barangay_id = null;
-        }
-        // If changing to lydo, clear position
-        if (newRoleName === 'lydo') {
-          updates.position = null;
-        }
-
-        const { error } = await supabase
-          .from('users')
-          .update(updates)
-          .eq('user_id', userId);
-
-        if (error) {
-          console.error('Error updating role:', error);
-          Alert.alert('Error', 'Failed to update role');
-          return false;
-        }
-
-        // Update local state
-        setAccounts(prev => prev.map(a =>
-          a.userId === userId ? {
-            ...a,
-            roleName: newRoleName,
-            roleDisplay: ROLE_DISPLAY[newRoleName],
-            roleId: roleData.role_id,
-            position: newRoleName === 'resident' || newRoleName === 'lydo' ? null : a.position,
-            displayPosition: newRoleName === 'resident' || newRoleName === 'lydo' ? null : a.displayPosition,
-            barangay: newRoleName === 'resident' || newRoleName === 'lydo' ? 'Select Barangay' : a.barangay,
-            barangayId: newRoleName === 'resident' || newRoleName === 'lydo' ? null : a.barangayId,
-          } : a
-        ));
-        return true;
-      }
-    } catch (error) {
-      console.error('Error:', error);
-    }
-    return false;
-  };
-
-  const handleRoleChange = async (id, displayRole) => {
-    // Skip if no valid selection
-    if (!displayRole || displayRole === 'Select Role') {
-      return;
-    }
-    // Convert display value back to database value
-    const dbRole = Object.keys(ROLE_DISPLAY).find(
-      key => ROLE_DISPLAY[key] === displayRole
-    );
-    // Only update if we found a valid role
-    if (dbRole) {
-      const account = accounts.find(a => a.id === id);
-      await updateUserRole(account.userId, dbRole);
-    }
-  };
-
-  // ── Filtered accounts ────────────────────────────────────────────────────────
-  const filtered = filterBrgy === 'All Barangays'
-    ? accounts
-    : accounts.filter(a => a.barangay === filterBrgy);
-
-  // ── Dropdown options ──────────────────────────────────────────────────────────
-  const getBarangayOptions = () => {
-    if (barangays.length > 0) {
-      return barangays.map(b => b.barangay_name);
-    }
-    return ['Select Barangay'];
-  };
-
-  const getPositionOptions = () => {
-    return Object.values(POSITION_DISPLAY);
   };
 
   // ── Sidebar ─────────────────────────────────────────────────────────────────
@@ -815,9 +858,6 @@ export default function LYDOMonitorAccountScreen() {
           <View style={{ flex: 1 }}>
             <Text style={styles.headerSub}>SANGGUNIANG KABATAAN FEDERATION</Text>
             <Text style={styles.headerTitle}>RIZAL, LAGUNA</Text>
-            <Text style={styles.headerDesc}>
-              SK Full Disclosure Policy Compliance Portal for the Submission and Validation{'\n'}of Statutory Financial Reports and Developmental Plans
-            </Text>
           </View>
           <TouchableOpacity style={styles.bellBtn} activeOpacity={0.7}>
             <BellIcon hasNotif={notifCount > 0} />
@@ -834,6 +874,7 @@ export default function LYDOMonitorAccountScreen() {
       <View style={styles.monitorTabBar}>
         {MONITOR_TABS.map(tab => {
           const active = activeMonitorTab === tab;
+          const hasNotif = NOTIF_TABS.has(tab);
           return (
             <TouchableOpacity
               key={tab}
@@ -844,124 +885,119 @@ export default function LYDOMonitorAccountScreen() {
               <Text style={[styles.monitorTabText, active && styles.monitorTabTextActive]}>
                 {tab}
               </Text>
+              {hasNotif && !active && <View style={styles.tabNotifDot} />}
             </TouchableOpacity>
           );
         })}
       </View>
 
-      {/* ── Page Title Row ── */}
-      <View style={styles.pageTitleRow}>
-        <View>
-          <Text style={styles.pageTitle}>Account Management</Text>
-          <Text style={styles.pageSubTitle}>Review of pending applicants</Text>
+      {/* ── Toolbar: Search | + Account ── */}
+      <View style={styles.toolbar}>
+        <View style={styles.searchWrap}>
+          <Text style={styles.searchIcon}>🔍</Text>
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Search"
+            placeholderTextColor={COLORS.midGray}
+            value={searchText}
+            onChangeText={setSearchText}
+          />
+          {searchText.length > 0 && (
+            <TouchableOpacity onPress={() => setSearchText('')} activeOpacity={0.7}>
+              <Text style={styles.searchClear}>✕</Text>
+            </TouchableOpacity>
+          )}
         </View>
-        {/* Filter by Barangay (top-right) */}
+        <TouchableOpacity style={styles.createBtn} onPress={() => setShowCreate(true)} activeOpacity={0.85}>
+          <Text style={styles.createBtnPlus}>＋</Text>
+          <Text style={styles.createBtnText}>Account</Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* ── List of Accounts heading + Barangay filter ── */}
+      <View style={styles.listHeadingRow}>
+        <Text style={styles.listHeading}>List of Accounts</Text>
+      </View>
+      <View style={{ marginBottom: 10, zIndex: 200 }}>
         <FilterDropdown
           value={filterBrgy}
-          options={['All Barangays', ...getBarangayOptions()]}
+          options={['All Barangays', ...barangays.map(b => b.barangay_name)]}
           onSelect={setFilterBrgy}
+          label={filterBrgy}
         />
       </View>
 
       {/* ── Table ── */}
       <View style={styles.tableContainer}>
-
-          {/* Table Header */}
-          <View style={styles.tableHeader}>
-            <View style={styles.colSelect}>
-              <Text style={styles.tableHeaderText}>Select</Text>
+        {/* Header */}
+        <View style={styles.tableHeader}>
+          {[
+            ['Barangay',      styles.colBrgy],
+            ['Last Name',     styles.colLastName],
+            ['First Name',    styles.colFirstName],
+            ['Middle Initial',styles.colMiddleInitial],
+            ['Role',          styles.colRole],
+            ['Position',      styles.colPosition],
+            ['Email',         styles.colEmail],
+            ['Password', styles.colPassword],
+          ].map(([col, colStyle]) => (
+            <View key={col} style={colStyle}>
+              <Text style={styles.tableHeaderText}>{col}</Text>
             </View>
-            <View style={styles.colName}>
-              <Text style={styles.tableHeaderText}>User Name</Text>
-            </View>
-            <View style={styles.colBarangay}>
-              <Text style={styles.tableHeaderText}>Barangay</Text>
-            </View>
-            <View style={styles.colRole}>
-              <Text style={styles.tableHeaderText}>Role</Text>
-            </View>
-            <View style={styles.colPosition}>
-              <Text style={styles.tableHeaderText}>Position</Text>
-            </View>
-            <View style={styles.colDate}>
-              <Text style={styles.tableHeaderText}>Sign-up Date</Text>
-            </View>
-            <View style={styles.colStatus}>
-              <Text style={styles.tableHeaderText}>Status</Text>
-            </View>
-            <View style={styles.colAction}>
-              <Text style={styles.tableHeaderText}>Action</Text>
-            </View>
-          </View>
-
-          {/* Rows */}
-          {loading ? (
-            <View style={styles.emptyState}>
-              <ActivityIndicator size="large" color={COLORS.navy} />
-              <Text style={styles.emptyText}>Loading accounts...</Text>
-            </View>
-          ) : filtered.length === 0 ? (
-            <View style={styles.emptyState}>
-              <Text style={styles.emptyText}>No accounts found.</Text>
-            </View>
-          ) : (
-            filtered.map((acc, idx) => (
-              <AccountRow
-                key={acc.id}
-                account={acc}
-                checked={selectedIds.has(acc.id)}
-                isEven={idx % 2 !== 0}
-                rowIndex={idx}
-                onToggle={() => toggleSelect(acc.id)}
-                onBrgyChange={val => handleBarangayChange(acc.id, val)}
-                onRoleChange={val => handleRoleChange(acc.id, val)}
-                onPositionChange={val => handlePositionChange(acc.id, val)}
-                onApprove={() => handleApprove(acc.id)}
-                onReject={() => handleReject(acc.id)}
-                barangayOptions={getBarangayOptions()}
-                roleOptions={ROLE_OPTIONS}
-                positionOptions={POSITION_OPTIONS}
-              />
-            ))
-          )}
-
-          {/* Extra empty rows to match screenshot appearance */}
-          {[...Array(Math.max(0, 6 - filtered.length))].map((_, i) => (
-            <View key={`empty-${i}`} style={[styles.tableRow, (filtered.length + i) % 2 !== 0 && styles.tableRowEven, styles.emptyRow]} />
           ))}
+        </View>
 
-       
+        {/* Rows */}
+        {loading ? (
+          <View style={styles.emptyState}>
+            <ActivityIndicator size="large" color={COLORS.navy} />
+            <Text style={styles.emptyText}>Loading accounts...</Text>
+          </View>
+        ) : filtered.length === 0 ? (
+          <View style={styles.emptyState}>
+            <Text style={styles.emptyText}>No accounts found.</Text>
+          </View>
+        ) : (
+          filtered.map((acc, idx) => (
+            <AccountListRow
+              key={acc.id}
+              account={acc}
+              isEven={idx % 2 !== 0}
+              isPasswordVisible={visiblePasswords.has(acc.id)}
+              onTogglePassword={togglePasswordVisibility}
+            />
+          ))
+        )}
       </View>
 
+      {/* Create Account Modal */}
+      {showCreate && (
+        <CreateAccountModal
+          visible={showCreate}
+          onClose={() => setShowCreate(false)}
+          onSave={handleCreateAccount}
+          barangays={barangays}
+        />
+      )}
     </ScrollView>
   );
 
-  // ── Root ─────────────────────────────────────────────────────────────────────
   return (
     <GlobalDropdownProvider>
       <SafeAreaView style={styles.safe}>
-      <StatusBar barStyle="light-content" backgroundColor={COLORS.navy} />
-
-      {/* Layout */}
-      <View style={styles.layout}>
-        {/* Mobile: Sidebar as overlay */}
-        {isMobile && sidebarVisible && (
-          <TouchableOpacity
-            style={styles.sidebarOverlay}
-            activeOpacity={1}
-            onPress={() => setSidebarVisible(false)}
-          />
-        )}
-
-        {isMobile ? (
-          sidebarVisible && renderSidebar()
-        ) : (
-          renderSidebar()
-        )}
-
-        {renderContent()}
-      </View>
-    </SafeAreaView>
+        <StatusBar barStyle="light-content" backgroundColor={COLORS.navy} />
+        <View style={styles.layout}>
+          {isMobile && sidebarVisible && (
+            <TouchableOpacity
+              style={styles.sidebarOverlay}
+              activeOpacity={1}
+              onPress={() => setSidebarVisible(false)}
+            />
+          )}
+          {isMobile ? (sidebarVisible && renderSidebar()) : renderSidebar()}
+          {renderContent()}
+        </View>
+      </SafeAreaView>
     </GlobalDropdownProvider>
   );
 }
@@ -1004,7 +1040,6 @@ const styles = StyleSheet.create({
   header:      { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 18 },
   headerSub:   { fontSize: 10, fontWeight: '600', color: COLORS.subText, letterSpacing: 2, textTransform: 'uppercase', marginBottom: 2 },
   headerTitle: { fontSize: 20, fontWeight: '900', color: COLORS.darkText, letterSpacing: 0.5, borderBottomWidth: 2, borderBottomColor: COLORS.lightGray },
-  headerDesc:  { fontSize: 15, fontWeight: '700', color: COLORS.darkText, marginTop: 6, lineHeight: 17 },
 
   // Bell
   bellBtn:        { width: 40, height: 40, borderRadius: 20, backgroundColor: COLORS.cardBg, alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 6, elevation: 3 },
@@ -1016,46 +1051,46 @@ const styles = StyleSheet.create({
   notifBadgeText: { fontSize: 8, fontWeight: '900', color: COLORS.navy },
 
   // ── Monitor tabs ─────────────────────────────────────────────────────────────
-  monitorTabBar:        { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: COLORS.lightGray, marginBottom: 14, overflowX: 'hidden', overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.30, shadowRadius: 3, elevation: 6 },
-  monitorTab:           { flex: 1, paddingHorizontal: isMobile ? 8 : 40, backgroundColor: COLORS.navy, paddingVertical: 10, borderBottomWidth: 0, borderBottomColor: 'transparent', marginBottom: -1, borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)', alignItems: 'center' },
-  monitorTabActive:     { backgroundColor: COLORS.gold, borderRadius: 4, borderBottomColor: COLORS.gold, borderColor: COLORS.gold, shadowColor: COLORS.gold, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.4, shadowRadius: 4, elevation: 3 },
+  monitorTabBar:        { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: COLORS.lightGray, marginBottom: 14, overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.30, shadowRadius: 3, elevation: 6 },
+  monitorTab:           { flex: 1, paddingHorizontal: isMobile ? 8 : 40, backgroundColor: COLORS.navy, paddingVertical: 10, borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)', alignItems: 'center', position: 'relative' },
+  monitorTabActive:     { backgroundColor: COLORS.gold, borderRadius: 4, borderColor: COLORS.gold, shadowColor: COLORS.gold, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.4, shadowRadius: 4, elevation: 3 },
   monitorTabText:       { fontSize: isMobile ? 10 : 13, fontWeight: '600', color: COLORS.white },
   monitorTabTextActive: { color: COLORS.darkText, fontWeight: '800' },
+  tabNotifDot:          { position: 'absolute', top: 6, right: 8, width: 8, height: 8, borderRadius: 4, backgroundColor: '#E53935' },
 
-  // ── Page title row ────────────────────────────────────────────────────────────
-  pageTitleRow:  { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 16, zIndex: 300 },
-  pageTitle:     { fontSize: isMobile ? 16 : 22, fontWeight: '800', color: COLORS.darkText, letterSpacing: 0.2 },
-  pageSubTitle:  { fontSize: isMobile ? 10 : 12, color: COLORS.subText, marginTop: 2 },
+  // ── Toolbar ──────────────────────────────────────────────────────────────────
+  toolbar:       { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 14 },
+  createBtn:     { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#7BAFD4', borderRadius: 20, paddingHorizontal: 18, paddingVertical: 6, shadowColor: '#7BAFD4', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.35, shadowRadius: 6, elevation: 3 },
+  createBtnPlus: { fontSize: 18, fontWeight: '300', color: COLORS.white, lineHeight: 20 },
+  createBtnText: { fontSize: 14, fontWeight: '500', color: COLORS.white },
+  searchWrap:    { flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.white, borderRadius: 20, borderWidth: 1, borderColor: COLORS.lightGray, paddingHorizontal: 10, paddingVertical: 6, width: isMobile ? 160 : 220 },
+  searchIcon:    { fontSize: 12, marginRight: 4 },
+  searchInput:   { flex: 1, fontSize: 11, color: COLORS.darkText, padding: 0 },
+  searchClear:   { color: COLORS.midGray, fontSize: 12 },
+
+  // ── List heading ─────────────────────────────────────────────────────────────
+  listHeadingRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 6 },
+  listHeading:    { fontSize: isMobile ? 13 : 15, fontWeight: '800', color: COLORS.navy },
 
   // ── Table ─────────────────────────────────────────────────────────────────────
-  tableContainer: { backgroundColor: COLORS.white, borderRadius: 12, overflow: 'hidden', borderWidth: 1, borderColor: COLORS.lightGray, elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 6 },
-  tableHeader:   { flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.white, paddingVertical: 11, paddingHorizontal: 14, borderBottomWidth: 1, borderBottomColor: COLORS.lightGray },
-  tableHeaderText:{ fontSize: isMobile ? 10 : 12, fontWeight: '700', color: COLORS.darkText, letterSpacing: 0.2 },
-  tableRow:      { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, paddingHorizontal: 14, borderBottomWidth: 1, borderBottomColor: COLORS.lightGray, backgroundColor: COLORS.white, minHeight: 56 },
-  tableRowEven:  { backgroundColor: '#FAFAFA' },
-  tableRowSelected: { backgroundColor: '#EEF3FB' },
-  emptyRow:      { minHeight: 52 },
+  tableContainer:  { backgroundColor: COLORS.white, borderRadius: 10, overflow: 'hidden', borderWidth: 1, borderColor: COLORS.lightGray, elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 6 },
+  tableHeader:     { flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.white, paddingVertical: 10, paddingHorizontal: 10, borderBottomWidth: 1, borderBottomColor: COLORS.lightGray },
+  tableHeaderText: { fontSize: isMobile ? 9 : 11, fontWeight: '700', color: COLORS.darkText, letterSpacing: 0.1 },
+  tableRow:        { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, paddingHorizontal: 10, borderBottomWidth: 1, borderBottomColor: COLORS.lightGray, backgroundColor: COLORS.white, minHeight: 44 },
+  tableRowEven:    { backgroundColor: '#FAFAFA' },
+  emptyRow:        { minHeight: 44 },
+  cellText:        { fontSize: isMobile ? 9 : 11, color: COLORS.darkText },
 
-  // Columns — all flex: 1 to match lydo-monitor tab behaviour
-  colSelect:   { width: 44, alignItems: 'center' },
-  colName:     { flex: 1, paddingRight: 8 },
-  colBarangay: { flex: 1, paddingRight: 8, zIndex: 900 },
-  colRole:     { flex: 1, paddingRight: 8, zIndex: 900 },
-  colPosition: { flex: 1, paddingRight: 8, zIndex: 900 },
-  colDate:     { flex: 1, paddingRight: 8 },
-  colStatus:   { flex: 1, paddingRight: 8 },
-  colAction:   { width: isMobile ? 80 : 100, gap: 4, zIndex: 1000, position: 'relative' },
-
-  // Cells
-  cellName:    { fontSize: isMobile ? 10 : 12, color: COLORS.darkText, fontWeight: '500' },
-  cellDate:    { fontSize: isMobile ? 10 : 12, color: COLORS.darkText },
-  cellEmail:   { fontSize: isMobile ? 8 : 10, color: COLORS.subText, marginTop: 2 },
-  cellRole:    { fontSize: isMobile ? 10 : 12, color: COLORS.subText, fontWeight: '500' },
-
-  // Action buttons
-  approveBtn:     { backgroundColor: '#43A047', borderRadius: 4, paddingHorizontal: 8, paddingVertical: 4, alignItems: 'center', zIndex: 1000, position: 'relative' },
-  rejectBtn:      { backgroundColor: '#C62828', borderRadius: 4, paddingHorizontal: 8, paddingVertical: 4, alignItems: 'center', zIndex: 1000, position: 'relative' },
-  actionBtnText:  { fontSize: 10, fontWeight: '700', color: COLORS.white },
+  // Columns matching the UI screenshot
+  colBrgy:          { flex: 1.4, paddingRight: 6 },
+  colLastName:      { flex: 1.2, paddingRight: 6 },
+  colFirstName:     { flex: 1.2, paddingRight: 6 },
+  colMiddleInitial: { flex: 0.6, paddingRight: 6 },
+  colRole:          { flex: 1, paddingRight: 6 },
+  colPosition:      { flex: 1.2, paddingRight: 6 },
+  colEmail:         { flex: 1.6, paddingRight: 6 },
+  colPassword:      { flex: 0.9 },
+  colFlex:          { flex: 1, paddingRight: 6 },
 
   emptyState: { alignItems: 'center', paddingVertical: 40 },
   emptyText:  { fontSize: 14, color: COLORS.midGray },
