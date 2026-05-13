@@ -607,7 +607,7 @@ export default function LYDOMonitorAccountScreen() {
   const [accounts, setAccounts]         = useState([]);
   const [barangays, setBarangays]       = useState([]);
   const [selectedIds, setSelectedIds]   = useState(new Set());
-  const [filterBrgy, setFilterBrgy]     = useState('Barangay');
+  const [filterBrgy, setFilterBrgy]     = useState('All Barangays');
   const [searchText, setSearchText]     = useState('');
   const [notifCount]                    = useState(2);
   const [sidebarVisible, setSidebarVisible] = useState(false);
@@ -677,7 +677,6 @@ export default function LYDOMonitorAccountScreen() {
             middleInitial: user.middle_initial || '',
             name: `${user.first_name || ''} ${user.last_name || ''}`.trim(),
             email: user.email || '',
-            password: user.password || '',
             barangay: user.barangays?.barangay_name || '—',
             barangayId: user.barangay_id,
             roleName,
@@ -737,7 +736,7 @@ export default function LYDOMonitorAccountScreen() {
 
   // ── Filtering ────────────────────────────────────────────────────────────────
   const filtered = accounts.filter(a => {
-    const brgyMatch = filterBrgy === 'Barangay' || a.barangay === filterBrgy;
+    const brgyMatch = filterBrgy === 'All Barangays' || a.barangay === filterBrgy;
     const q = searchText.toLowerCase();
     const textMatch = !q ||
       a.firstName.toLowerCase().includes(q) ||
@@ -885,7 +884,7 @@ export default function LYDOMonitorAccountScreen() {
       <View style={{ marginBottom: 10, zIndex: 200 }}>
         <FilterDropdown
           value={filterBrgy}
-          options={['Barangay', ...barangays.map(b => b.barangay_name)]}
+          options={['All Barangays', ...barangays.map(b => b.barangay_name)]}
           onSelect={setFilterBrgy}
           label={filterBrgy}
         />
@@ -923,15 +922,14 @@ export default function LYDOMonitorAccountScreen() {
           </View>
         ) : (
           filtered.map((acc, idx) => (
-            <AccountListRow
-              key={acc.id}
-              account={acc}
-              isEven={idx % 2 !== 0}
-              isPasswordVisible={visiblePasswords.has(acc.id)}
-              onTogglePassword={togglePasswordVisibility}
-            />
+            <AccountListRow key={acc.id} account={acc} isEven={idx % 2 !== 0} />
           ))
         )}
+
+        {/* Fill empty rows */}
+        {!loading && [...Array(Math.max(0, 6 - filtered.length))].map((_, i) => (
+          <View key={`empty-${i}`} style={[styles.tableRow, (filtered.length + i) % 2 !== 0 && styles.tableRowEven, styles.emptyRow]} />
+        ))}
       </View>
 
       {/* Create Account Modal */}
