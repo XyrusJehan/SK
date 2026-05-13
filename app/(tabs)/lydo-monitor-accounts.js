@@ -305,6 +305,7 @@ const CreateAccountModal = ({ visible, onClose, onSave, barangays }) => {
     position: '', role: 'SK',
     barangay: '', email: '', password: '',
   });
+  const [errors, setErrors] = useState({});
   const [confirmed, setConfirmed] = useState(false);
   const [showPosDd, setShowPosDd] = useState(false);
   const [showBrgyDd, setShowBrgyDd] = useState(false);
@@ -314,6 +315,28 @@ const CreateAccountModal = ({ visible, onClose, onSave, barangays }) => {
   const barangayOpts = barangays.map(b => b.barangay_name);
 
   const set = (key, val) => setForm(f => ({ ...f, [key]: val }));
+
+  // Validate form fields
+  const validateForm = () => {
+    const newErrors = {};
+    if (!form.barangay) newErrors.barangay = 'Barangay is required';
+    if (!form.lastName.trim()) newErrors.lastName = 'Last name is required';
+    if (!form.firstName.trim()) newErrors.firstName = 'First name is required';
+    if (!form.position) newErrors.position = 'Position is required';
+    if (!form.email.trim()) newErrors.email = 'Email is required';
+    else if (!/\S+@\S+\.\S+/.test(form.email)) newErrors.email = 'Invalid email format';
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
+  const handleSave = () => {
+    if (validateForm()) {
+      if (confirmed) {
+        onSave(form);
+        onClose();
+      }
+    }
+  };
 
   // Auto-generate password based on barangay, position, and year
   const generatePassword = (barangayName, position) => {
@@ -337,10 +360,10 @@ const CreateAccountModal = ({ visible, onClose, onSave, barangays }) => {
   }, [form.barangay, form.position]);
 
   // ── Sub-components ──────────────────────────────────────────────────────────
-  const MField = ({ label, value, onChange, secure, placeholder, isVisible, onToggle, editable = true }) => (
+  const MField = ({ label, value, onChange, secure, placeholder, isVisible, onToggle, editable = true, error }) => (
     <View style={M.fieldWrap}>
       <Text style={M.fieldLabel}>{label}</Text>
-      <View style={[M.inputContainer, !editable && M.inputDisabled]}>
+      <View style={[M.inputContainer, !editable && M.inputDisabled, error && M.inputError]}>
         <TextInput
           style={[M.input, secure && M.inputWithToggle, !editable && M.inputNoEdit]}
           value={value}
@@ -356,13 +379,14 @@ const CreateAccountModal = ({ visible, onClose, onSave, barangays }) => {
           </TouchableOpacity>
         )}
       </View>
+      {error && <Text style={M.errorText}>{error}</Text>}
     </View>
   );
 
-  const MDropdown = ({ label, value, options, open, setOpen, onSelect, placeholder, scrollable }) => (
+  const MDropdown = ({ label, value, options, open, setOpen, onSelect, placeholder, scrollable, error }) => (
     <View style={[M.fieldWrap, { zIndex: open ? 999 : 1 }]}>
       <Text style={M.fieldLabel}>{label}</Text>
-      <TouchableOpacity style={M.ddBtn} onPress={() => setOpen(o => !o)} activeOpacity={0.85}>
+      <TouchableOpacity style={[M.ddBtn, error && M.ddBtnError]} onPress={() => setOpen(o => !o)} activeOpacity={0.85}>
         <Text style={[M.ddVal, !value && M.ddPlaceholder]}>{value || placeholder}</Text>
         <Text style={M.ddArrow}>▼</Text>
       </TouchableOpacity>
@@ -389,6 +413,7 @@ const CreateAccountModal = ({ visible, onClose, onSave, barangays }) => {
           )}
         </View>
       )}
+      {error && <Text style={M.errorText}>{error}</Text>}
     </View>
   );
 
@@ -403,13 +428,25 @@ const CreateAccountModal = ({ visible, onClose, onSave, barangays }) => {
     </View>
   );
 
+  // Reset form when modal closes
+  const handleClose = () => {
+    setForm({
+      lastName: '', firstName: '', middleInitial: '',
+      position: '', role: 'SK',
+      barangay: '', email: '', password: '',
+    });
+    setErrors({});
+    setConfirmed(false);
+    onClose();
+  };
+
   if (!visible) return null;
   return (
     <View style={M.overlay}>
       <View style={M.modal}>
 
         {/* ── Header ── */}
-        <TouchableOpacity style={M.closeBtn} onPress={onClose} activeOpacity={0.8}>
+        <TouchableOpacity style={M.closeBtn} onPress={handleClose} activeOpacity={0.8}>
           <Text style={M.closeX}>✕</Text>
         </TouchableOpacity>
         <Text style={M.title}>CREATE ACCOUNT FOR SANGGUNIANG KABATAAN OFFICIALS</Text>
@@ -431,12 +468,13 @@ const CreateAccountModal = ({ visible, onClose, onSave, barangays }) => {
                 options={barangayOpts}
                 open={showBrgyDd}
                 setOpen={setShowBrgyDd}
-                onSelect={v => set('barangay', v)}
+                onSelect={v => { set('barangay', v); setErrors(e => ({ ...e, barangay: null })); }}
                 placeholder="Select Barangay"
                 scrollable
+                error={errors.barangay}
               />
-              <MField label="Last Name"      value={form.lastName}      onChange={v => set('lastName', v)}      placeholder="Enter last name" />
-              <MField label="First Name"     value={form.firstName}     onChange={v => set('firstName', v)}     placeholder="Enter first name" />
+              <MField label="Last Name"      value={form.lastName}      onChange={v => { set('lastName', v); setErrors(e => ({ ...e, lastName: null })); }}      placeholder="Enter last name" error={errors.lastName} />
+              <MField label="First Name"     value={form.firstName}     onChange={v => { set('firstName', v); setErrors(e => ({ ...e, firstName: null })); }}     placeholder="Enter first name" error={errors.firstName} />
               <MField label="Middle Initial" value={form.middleInitial} onChange={v => set('middleInitial', v)} placeholder="e.g. A" />
             </View>
 
@@ -451,8 +489,9 @@ const CreateAccountModal = ({ visible, onClose, onSave, barangays }) => {
                 options={positionOpts}
                 open={showPosDd}
                 setOpen={setShowPosDd}
-                onSelect={v => set('position', v)}
+                onSelect={v => { set('position', v); setErrors(e => ({ ...e, position: null })); }}
                 placeholder="Select Position"
+                error={errors.position}
               />
 
               {/* Role — static display pill */}
@@ -463,7 +502,7 @@ const CreateAccountModal = ({ visible, onClose, onSave, barangays }) => {
                 </View>
               </View>
 
-              <MField label="Email"                  value={form.email}           onChange={v => set('email', v)}           placeholder="e.g. juan@email.com" />
+              <MField label="Email"                  value={form.email}           onChange={v => { set('email', v); setErrors(e => ({ ...e, email: null })); }}           placeholder="e.g. juan@email.com" error={errors.email} />
               <MField label="Auto Generated Password" value={form.password}        onChange={() => {}}        placeholder="Auto-generated"       secure isVisible={showPassword} onToggle={() => setShowPassword(v => !v)} editable={false} />
             </View>
           </View>
@@ -510,12 +549,12 @@ const CreateAccountModal = ({ visible, onClose, onSave, barangays }) => {
 
         {/* ── Footer buttons ── */}
         <View style={M.actions}>
-          <TouchableOpacity style={M.cancelBtn} onPress={onClose} activeOpacity={0.8}>
+          <TouchableOpacity style={M.cancelBtn} onPress={handleClose} activeOpacity={0.8}>
             <Text style={M.cancelText}>Cancel</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={[M.saveBtn, !confirmed && M.saveBtnDisabled]}
-            onPress={() => { if (confirmed) { onSave(form); onClose(); } }}
+            onPress={handleSave}
             activeOpacity={confirmed ? 0.85 : 1}
           >
             <Text style={M.saveText}>Create Account</Text>
@@ -556,6 +595,13 @@ const M = StyleSheet.create({
   // Disabled state
   inputDisabled:  { backgroundColor: '#E8E8E8' },
   inputNoEdit:    { backgroundColor: '#E8E8E8', color: COLORS.subText },
+  inputError:     { borderColor: '#C62828', borderWidth: 1.5 },
+
+  // Error text
+  errorText:      { fontSize: 10, color: '#C62828', marginTop: 2 },
+
+  // Dropdown error state
+  ddBtnError:     { borderColor: '#C62828', borderWidth: 1.5 },
 
   // Dropdown
   ddBtn:          { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: COLORS.white, borderRadius: 6, paddingHorizontal: 10, paddingVertical: 7, height: 34 },
