@@ -136,7 +136,7 @@ export default function LoginScreen() {
                   onBlur={() => setPassFocused(false)}
                 />
                 <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={styles.eyeBtn}>
-                  <Text style={styles.eyeIcon}>{showPassword ? '⌣' : '👁'}</Text>
+                  <Text style={styles.eyeIcon}>{showPassword ? '👁' : '⌣'}</Text>
                 </TouchableOpacity>
               </View>
 
