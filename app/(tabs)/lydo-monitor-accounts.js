@@ -562,7 +562,7 @@ const M = StyleSheet.create({
 });
 
 // ─── ACCOUNT LIST ROW ─────────────────────────────────────────────────────────
-const AccountListRow = ({ account, isEven }) => (
+const AccountListRow = ({ account, isEven, isPasswordVisible, onTogglePassword }) => (
   <View style={[styles.tableRow, isEven && styles.tableRowEven]}>
     <View style={styles.colBrgy}>
       <Text style={styles.cellText} numberOfLines={1}>{account.barangay || '—'}</Text>
@@ -585,9 +585,15 @@ const AccountListRow = ({ account, isEven }) => (
     <View style={styles.colEmail}>
       <Text style={styles.cellText} numberOfLines={1}>{account.email || '—'}</Text>
     </View>
-    <View style={styles.colPassword}>
-      <Text style={styles.cellText} numberOfLines={1}>••••••••</Text>
-    </View>
+    <TouchableOpacity
+      style={styles.colPassword}
+      onPress={() => onTogglePassword(account.id)}
+      activeOpacity={0.7}
+    >
+      <Text style={styles.cellText} numberOfLines={1}>
+        {isPasswordVisible ? (account.password || '—') : '••••••••'}
+      </Text>
+    </TouchableOpacity>
   </View>
 );
 
@@ -607,11 +613,24 @@ export default function LYDOMonitorAccountScreen() {
   const [sidebarVisible, setSidebarVisible] = useState(false);
   const [loading, setLoading]           = useState(true);
   const [showCreate, setShowCreate]     = useState(false);
+  const [visiblePasswords, setVisiblePasswords] = useState(new Set());
 
   // ── Fetch data from Supabase ─────────────────────────────────────────────────
   useEffect(() => {
     fetchData();
   }, []);
+
+  const togglePasswordVisibility = (userId) => {
+    setVisiblePasswords(prev => {
+      const next = new Set(prev);
+      if (next.has(userId)) {
+        next.delete(userId);
+      } else {
+        next.add(userId);
+      }
+      return next;
+    });
+  };
 
   const fetchData = async () => {
     try {
@@ -634,6 +653,7 @@ export default function LYDOMonitorAccountScreen() {
           last_name,
           middle_initial,
           email,
+          password,
           position,
           status,
           created_at,
@@ -657,6 +677,7 @@ export default function LYDOMonitorAccountScreen() {
             middleInitial: user.middle_initial || '',
             name: `${user.first_name || ''} ${user.last_name || ''}`.trim(),
             email: user.email || '',
+            password: user.password || '',
             barangay: user.barangays?.barangay_name || '—',
             barangayId: user.barangay_id,
             roleName,
@@ -902,14 +923,15 @@ export default function LYDOMonitorAccountScreen() {
           </View>
         ) : (
           filtered.map((acc, idx) => (
-            <AccountListRow key={acc.id} account={acc} isEven={idx % 2 !== 0} />
+            <AccountListRow
+              key={acc.id}
+              account={acc}
+              isEven={idx % 2 !== 0}
+              isPasswordVisible={visiblePasswords.has(acc.id)}
+              onTogglePassword={togglePasswordVisibility}
+            />
           ))
         )}
-
-        {/* Fill empty rows */}
-        {!loading && [...Array(Math.max(0, 6 - filtered.length))].map((_, i) => (
-          <View key={`empty-${i}`} style={[styles.tableRow, (filtered.length + i) % 2 !== 0 && styles.tableRowEven, styles.emptyRow]} />
-        ))}
       </View>
 
       {/* Create Account Modal */}
