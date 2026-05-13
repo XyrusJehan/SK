@@ -6,7 +6,7 @@ import {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
 import { useNav } from './navContext';
-import { useAuth, hashPassword } from './authContext';
+import { useAuth, hashPassword, encryptPassword, decryptPassword } from './authContext';
 import { supabase } from '../../utils/supabase';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -212,7 +212,7 @@ export default function AccountScreen() {
     setSavingPassword(true);
     try {
       // First, verify the current password
-      const currentHashedPassword = hashPassword(currentPassword);
+      const currentEncryptedPassword = encryptPassword(currentPassword);
       const { data: userData, error: fetchError } = await supabase
         .from('users')
         .select('password')
@@ -225,18 +225,20 @@ export default function AccountScreen() {
         return;
       }
 
-      // Check if current password matches (accept both hashed and plain text for backward compatibility)
-      if (userData.password !== currentHashedPassword && userData.password !== currentPassword) {
+      // Check if current password matches (accept hashed, encrypted, and plain text for backward compatibility)
+      const currentHashedPassword = hashPassword(currentPassword);
+      const decryptedStored = decryptPassword(userData.password);
+      if (userData.password !== currentHashedPassword && userData.password !== currentEncryptedPassword && userData.password !== currentPassword && decryptedStored !== currentPassword) {
         Alert.alert('Error', 'Current password is incorrect.');
         setSavingPassword(false);
         return;
       }
 
-      // Hash new password and update
-      const newHashedPassword = hashPassword(newPassword);
+      // Encrypt new password and update
+      const newEncryptedPassword = encryptPassword(newPassword);
       const { error: updateError } = await supabase
         .from('users')
-        .update({ password: newHashedPassword })
+        .update({ password: newEncryptedPassword })
         .eq('user_id', user.userId);
 
       if (updateError) {

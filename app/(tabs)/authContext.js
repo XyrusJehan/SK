@@ -12,7 +12,7 @@ const ROLE_MAP = {
   'resident': 'public',
 };
 
-// Simple hash function for password hashing
+// Simple hash function for password hashing (for backward compatibility)
 export function hashPassword(password) {
   let hash = 0;
   for (let i = 0; i < password.length; i++) {
@@ -21,6 +21,78 @@ export function hashPassword(password) {
     hash = hash & hash;
   }
   return 'hash_' + Math.abs(hash).toString(16) + '_' + password.length.toString();
+}
+
+// Encryption key (should be stored securely in production)
+const ENCRYPTION_KEY = 'SKApp2024SecretKey';
+
+// Simple base64 encode/decode helpers (works in React Native)
+function base64Encode(str) {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+  let result = '';
+  let i = 0;
+  while (i < str.length) {
+    const a = str.charCodeAt(i++);
+    const b = i < str.length ? str.charCodeAt(i++) : 0;
+    const c = i < str.length ? str.charCodeAt(i++) : 0;
+    const triplet = (a << 16) | (b << 8) | c;
+    result += chars[(triplet >> 18) & 0x3F];
+    result += chars[(triplet >> 12) & 0x3F];
+    result += i > str.length + 1 ? '=' : chars[(triplet >> 6) & 0x3F];
+    result += i > str.length ? '=' : chars[triplet & 0x3F];
+  }
+  return result;
+}
+
+function base64Decode(str) {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+  let result = '';
+  const cleanStr = str.replace(/=/g, '');
+  let i = 0;
+  while (i < cleanStr.length) {
+    const a = chars.indexOf(cleanStr[i++]);
+    const b = chars.indexOf(cleanStr[i++]);
+    const c = chars.indexOf(cleanStr[i++]);
+    const d = chars.indexOf(cleanStr[i++]);
+    const triplet = (a << 18) | (b << 12) | (c << 6) | d;
+    result += String.fromCharCode((triplet >> 16) & 0xFF);
+    if (c !== -1) result += String.fromCharCode((triplet >> 8) & 0xFF);
+    if (d !== -1) result += String.fromCharCode(triplet & 0xFF);
+  }
+  return result;
+}
+
+// Simple XOR-based encryption
+function xorEncrypt(text, key) {
+  let result = '';
+  for (let i = 0; i < text.length; i++) {
+    result += String.fromCharCode(text.charCodeAt(i) ^ key.charCodeAt(i % key.length));
+  }
+  return base64Encode(result);
+}
+
+// Simple XOR-based decryption
+function xorDecrypt(encoded, key) {
+  const decoded = base64Decode(encoded);
+  let result = '';
+  for (let i = 0; i < decoded.length; i++) {
+    result += String.fromCharCode(decoded.charCodeAt(i) ^ key.charCodeAt(i % key.length));
+  }
+  return result;
+}
+
+// Encrypt password for storage
+export function encryptPassword(password) {
+  return xorEncrypt(password, ENCRYPTION_KEY);
+}
+
+// Decrypt password for display/verification
+export function decryptPassword(encryptedPassword) {
+  try {
+    return xorDecrypt(encryptedPassword, ENCRYPTION_KEY);
+  } catch (e) {
+    return encryptedPassword; // Return as-is if decryption fails (plain text or old hash)
+  }
 }
 
 // Validate password requirements
@@ -94,9 +166,10 @@ export function AuthProvider({ children }) {
         return { success: false, error: 'Invalid account status' };
       }
 
-      // Verify password (accept both hashed and plain text for backward compatibility)
+      // Verify password (accept plain text, hashed, and encrypted for backward compatibility)
       const hashedInput = hashPassword(password);
-      if (userData.password !== hashedInput && userData.password !== password) {
+      const decryptedStored = decryptPassword(userData.password);
+      if (userData.password !== hashedInput && userData.password !== password && decryptedStored !== password) {
         return { success: false, error: 'Invalid email or password' };
       }
 
@@ -183,8 +256,8 @@ export function AuthProvider({ children }) {
         .eq('role_name', 'resident')
         .maybeSingle();
 
-      // Hash password before storing
-      const hashedPassword = hashPassword(password);
+      // Encrypt password before storing
+      const encryptedPassword = encryptPassword(password);
 
       // Insert user with 'pending' status — requires admin approval before login
       const { error: insertError } = await supabase
@@ -193,7 +266,7 @@ export function AuthProvider({ children }) {
           first_name: firstName,
           last_name: lastName,
           email: email.toLowerCase(),
-          password: hashedPassword,
+          password: encryptedPassword,
           role_id: roleData?.role_id || 1,
           position: null,
           barangay_id: null,
