@@ -88,10 +88,6 @@ export default function AccountScreen() {
   // Change Password
   const [passwordSuccess, setPasswordSuccess] = useState(false);
 
-  // Modals
-  const [showProfileModal, setShowProfileModal] = useState(false);
-  const [showPasswordModal, setShowPasswordModal] = useState(false);
-
   // Track original values for change detection
   const [originalFirstName, setOriginalFirstName] = useState('');
   const [originalLastName, setOriginalLastName] = useState('');
@@ -215,7 +211,8 @@ export default function AccountScreen() {
 
     setSavingPassword(true);
     try {
-      // Get current stored password
+      // First, verify the current password
+      const currentEncryptedPassword = encryptPassword(currentPassword);
       const { data: userData, error: fetchError } = await supabase
         .from('users')
         .select('password')
@@ -228,17 +225,16 @@ export default function AccountScreen() {
         return;
       }
 
-      // Verify current password (encrypted format like lydo-monitor-accounts)
-      const currentEncryptedPassword = await encryptPassword(currentPassword);
-      const decryptedStoredPassword = await decryptPassword(userData.password);
-      if (userData.password !== currentEncryptedPassword && userData.password !== currentPassword && decryptedStoredPassword !== currentPassword) {
+      // Check if current password matches (accept encrypted and plain text for backward compatibility)
+      const decryptedStored = decryptPassword(userData.password);
+      if (userData.password !== currentEncryptedPassword && userData.password !== currentPassword && decryptedStored !== currentPassword) {
         Alert.alert('Error', 'Current password is incorrect.');
         setSavingPassword(false);
         return;
       }
 
-      // Encrypt new password and update (same as lydo-monitor-accounts)
-      const newEncryptedPassword = await encryptPassword(newPassword);
+      // Encrypt new password and update
+      const newEncryptedPassword = encryptPassword(newPassword);
       const { error: updateError } = await supabase
         .from('users')
         .update({ password: newEncryptedPassword })
@@ -463,7 +459,7 @@ export default function AccountScreen() {
                         styles.saveChangesBtn,
                         (savingProfile || !hasProfileChanges) && styles.saveChangesBtnDisabled
                       ]}
-                      onPress={() => setShowProfileModal(true)}
+                      onPress={handleSaveProfile}
                       activeOpacity={0.8}
                       disabled={savingProfile || !hasProfileChanges}
                     >
@@ -557,7 +553,7 @@ export default function AccountScreen() {
                         styles.changePwBtn,
                         (savingPassword || !hasPasswordFields) && styles.changePwBtnDisabled
                       ]}
-                      onPress={() => setShowPasswordModal(true)}
+                      onPress={handleChangePassword}
                       activeOpacity={0.8}
                       disabled={savingPassword || !hasPasswordFields}
                     >
@@ -580,64 +576,6 @@ export default function AccountScreen() {
           </View>
 
         </ScrollView>
-
-        {/* ── Profile Confirmation Modal ── */}
-        {showProfileModal && (
-          <View style={styles.modalOverlay}>
-            <View style={styles.modalContent}>
-              <Text style={styles.modalTitle}>Confirm Profile Update</Text>
-              <Text style={styles.modalMessage}>
-                Are you sure you want to save changes to your profile?
-              </Text>
-              <View style={styles.modalButtons}>
-                <TouchableOpacity
-                  style={styles.modalCancelBtn}
-                  onPress={() => setShowProfileModal(false)}
-                >
-                  <Text style={styles.modalCancelText}>Cancel</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.modalConfirmBtn}
-                  onPress={async () => {
-                    setShowProfileModal(false);
-                    await handleSaveProfile();
-                  }}
-                >
-                  <Text style={styles.modalConfirmText}>Confirm</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          </View>
-        )}
-
-        {/* ── Password Confirmation Modal ── */}
-        {showPasswordModal && (
-          <View style={styles.modalOverlay}>
-            <View style={styles.modalContent}>
-              <Text style={styles.modalTitle}>Confirm Password Change</Text>
-              <Text style={styles.modalMessage}>
-                Are you sure you want to change your password? This action cannot be undone.
-              </Text>
-              <View style={styles.modalButtons}>
-                <TouchableOpacity
-                  style={styles.modalCancelBtn}
-                  onPress={() => setShowPasswordModal(false)}
-                >
-                  <Text style={styles.modalCancelText}>Cancel</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.modalConfirmBtn, styles.modalConfirmBtnDanger]}
-                  onPress={async () => {
-                    setShowPasswordModal(false);
-                    await handleChangePassword();
-                  }}
-                >
-                  <Text style={styles.modalConfirmText}>Change Password</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          </View>
-        )}
       </View>
     </SafeAreaView>
   );
@@ -844,77 +782,5 @@ const styles = StyleSheet.create({
     color: COLORS.white,
     fontSize: 14,
     fontWeight: '900',
-  },
-
-  // ── Modals ──
-  modalOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'rgba(0, 0, 0, 0.6)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    zIndex: 100,
-  },
-  modalContent: {
-    backgroundColor: COLORS.white,
-    borderRadius: 16,
-    padding: 24,
-    width: '85%',
-    maxWidth: 360,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
-    shadowRadius: 12,
-    elevation: 8,
-  },
-  modalTitle: {
-    fontSize: 18,
-    fontWeight: '800',
-    color: COLORS.darkText,
-    textAlign: 'center',
-    marginBottom: 12,
-  },
-  modalMessage: {
-    fontSize: 14,
-    color: COLORS.subText,
-    textAlign: 'center',
-    marginBottom: 24,
-    lineHeight: 20,
-  },
-  modalButtons: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: 12,
-  },
-  modalCancelBtn: {
-    flex: 1,
-    paddingVertical: 12,
-    borderRadius: 8,
-    borderWidth: 1.5,
-    borderColor: COLORS.lightGray,
-    alignItems: 'center',
-  },
-  modalCancelText: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: COLORS.subText,
-  },
-  modalConfirmBtn: {
-    flex: 1,
-    paddingVertical: 12,
-    borderRadius: 8,
-    backgroundColor: COLORS.navy,
-    alignItems: 'center',
-  },
-  modalConfirmBtnDanger: {
-    backgroundColor: COLORS.maroon,
-  },
-  modalConfirmText: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: COLORS.white,
   },
 });
