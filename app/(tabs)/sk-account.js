@@ -6,7 +6,7 @@ import {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
 import { useNav } from './navContext';
-import { useAuth, encryptPassword, decryptPassword } from './authContext';
+import { useAuth, encryptPassword, decryptPassword, validatePassword } from './authContext';
 import { supabase } from '../../utils/supabase';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -206,6 +206,11 @@ export default function AccountScreen() {
     }
     if (newPassword.length < 8) {
       Alert.alert('Error', 'New password must be at least 8 characters.');
+      return;
+    }
+    const passwordError = validatePassword(newPassword);
+    if (passwordError) {
+      Alert.alert('Error', passwordError);
       return;
     }
 
