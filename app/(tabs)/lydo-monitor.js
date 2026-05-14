@@ -30,7 +30,7 @@ const COLORS = {
   comment:   '#E0E0E0',
 };
 
-const NAV_TABS     = ['Dashboard', 'Documents', 'Monitor'];
+const NAV_TABS     = ['Dashboard', 'Documents', 'Monitor', 'Barangay'];
 const MONITOR_TABS = ['Consultation', 'Budget', 'Report', 'Accounts'];
 
 // ─── CBYDP DOCUMENT SECTIONS (tappable for highlight) ────────────────────────

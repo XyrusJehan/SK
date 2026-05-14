@@ -155,7 +155,7 @@ const CATEGORIES = ['All', 'Planning', 'Financial', 'Governance', 'Performance']
 const SORT_OPTIONS = ['Newest', 'Oldest', 'A–Z'];
 const DOCUMENT_TABS = ['Barangay Document', 'Reports', 'Templates'];
 
-const NAV_TABS = ['Dashboard', 'Documents', 'Monitor'];
+const NAV_TABS = ['Dashboard', 'Documents', 'Monitor','Barangay'];
 
 // ─── ICONS ────────────────────────────────────────────────────────────────────
 const BellIcon = ({ hasNotif }) => (

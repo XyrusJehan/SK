@@ -116,7 +116,7 @@ const DOCUMENT_GROUPS = [
 ];
 
 // ─── NAV TABS ─────────────────────────────────────────────────────────────────
-const NAV_TABS = ['Dashboard', 'Documents', 'Monitor'];
+const NAV_TABS = ['Dashboard', 'Documents', 'Monitor', 'Barangay'];
 const DOCUMENT_TABS = ['Barangay Document', 'Reports', 'Templates'];
 
 // ─── ICON COMPONENTS ──────────────────────────────────────────────────────────

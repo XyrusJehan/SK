@@ -31,7 +31,7 @@ const COLORS = {
   noPubBg:   '#FFEBEE',
 };
 
-const NAV_TABS     = ['Dashboard', 'Documents', 'Monitor'];
+const NAV_TABS     = ['Dashboard', 'Documents', 'Monitor', 'Barangay'];
 const MONITOR_TABS = ['Consultation', 'Budget', 'Report', 'Accounts'];
 
 // ─── DROPDOWN OPTIONS ─────────────────────────────────────────────────────────

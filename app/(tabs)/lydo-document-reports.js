@@ -35,7 +35,7 @@ const COLORS = {
 };
 
 // ─── NAV / TAB CONSTANTS ──────────────────────────────────────────────────────
-const NAV_TABS       = ['Dashboard', 'Documents', 'Monitor'];
+const NAV_TABS       = ['Dashboard', 'Documents', 'Monitor','Barangay'];
 const DOCUMENT_TABS  = ['Barangay Folders', 'Reports', 'Templates'];
 
 // ─── SAMPLE REPORT DATA ───────────────────────────────────────────────────────

@@ -26,7 +26,7 @@ const COLORS = {
   maroon:    '#8B0000',
 };
 
-const NAV_TABS     = ['Dashboard', 'Documents', 'Monitor'];
+const NAV_TABS     = ['Dashboard', 'Documents', 'Monitor', 'Barangay'];
 const MONITOR_TABS = ['Consultation', 'Budget', 'Report', 'Accounts'];
 
 // ─── FLOW STEPS ───────────────────────────────────────────────────────────────
