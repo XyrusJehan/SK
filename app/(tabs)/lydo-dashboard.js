@@ -193,6 +193,7 @@ export default function LYDOHomeScreen() {
     if (tab === 'Dashboard') router.push('/(tabs)/lydo-dashboard');
     else if (tab === 'Documents') router.push('/(tabs)/lydo-document');
     else if (tab === 'Monitor') router.push('/(tabs)/lydo-monitor');
+        if (tab === 'Barangay') router.push('/(tabs)/lydo-accounts');
   };
 
   const handleLogout = () => { logout(); router.replace('/'); };

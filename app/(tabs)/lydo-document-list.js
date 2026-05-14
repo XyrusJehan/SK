@@ -369,6 +369,7 @@ export default function LYDODocumentListScreen({ navigation }) {
     if (tab === 'Dashboard')      router.push('/(tabs)/lydo-dashboard');
     if (tab === 'Documents') router.push('/(tabs)/lydo-document');
     if (tab === 'Monitor')   router.push('/(tabs)/lydo-monitor');
+        if (tab === 'Barangay') router.push('/(tabs)/lydo-accounts');
   };
 
   const goBackToFolders = () => {

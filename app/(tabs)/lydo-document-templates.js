@@ -214,6 +214,7 @@ export default function LYDODocumentTemplatesScreen() {
     if (tab === 'Dashboard') router.push('/(tabs)/lydo-dashboard');
     else if (tab === 'Documents') router.push('/(tabs)/lydo-document');
     else if (tab === 'Monitor') router.push('/(tabs)/lydo-monitor');
+        if (tab === 'Barangay') router.push('/(tabs)/lydo-accounts');
   };
 
   const handleLogout = () => {
@@ -225,6 +226,7 @@ export default function LYDODocumentTemplatesScreen() {
     if (tab === 'Barangay Folders') { router.push('/(tabs)/lydo-document'); return; }
     if (tab === 'Reports') { router.push('/(tabs)/lydo-document-reports'); return; }
     if (tab === 'Templates') { setActiveDocumentTab('Templates'); return; }
+
   };
 
   // ── Sidebar ──
