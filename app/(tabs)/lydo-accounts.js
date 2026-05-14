@@ -683,7 +683,7 @@ const AccountListRow = ({ account, isEven, isPasswordVisible, onTogglePassword }
       activeOpacity={0.7}
     >
       <Text style={styles.cellText} numberOfLines={1}>
-        {isPasswordVisible ? (account.password || '—') : '••••••••'}
+        {isPasswordVisible ? (decryptPassword(account.password) || '—') : '••••••••'}
       </Text>
     </TouchableOpacity>
   </View>
@@ -769,7 +769,7 @@ export default function LYDOMonitorAccountScreen() {
             middleInitial: user.middle_initial || '',
             name: `${user.first_name || ''} ${user.last_name || ''}`.trim(),
             email: user.email || '',
-            password: decryptPassword(user.password), // Decrypt for display
+            password: user.password || '', // Store raw; decrypt on reveal
             barangay: user.barangays?.barangay_name || '—',
             barangayId: user.barangay_id,
             roleName,
