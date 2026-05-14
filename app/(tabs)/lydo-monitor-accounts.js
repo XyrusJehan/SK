@@ -445,14 +445,16 @@ const CreateAccountModal = ({ visible, onClose, onSave, barangays }) => {
     <View style={M.overlay}>
       <View style={M.modal}>
 
-        {/* ── Header ── */}
-        <TouchableOpacity style={M.closeBtn} onPress={handleClose} activeOpacity={0.8}>
-          <Text style={M.closeX}>✕</Text>
-        </TouchableOpacity>
-        <Text style={M.title}>CREATE ACCOUNT FOR SANGGUNIANG KABATAAN OFFICIALS</Text>
-        <View style={M.titleDivider} />
+        {/* ── Header band ── */}
+        <View style={M.modalHeader}>
+          <TouchableOpacity style={M.closeBtn} onPress={handleClose} activeOpacity={0.8}>
+            <Text style={M.closeX}>✕</Text>
+          </TouchableOpacity>
+          <Text style={M.title}>CREATE ACCOUNT FOR SANGGUNIANG KABATAAN OFFICIALS</Text>
+        </View>
 
-        <ScrollView showsVerticalScrollIndicator={false} style={{ flex: 1 }}>
+        <ScrollView showsVerticalScrollIndicator={false} style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 4 }}>
+          <View style={M.modalBody}>
 
           {/* ── Two-column form ── */}
           <View style={M.formCols}>
@@ -545,6 +547,7 @@ const CreateAccountModal = ({ visible, onClose, onSave, barangays }) => {
             </View>
           </View>
 
+          </View>{/* end modalBody */}
         </ScrollView>
 
         {/* ── Footer buttons ── */}
@@ -568,79 +571,86 @@ const CreateAccountModal = ({ visible, onClose, onSave, barangays }) => {
 
 const M = StyleSheet.create({
   // Overlay & modal shell
-  overlay:        { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'center', alignItems: 'center', zIndex: 99999 },
-  modal:          { backgroundColor: COLORS.navy, borderRadius: 14, padding: 20, width: isMobile ? '96%' : 580, maxHeight: '92%', shadowColor: '#000', shadowOffset: {width:0,height:10}, shadowOpacity: 0.35, shadowRadius: 24, elevation: 24 },
+  overlay:        { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center', zIndex: 99999 },
+  modal:          { backgroundColor: COLORS.offWhite, borderRadius: 16, width: isMobile ? '96%' : 660, maxHeight: '88%', flexShrink: 1, shadowColor: '#000', shadowOffset: {width:0,height:12}, shadowOpacity: 0.4, shadowRadius: 28, elevation: 28, overflow: 'hidden' },
+
+  // Modal header band
+  modalHeader:    { backgroundColor: COLORS.navy, paddingHorizontal: 20, paddingTop: 18, paddingBottom: 16 },
 
   // Header
-  closeBtn:       { position: 'absolute', top: 14, right: 16, zIndex: 10, padding: 4 },
-  closeX:         { fontSize: 18, color: COLORS.white, fontWeight: '300' },
-  title:          { fontSize: isMobile ? 12 : 13, fontWeight: '800', color: COLORS.white, letterSpacing: 0.5, marginBottom: 10, paddingRight: 30 },
-  titleDivider:   { height: 1, backgroundColor: 'rgba(255,255,255,0.25)', marginBottom: 14 },
+  closeBtn:       { position: 'absolute', top: 12, right: 14, zIndex: 10, width: 28, height: 28, borderRadius: 14, backgroundColor: 'rgba(255,255,255,0.18)', alignItems: 'center', justifyContent: 'center' },
+  closeX:         { fontSize: 14, color: COLORS.white, fontWeight: '700', lineHeight: 16 },
+  title:          { fontSize: isMobile ? 11 : 13, fontWeight: '800', color: COLORS.white, letterSpacing: 0.5, marginBottom: 0, paddingRight: 36, lineHeight: 18 },
+  titleDivider:   { height: 0, marginBottom: 0 },
+
+  // Modal body
+  modalBody:      { padding: 18, paddingBottom: 0 },
 
   // Two-column form
-  formCols:       { flexDirection: 'row', gap: 16, marginBottom: 14 },
-  col:            { flex: 1 },
-  colHeading:     { fontSize: 13, fontWeight: '700', color: COLORS.white, marginBottom: 6 },
-  colDivider:     { height: 1, backgroundColor: 'rgba(255,255,255,0.25)', marginBottom: 10 },
+  formCols:       { flexDirection: isMobile ? 'column' : 'row', gap: 14, marginBottom: 14 },
+  col:            { flex: 1, backgroundColor: COLORS.white, borderRadius: 10, padding: 14, borderWidth: 1, borderColor: COLORS.lightGray },
+  colHeading:     { fontSize: 12, fontWeight: '800', color: COLORS.navy, marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 },
+  colDivider:     { height: 1, backgroundColor: COLORS.lightGray, marginBottom: 12 },
 
   // Fields
   fieldWrap:      { marginBottom: 10, position: 'relative' },
-  fieldLabel:     { fontSize: 11, color: 'rgba(255,255,255,0.75)', marginBottom: 4 },
-  inputContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.white, borderRadius: 6, borderWidth: 1, borderColor: '#C8C8C8' },
-  input:          { flex: 1, borderRadius: 6, paddingHorizontal: 10, paddingVertical: 7, fontSize: 12, color: COLORS.darkText, height: 34 },
+  fieldLabel:     { fontSize: 11, color: COLORS.subText, fontWeight: '600', marginBottom: 4 },
+  inputContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.white, borderRadius: 7, borderWidth: 1, borderColor: '#D0D0D0' },
+  input:          { flex: 1, borderRadius: 7, paddingHorizontal: 10, paddingVertical: 7, fontSize: 12, color: COLORS.darkText, height: 36 },
   inputWithToggle: { borderWidth: 0, borderRadius: 0 },
-  toggleBtn:      { width: 34, height: 34, alignItems: 'center', justifyContent: 'center', borderLeftWidth: 1, borderLeftColor: '#C8C8C8' },
+  toggleBtn:      { width: 36, height: 36, alignItems: 'center', justifyContent: 'center', borderLeftWidth: 1, borderLeftColor: '#D0D0D0' },
   toggleText:     { fontSize: 14 },
 
   // Disabled state
-  inputDisabled:  { backgroundColor: '#E8E8E8' },
-  inputNoEdit:    { backgroundColor: '#E8E8E8', color: COLORS.subText },
+  inputDisabled:  { backgroundColor: '#F0F0F0' },
+  inputNoEdit:    { backgroundColor: '#F0F0F0', color: COLORS.subText },
   inputError:     { borderColor: '#C62828', borderWidth: 1.5 },
 
   // Error text
-  errorText:      { fontSize: 10, color: '#C62828', marginTop: 2 },
+  errorText:      { fontSize: 10, color: '#C62828', marginTop: 3 },
 
   // Dropdown error state
   ddBtnError:     { borderColor: '#C62828', borderWidth: 1.5 },
 
   // Dropdown
-  ddBtn:          { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: COLORS.white, borderRadius: 6, paddingHorizontal: 10, paddingVertical: 7, height: 34 },
+  ddBtn:          { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: COLORS.white, borderRadius: 7, borderWidth: 1, borderColor: '#D0D0D0', paddingHorizontal: 10, paddingVertical: 7, height: 36 },
   ddVal:          { fontSize: 12, color: COLORS.darkText, flex: 1 },
   ddPlaceholder:  { color: 'rgba(0,0,0,0.3)' },
-  ddArrow:        { fontSize: 9, color: COLORS.darkText },
-  ddMenu:         { position: 'absolute', top: 56, left: 0, right: 0, backgroundColor: COLORS.white, borderRadius: 8, borderWidth: 1, borderColor: COLORS.lightGray, zIndex: 9999, elevation: 40, shadowColor: '#000', shadowOffset: {width:0,height:4}, shadowOpacity: 0.2, shadowRadius: 8 },
-  ddMenuScrollable: { position: 'absolute', top: 56, left: 0, right: 0, backgroundColor: COLORS.white, borderRadius: 8, borderWidth: 1, borderColor: COLORS.lightGray, zIndex: 9999, elevation: 40, shadowColor: '#000', shadowOffset: {width:0,height:4}, shadowOpacity: 0.2, shadowRadius: 8, overflow: 'hidden' },
-  ddItem:         { paddingHorizontal: 12, paddingVertical: 9, borderBottomWidth: 1, borderBottomColor: COLORS.lightGray },
+  ddArrow:        { fontSize: 9, color: COLORS.subText },
+  ddMenu:         { position: 'absolute', top: 60, left: 0, right: 0, backgroundColor: COLORS.white, borderRadius: 8, borderWidth: 1, borderColor: COLORS.lightGray, zIndex: 9999, elevation: 40, shadowColor: '#000', shadowOffset: {width:0,height:4}, shadowOpacity: 0.18, shadowRadius: 10 },
+  ddMenuScrollable: { position: 'absolute', top: 60, left: 0, right: 0, backgroundColor: COLORS.white, borderRadius: 8, borderWidth: 1, borderColor: COLORS.lightGray, zIndex: 9999, elevation: 40, shadowColor: '#000', shadowOffset: {width:0,height:4}, shadowOpacity: 0.18, shadowRadius: 10, overflow: 'hidden' },
+  ddItem:         { paddingHorizontal: 12, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: COLORS.lightGray },
   ddItemText:     { fontSize: 12, color: COLORS.darkText },
 
   // Role static pill
-  rolePill:       { backgroundColor: COLORS.lightGray, borderRadius: 6, height: 34, alignItems: 'center', justifyContent: 'center' },
-  rolePillText:   { fontSize: 13, fontWeight: '600', color: COLORS.darkText },
+  rolePill:       { backgroundColor: '#EEF3FB', borderRadius: 7, borderWidth: 1, borderColor: '#C8D8EE', height: 36, alignItems: 'flex-start', justifyContent: 'center', paddingHorizontal: 10 },
+  rolePillText:   { fontSize: 12, fontWeight: '700', color: COLORS.navy },
 
   // Preview card
-  previewCard:    { backgroundColor: COLORS.white, borderRadius: 10, padding: 14, marginBottom: 14 },
+  previewCard:    { backgroundColor: COLORS.white, borderRadius: 10, padding: 14, marginBottom: 14, borderWidth: 1, borderColor: COLORS.lightGray },
+  previewTitle:   { fontSize: 11, fontWeight: '800', color: COLORS.navy, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 10 },
   previewCols:    { flexDirection: 'row', gap: 0 },
   previewCol:     { flex: 1, paddingRight: 10 },
-  previewHeading: { fontSize: 12, fontWeight: '700', color: COLORS.navy, marginBottom: 8, textAlign: 'center' },
-  previewDivider: { width: 1, backgroundColor: COLORS.lightGray, marginHorizontal: 8 },
-  previewRow:     { flexDirection: 'row', flexWrap: 'wrap', marginBottom: 5 },
-  previewLabel:   { fontSize: 11, color: COLORS.subText },
-  previewVal:     { fontSize: 11, color: COLORS.darkText, marginLeft: 4 },
+  previewHeading: { fontSize: 11, fontWeight: '700', color: COLORS.navy, marginBottom: 8, textAlign: 'center', backgroundColor: '#EEF3FB', paddingVertical: 4, borderRadius: 5 },
+  previewDivider: { width: 1, backgroundColor: COLORS.lightGray, marginHorizontal: 10 },
+  previewRow:     { flexDirection: 'row', flexWrap: 'wrap', marginBottom: 6, alignItems: 'flex-start' },
+  previewLabel:   { fontSize: 10, color: COLORS.subText, fontWeight: '600', minWidth: 70 },
+  previewVal:     { fontSize: 10, color: COLORS.darkText, flex: 1, marginLeft: 4 },
 
   // Confirm Details
-  confirmRow:     { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', marginTop: 10, gap: 8 },
-  confirmLabel:   { fontSize: 12, color: COLORS.subText },
-  confirmBox:     { width: 20, height: 20, borderRadius: 4, borderWidth: 1.5, borderColor: COLORS.midGray, backgroundColor: COLORS.white, alignItems: 'center', justifyContent: 'center' },
+  confirmRow:     { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', marginTop: 12, paddingTop: 10, borderTopWidth: 1, borderTopColor: COLORS.lightGray, gap: 8 },
+  confirmLabel:   { fontSize: 12, fontWeight: '600', color: COLORS.subText },
+  confirmBox:     { width: 22, height: 22, borderRadius: 5, borderWidth: 1.5, borderColor: COLORS.midGray, backgroundColor: COLORS.white, alignItems: 'center', justifyContent: 'center' },
   confirmBoxChecked: { backgroundColor: COLORS.navy, borderColor: COLORS.navy },
-  confirmCheck:   { fontSize: 12, color: COLORS.white, fontWeight: '800' },
+  confirmCheck:   { fontSize: 13, color: COLORS.white, fontWeight: '900' },
 
   // Footer
-  actions:        { flexDirection: 'row', gap: 10, marginTop: 4 },
-  cancelBtn:      { flex: 1, backgroundColor: COLORS.midGray, borderRadius: 8, paddingVertical: 12, alignItems: 'center' },
-  cancelText:     { fontSize: 13, fontWeight: '600', color: COLORS.white },
-  saveBtn:        { flex: 1, backgroundColor: COLORS.white, borderRadius: 8, paddingVertical: 12, alignItems: 'center' },
-  saveBtnDisabled:{ opacity: 0.45 },
-  saveText:       { fontSize: 13, fontWeight: '700', color: COLORS.navy },
+  actions:        { flexDirection: 'row', gap: 10, paddingHorizontal: 18, paddingVertical: 14, backgroundColor: COLORS.white, borderTopWidth: 1, borderTopColor: COLORS.lightGray },
+  cancelBtn:      { flex: 1, backgroundColor: COLORS.offWhite, borderRadius: 8, paddingVertical: 12, alignItems: 'center', borderWidth: 1, borderColor: COLORS.lightGray },
+  cancelText:     { fontSize: 13, fontWeight: '600', color: COLORS.subText },
+  saveBtn:        { flex: 2, backgroundColor: COLORS.navy, borderRadius: 8, paddingVertical: 12, alignItems: 'center' },
+  saveBtnDisabled:{ opacity: 0.4 },
+  saveText:       { fontSize: 13, fontWeight: '700', color: COLORS.white },
 });
 
 // ─── ACCOUNT LIST ROW ─────────────────────────────────────────────────────────
@@ -1016,15 +1026,6 @@ export default function LYDOMonitorAccountScreen() {
         )}
       </View>
 
-      {/* Create Account Modal */}
-      {showCreate && (
-        <CreateAccountModal
-          visible={showCreate}
-          onClose={() => setShowCreate(false)}
-          onSave={handleCreateAccount}
-          barangays={barangays}
-        />
-      )}
     </ScrollView>
   );
 
@@ -1043,6 +1044,16 @@ export default function LYDOMonitorAccountScreen() {
           {isMobile ? (sidebarVisible && renderSidebar()) : renderSidebar()}
           {renderContent()}
         </View>
+
+        {/* Create Account Modal — rendered at SafeAreaView level so it's independent of scroll content */}
+        {showCreate && (
+          <CreateAccountModal
+            visible={showCreate}
+            onClose={() => setShowCreate(false)}
+            onSave={handleCreateAccount}
+            barangays={barangays}
+          />
+        )}
       </SafeAreaView>
     </GlobalDropdownProvider>
   );
