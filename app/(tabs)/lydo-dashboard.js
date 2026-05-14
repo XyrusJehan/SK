@@ -19,6 +19,9 @@ import { supabase } from '../../utils/supabase';
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const isMobile = SCREEN_WIDTH < 768;
 
+// ─── NAV TABS ─────────────────────────────────────────────────────────────────
+const NAV_TABS = ['Dashboard', 'Documents', 'Monitor', 'Barangay'];
+
 // ─── COLORS ───────────────────────────────────────────────────────────────────
 const COLORS = {
   navy:       '#133E75',
@@ -187,7 +190,8 @@ export default function LYDOHomeScreen() {
   const handleNav = (tab) => {
     setActiveTab(tab);
     setSidebarVisible(false);
-    if (tab === 'Documents') router.push('/(tabs)/lydo-document');
+    if (tab === 'Dashboard') router.push('/(tabs)/lydo-dashboard');
+    else if (tab === 'Documents') router.push('/(tabs)/lydo-document');
     else if (tab === 'Monitor') router.push('/(tabs)/lydo-monitor');
   };
 
@@ -206,7 +210,7 @@ export default function LYDOHomeScreen() {
         />
       </View>
       <View style={styles.sidebarSpacer} />
-      {['Dashboard', 'Documents', 'Monitor', 'Barangay'].map((tab) => {
+      {NAV_TABS.map((tab) => {
         const active = activeTab === tab;
         return (
           <TouchableOpacity
