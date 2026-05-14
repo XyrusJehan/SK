@@ -6,7 +6,7 @@ import {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
 import { useNav } from './navContext';
-import { useAuth, hashPassword, encryptPassword, decryptPassword } from './authContext';
+import { useAuth, encryptPassword, decryptPassword } from './authContext';
 import { supabase } from '../../utils/supabase';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -215,8 +215,7 @@ export default function AccountScreen() {
 
     setSavingPassword(true);
     try {
-      // First, verify the current password
-      const currentEncryptedPassword = encryptPassword(currentPassword);
+      // Get current stored password
       const { data: userData, error: fetchError } = await supabase
         .from('users')
         .select('password')
@@ -229,17 +228,17 @@ export default function AccountScreen() {
         return;
       }
 
-      // Check if current password matches (accept hashed, encrypted, and plain text for backward compatibility)
-      const currentHashedPassword = hashPassword(currentPassword);
-      const decryptedStored = decryptPassword(userData.password);
-      if (userData.password !== currentHashedPassword && userData.password !== currentEncryptedPassword && userData.password !== currentPassword && decryptedStored !== currentPassword) {
+      // Verify current password (encrypted format like lydo-monitor-accounts)
+      const currentEncryptedPassword = await encryptPassword(currentPassword);
+      const decryptedStoredPassword = await decryptPassword(userData.password);
+      if (userData.password !== currentEncryptedPassword && userData.password !== currentPassword && decryptedStoredPassword !== currentPassword) {
         Alert.alert('Error', 'Current password is incorrect.');
         setSavingPassword(false);
         return;
       }
 
-      // Encrypt new password and update
-      const newEncryptedPassword = encryptPassword(newPassword);
+      // Encrypt new password and update (same as lydo-monitor-accounts)
+      const newEncryptedPassword = await encryptPassword(newPassword);
       const { error: updateError } = await supabase
         .from('users')
         .update({ password: newEncryptedPassword })

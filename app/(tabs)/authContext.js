@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import AES from 'react-native-aes-crypto';
 
 import { supabase } from '../../utils/supabase';
 
@@ -12,86 +13,38 @@ const ROLE_MAP = {
   'resident': 'public',
 };
 
-// Simple hash function for password hashing (for backward compatibility)
-export function hashPassword(password) {
-  let hash = 0;
-  for (let i = 0; i < password.length; i++) {
-    const char = password.charCodeAt(i);
-    hash = ((hash << 5) - hash) + char;
-    hash = hash & hash;
-  }
-  return 'hash_' + Math.abs(hash).toString(16) + '_' + password.length.toString();
-}
+// AES-128 encryption key (16 bytes = 128 bits)
+const ENCRYPTION_KEY = 'SKApp2024Key16'; // Must be 16 characters for AES-128
+const IV_LENGTH = 16; // AES block size
 
-// Encryption key (should be stored securely in production)
-const ENCRYPTION_KEY = 'SKApp2024SecretKey';
-
-// Simple base64 encode/decode helpers (works in React Native)
-function base64Encode(str) {
-  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
-  let result = '';
-  let i = 0;
-  while (i < str.length) {
-    const a = str.charCodeAt(i++);
-    const b = i < str.length ? str.charCodeAt(i++) : 0;
-    const c = i < str.length ? str.charCodeAt(i++) : 0;
-    const triplet = (a << 16) | (b << 8) | c;
-    result += chars[(triplet >> 18) & 0x3F];
-    result += chars[(triplet >> 12) & 0x3F];
-    result += i > str.length + 1 ? '=' : chars[(triplet >> 6) & 0x3F];
-    result += i > str.length ? '=' : chars[triplet & 0x3F];
-  }
-  return result;
-}
-
-function base64Decode(str) {
-  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
-  let result = '';
-  const cleanStr = str.replace(/=/g, '');
-  let i = 0;
-  while (i < cleanStr.length) {
-    const a = chars.indexOf(cleanStr[i++]);
-    const b = chars.indexOf(cleanStr[i++]);
-    const c = chars.indexOf(cleanStr[i++]);
-    const d = chars.indexOf(cleanStr[i++]);
-    const triplet = (a << 18) | (b << 12) | (c << 6) | d;
-    result += String.fromCharCode((triplet >> 16) & 0xFF);
-    if (c !== -1) result += String.fromCharCode((triplet >> 8) & 0xFF);
-    if (d !== -1) result += String.fromCharCode(triplet & 0xFF);
-  }
-  return result;
-}
-
-// Simple XOR-based encryption
-function xorEncrypt(text, key) {
-  let result = '';
-  for (let i = 0; i < text.length; i++) {
-    result += String.fromCharCode(text.charCodeAt(i) ^ key.charCodeAt(i % key.length));
-  }
-  return base64Encode(result);
-}
-
-// Simple XOR-based decryption
-function xorDecrypt(encoded, key) {
-  const decoded = base64Decode(encoded);
-  let result = '';
-  for (let i = 0; i < decoded.length; i++) {
-    result += String.fromCharCode(decoded.charCodeAt(i) ^ key.charCodeAt(i % key.length));
-  }
-  return result;
-}
-
-// Encrypt password for storage
-export function encryptPassword(password) {
-  return xorEncrypt(password, ENCRYPTION_KEY);
-}
-
-// Decrypt password for display/verification
-export function decryptPassword(encryptedPassword) {
+// Encrypt password using AES-128-CBC
+export async function encryptPassword(password) {
   try {
-    return xorDecrypt(encryptedPassword, ENCRYPTION_KEY);
+    const iv = await AES.randomIV(IV_LENGTH);
+    const encrypted = await AES.encrypt(password, ENCRYPTION_KEY, iv, 'aes-128-cbc');
+    // Return IV + encrypted data (IV is prepended for decryption)
+    return iv + ':' + encrypted;
   } catch (e) {
-    return encryptedPassword; // Return as-is if decryption fails (plain text or old hash)
+    console.error('Encryption error:', e);
+    return password;
+  }
+}
+
+// Decrypt password using AES-128-CBC
+export async function decryptPassword(encryptedPassword) {
+  try {
+    // Split IV and encrypted data
+    const parts = encryptedPassword.split(':');
+    if (parts.length !== 2) {
+      return encryptedPassword; // Not in expected format, return as-is
+    }
+    const iv = parts[0];
+    const encrypted = parts[1];
+    const decrypted = await AES.decrypt(encrypted, ENCRYPTION_KEY, iv, 'aes-128-cbc');
+    return decrypted;
+  } catch (e) {
+    console.error('Decryption error:', e);
+    return encryptedPassword; // Return as-is if decryption fails
   }
 }
 
@@ -166,11 +119,10 @@ export function AuthProvider({ children }) {
         return { success: false, error: 'Invalid account status' };
       }
 
-      // Verify password (accept plain text, hashed, and encrypted for backward compatibility)
-      const hashedInput = hashPassword(password);
-      const encryptedInput = encryptPassword(password);
-      const decryptedStored = decryptPassword(userData.password);
-      if (userData.password !== hashedInput && userData.password !== password && userData.password !== encryptedInput && decryptedStored !== password) {
+      // Verify password (accept plain text and encrypted)
+      const encryptedInput = await encryptPassword(password);
+      const decryptedStored = await decryptPassword(userData.password);
+      if (userData.password !== encryptedInput && userData.password !== password && decryptedStored !== password) {
         return { success: false, error: 'Invalid email or password' };
       }
 
@@ -258,7 +210,7 @@ export function AuthProvider({ children }) {
         .maybeSingle();
 
       // Encrypt password before storing
-      const encryptedPassword = encryptPassword(password);
+      const encryptedPassword = await encryptPassword(password);
 
       // Insert user with 'pending' status — requires admin approval before login
       const { error: insertError } = await supabase

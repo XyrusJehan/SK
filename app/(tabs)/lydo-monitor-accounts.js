@@ -34,6 +34,33 @@ const COLORS = {
   checkBlue:  '#1565C0',
 };
 
+// Display password - returns as-is (decryption happens during fetch)
+function displayPassword(password) {
+  if (!password) return '—';
+  return password;
+}
+
+// Decrypt password for display
+async function decryptStoredPassword(password) {
+  if (!password) return '—';
+
+  // If it contains ':' (new AES format), try to decrypt
+  if (password.includes(':')) {
+    try {
+      const decrypted = await decryptPassword(password);
+      // If decryption produces valid-looking result, use it
+      if (decrypted && decrypted.length >= 6 && decrypted.length <= 50) {
+        return decrypted;
+      }
+    } catch (e) {
+      // Decryption failed, show as-is
+    }
+  }
+
+  // Otherwise treat as plain text
+  return password;
+}
+
 const NAV_TABS     = ['Dashboard', 'Documents', 'Monitor'];
 const MONITOR_TABS = ['Consultation', 'Budget', 'Report', 'Account'];
 // Tabs that show a red notification badge
@@ -748,7 +775,13 @@ export default function LYDOMonitorAccountScreen() {
 
       if (!userError) {
         const validPositions = ['chairman', 'secretary', 'treasurer', 'sk_federation'];
-        const transformedAccounts = (userData || []).map(user => {
+
+        // Decrypt passwords for all users
+        const decryptedPasswords = await Promise.all(
+          (userData || []).map(user => decryptStoredPassword(user.password))
+        );
+
+        const transformedAccounts = (userData || []).map((user, index) => {
           const roleName = user.roles?.role_name || 'resident';
           const cleanPosition = validPositions.includes(user.position) ? user.position : null;
           return {
@@ -759,7 +792,7 @@ export default function LYDOMonitorAccountScreen() {
             middleInitial: user.middle_initial || '',
             name: `${user.first_name || ''} ${user.last_name || ''}`.trim(),
             email: user.email || '',
-            password: decryptPassword(user.password), // Decrypt for display
+            password: decryptedPasswords[index], // Decrypted password
             barangay: user.barangays?.barangay_name || '—',
             barangayId: user.barangay_id,
             roleName,
@@ -794,12 +827,15 @@ export default function LYDOMonitorAccountScreen() {
       const { data: roleData } = await supabase
         .from('roles').select('role_id').eq('role_name', dbRole).single();
 
+      // Encrypt password before storing
+      const encryptedPassword = await encryptPassword(form.password);
+
       const { error } = await supabase.from('users').insert({
         first_name:     form.firstName,
         last_name:      form.lastName,
         middle_initial: form.middleInitial,
         email:          form.email,
-        password:       encryptPassword(form.password), // Encrypted for login
+        password:       encryptedPassword, // Encrypted for login
         position:       dbPos,
         barangay_id:    barangay?.barangay_id || null,
         role_id:        roleData?.role_id || null,
