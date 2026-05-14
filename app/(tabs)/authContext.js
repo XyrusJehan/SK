@@ -168,8 +168,9 @@ export function AuthProvider({ children }) {
 
       // Verify password (accept plain text, hashed, and encrypted for backward compatibility)
       const hashedInput = hashPassword(password);
+      const encryptedInput = encryptPassword(password);
       const decryptedStored = decryptPassword(userData.password);
-      if (userData.password !== hashedInput && userData.password !== password && decryptedStored !== password) {
+      if (userData.password !== hashedInput && userData.password !== password && userData.password !== encryptedInput && decryptedStored !== password) {
         return { success: false, error: 'Invalid email or password' };
       }
 
