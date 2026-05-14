@@ -390,6 +390,7 @@ export default function HomeScreen({ navigation }) {
     else if (tab === 'Documents') router.push('/(tabs)/sk-document');
     else if (tab === 'Planning') router.push('/(tabs)/sk-planning');
     else if (tab === 'Portal') router.push('/(tabs)/sk-portal');
+    else if (tab === 'Account') router.push('/(tabs)/sk-account');
     setActiveTab(tab);
     setSidebarVisible(false);
   };
@@ -406,7 +407,7 @@ export default function HomeScreen({ navigation }) {
         <Image source={require('./../../assets/images/sk-logo.png')} style={styles.logoImage} resizeMode="contain" />
       </View>
       <View style={styles.sidebarSpacer} />
-      {['Dashboard', 'Documents', 'Planning', 'Portal'].map((tab) => {
+      {['Dashboard', 'Documents', 'Planning', 'Portal', 'Account'].map((tab) => {
         const active = activeTab === tab;
         return (
           <TouchableOpacity key={tab} style={[styles.navItem, active && styles.navItemActive]} onPress={() => handleNavPress(tab)} activeOpacity={0.8}>

@@ -12,15 +12,39 @@ const ROLE_MAP = {
   'resident': 'public',
 };
 
-// Simple hash function for password hashing
-function hashPassword(password) {
-  let hash = 0;
-  for (let i = 0; i < password.length; i++) {
-    const char = password.charCodeAt(i);
-    hash = ((hash << 5) - hash) + char;
-    hash = hash & hash;
+// Encryption key (should be stored securely in production)
+const ENCRYPTION_KEY = 'SKApp2024SecretKey';
+
+// Simple XOR-based encryption (no base64 to preserve length)
+function xorEncrypt(text, key) {
+  let result = '';
+  for (let i = 0; i < text.length; i++) {
+    result += String.fromCharCode(text.charCodeAt(i) ^ key.charCodeAt(i % key.length));
   }
-  return 'hash_' + Math.abs(hash).toString(16) + '_' + password.length.toString();
+  return result;
+}
+
+// Simple XOR-based decryption
+function xorDecrypt(encoded, key) {
+  let result = '';
+  for (let i = 0; i < encoded.length; i++) {
+    result += String.fromCharCode(encoded.charCodeAt(i) ^ key.charCodeAt(i % key.length));
+  }
+  return result;
+}
+
+// Encrypt password for storage
+export function encryptPassword(password) {
+  return xorEncrypt(password, ENCRYPTION_KEY);
+}
+
+// Decrypt password for display/verification
+export function decryptPassword(encryptedPassword) {
+  try {
+    return xorDecrypt(encryptedPassword, ENCRYPTION_KEY);
+  } catch (e) {
+    return encryptedPassword; // Return as-is if decryption fails (plain text or old hash)
+  }
 }
 
 // Validate password requirements
@@ -94,9 +118,9 @@ export function AuthProvider({ children }) {
         return { success: false, error: 'Invalid account status' };
       }
 
-      // Verify password (accept both hashed and plain text for backward compatibility)
-      const hashedInput = hashPassword(password);
-      if (userData.password !== hashedInput && userData.password !== password) {
+      // Verify password (accept plain text and encrypted for backward compatibility)
+      const decryptedStored = decryptPassword(userData.password);
+      if (userData.password !== password && decryptedStored !== password) {
         return { success: false, error: 'Invalid email or password' };
       }
 
@@ -183,8 +207,8 @@ export function AuthProvider({ children }) {
         .eq('role_name', 'resident')
         .maybeSingle();
 
-      // Hash password before storing
-      const hashedPassword = hashPassword(password);
+      // Encrypt password before storing
+      const encryptedPassword = encryptPassword(password);
 
       // Insert user with 'pending' status — requires admin approval before login
       const { error: insertError } = await supabase
@@ -193,7 +217,7 @@ export function AuthProvider({ children }) {
           first_name: firstName,
           last_name: lastName,
           email: email.toLowerCase(),
-          password: hashedPassword,
+          password: encryptedPassword,
           role_id: roleData?.role_id || 1,
           position: null,
           barangay_id: null,

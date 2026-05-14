@@ -40,6 +40,7 @@ export default function TabLayout() {
         <Tabs.Screen name="lydo-monitor" />
         <Tabs.Screen name="lydo-monitor-budget" />
         <Tabs.Screen name="lydo-monitor-report" />
+        <Tabs.Screen name="sk-account" />
       </Tabs>
     </NavProvider>
   );
