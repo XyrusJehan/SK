@@ -204,8 +204,8 @@ export default function AccountScreen() {
       Alert.alert('Error', 'New password and confirmation do not match.');
       return;
     }
-    if (newPassword.length < 6) {
-      Alert.alert('Error', 'New password must be at least 6 characters.');
+    if (newPassword.length < 8) {
+      Alert.alert('Error', 'New password must be at least 8 characters.');
       return;
     }
 

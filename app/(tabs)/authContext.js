@@ -15,57 +15,20 @@ const ROLE_MAP = {
 // Encryption key (should be stored securely in production)
 const ENCRYPTION_KEY = 'SKApp2024SecretKey';
 
-// Simple base64 encode/decode helpers (works in React Native)
-function base64Encode(str) {
-  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
-  let result = '';
-  let i = 0;
-  while (i < str.length) {
-    const a = str.charCodeAt(i++);
-    const b = i < str.length ? str.charCodeAt(i++) : 0;
-    const c = i < str.length ? str.charCodeAt(i++) : 0;
-    const triplet = (a << 16) | (b << 8) | c;
-    result += chars[(triplet >> 18) & 0x3F];
-    result += chars[(triplet >> 12) & 0x3F];
-    result += i > str.length + 1 ? '=' : chars[(triplet >> 6) & 0x3F];
-    result += i > str.length ? '=' : chars[triplet & 0x3F];
-  }
-  return result;
-}
-
-function base64Decode(str) {
-  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
-  let result = '';
-  const cleanStr = str.replace(/=/g, '');
-  let i = 0;
-  while (i < cleanStr.length) {
-    const a = chars.indexOf(cleanStr[i++]);
-    const b = chars.indexOf(cleanStr[i++]);
-    const c = chars.indexOf(cleanStr[i++]);
-    const d = chars.indexOf(cleanStr[i++]);
-    const triplet = (a << 18) | (b << 12) | (c << 6) | d;
-    result += String.fromCharCode((triplet >> 16) & 0xFF);
-    if (c !== -1) result += String.fromCharCode((triplet >> 8) & 0xFF);
-    if (d !== -1) result += String.fromCharCode(triplet & 0xFF);
-  }
-  return result;
-}
-
-// Simple XOR-based encryption
+// Simple XOR-based encryption (no base64 to preserve length)
 function xorEncrypt(text, key) {
   let result = '';
   for (let i = 0; i < text.length; i++) {
     result += String.fromCharCode(text.charCodeAt(i) ^ key.charCodeAt(i % key.length));
   }
-  return base64Encode(result);
+  return result;
 }
 
 // Simple XOR-based decryption
 function xorDecrypt(encoded, key) {
-  const decoded = base64Decode(encoded);
   let result = '';
-  for (let i = 0; i < decoded.length; i++) {
-    result += String.fromCharCode(decoded.charCodeAt(i) ^ key.charCodeAt(i % key.length));
+  for (let i = 0; i < encoded.length; i++) {
+    result += String.fromCharCode(encoded.charCodeAt(i) ^ key.charCodeAt(i % key.length));
   }
   return result;
 }
