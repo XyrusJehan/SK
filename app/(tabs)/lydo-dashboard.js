@@ -69,13 +69,6 @@ const QUICK_ACTIONS = [
   { id: 'task', label: 'Create Task', color: COLORS.navy, icon: null, route: null, fullWidth: true },
 ];
 
-const COMPLIANCE_DATA = [
-  { label: 'Fully Compliant', count: 6, color: COLORS.green },
-  { label: 'With Missing Documents', count: 3, color: COLORS.orange },
-  { label: 'Near Deadline', count: 1, color: COLORS.yellow },
-  { label: 'Overdue', count: 1, color: COLORS.red },
-];
-
 // ─── ICON COMPONENTS ──────────────────────────────────────────────────────────
 const MenuIcon = () => (
   <View style={ic.menuIconContainer}>
@@ -122,11 +115,12 @@ export default function LYDOHomeScreen() {
 
   const [sidebarVisible, setSidebarVisible] = useState(false);
   const [activities, setActivities] = useState([]);
-  const [totalBarangays, setTotalBarangays] = useState(14);
-  const [totalDocuments, setTotalDocuments] = useState(150);
-  const [forRevision, setForRevision] = useState(7);
-  const [approved, setApproved] = useState(4);
-  const [missingDocs, setMissingDocs] = useState(3);
+  const [totalBarangays, setTotalBarangays] = useState(0);
+  const [complianceData, setComplianceData] = useState([]);
+  const [totalDocuments, setTotalDocuments] = useState(0);
+  const [forRevision, setForRevision] = useState(0);
+  const [approved, setApproved] = useState(0);
+  const [missingDocs, setMissingDocs] = useState(0);
 
   useEffect(() => {
     if (user && user.role !== 'lydo') router.replace('/');
@@ -144,7 +138,34 @@ export default function LYDOHomeScreen() {
           .select('barangay_id', { count: 'exact' });
         if (brgyData) setTotalBarangays(brgyData.length || 0);
 
+        // Fetch compliance data from documents table
         const { data: docsData } = await supabase
+          .from('documents')
+          .select('status');
+
+        if (docsData) {
+          const total = docsData.length;
+          setTotalDocuments(total);
+
+          const submitted = docsData.filter(d => d.status === 'submitted').length;
+          const approvedCount = docsData.filter(d => d.status === 'approved').length;
+          const returned = docsData.filter(d => d.status === 'returned').length;
+
+          setApproved(approvedCount);
+          setForRevision(returned);
+          setMissingDocs(total - submitted - approvedCount - returned);
+        }
+
+        // Set compliance data based on actual barangays
+        const totalBrgy = brgyData?.length || 0;
+        setComplianceData([
+          { label: 'Fully Compliant', count: 0, color: COLORS.green },
+          { label: 'With Missing Documents', count: 0, color: COLORS.orange },
+          { label: 'Near Deadline', count: 0, color: COLORS.yellow },
+          { label: 'Overdue', count: 0, color: COLORS.red },
+        ]);
+
+        const { data: docsData2 } = await supabase
           .from('documents')
           .select(`document_id, title, status, created_at, saved_at, submitted_at, barangay:barangays(barangay_name)`)
           .order('created_at', { ascending: false })
@@ -288,7 +309,7 @@ export default function LYDOHomeScreen() {
             <View style={[styles.card, styles.flex1]}>
               <Text style={styles.cardTitle}>Barangay Compliance Status</Text>
               <View style={styles.divider} />
-              {COMPLIANCE_DATA.map((item) => (
+              {complianceData.map((item) => (
                 <View key={item.label} style={styles.complianceRow}>
                   <View style={[styles.complianceDot, { backgroundColor: item.color }]} />
                   <Text style={styles.complianceLabel}>{item.label}</Text>
@@ -297,7 +318,7 @@ export default function LYDOHomeScreen() {
               ))}
               <View style={styles.divider} />
               <Text style={styles.complianceTotal}>
-                Total Barangays: {COMPLIANCE_DATA.reduce((s, i) => s + i.count, 0)}
+                Total Barangays: {totalBarangays}
               </Text>
             </View>
 

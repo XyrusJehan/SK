@@ -379,7 +379,11 @@ export default function LYDOBarangayScreen() {
     try {
       const { error } = await supabase
         .from('barangays')
-        .insert({ barangay_name: name });
+        .insert({
+          barangay_name: name,
+          municipality: 'Rizal',
+          province: 'Laguna'
+        });
 
       if (error) {
         if (error.code === '23505') {
