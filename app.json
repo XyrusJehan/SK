@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "SK",
-    "slug": "SK",
+    "slug": "sk",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
@@ -9,7 +9,11 @@
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.rizal.sk",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -19,7 +23,8 @@
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "package": "com.rizal.sk"
     },
     "web": {
       "output": "static",
@@ -38,11 +43,21 @@
             "backgroundColor": "#000000"
           }
         }
-      ]
+      ],
+      "expo-web-browser"
     ],
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
-    }
+    },
+    "extra": {
+      "supabaseUrl": "https://ttsgeniubfkcexitfqsd.supabase.co",
+      "supabaseAnonKey": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblBGnKu0",
+      "router": {},
+      "eas": {
+        "projectId": "c9b7166d-f556-4be5-9e05-193050e787e7"
+      }
+    },
+    "owner": "iamwhiskeyy"
   }
 }

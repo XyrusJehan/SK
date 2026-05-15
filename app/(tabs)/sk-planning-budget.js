@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import {
   View, Text, TextInput, ScrollView, TouchableOpacity,
   StyleSheet, SafeAreaView, StatusBar, Dimensions,
-  Image,
+  Modal, Alert, Image,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useNav } from './navContext';
@@ -15,6 +15,7 @@ const isMobile = SCREEN_WIDTH < 768;
 // ─── COLORS ───────────────────────────────────────────────────────────────────
 const COLORS = {
   navy:      '#133E75',
+  navyLight: '#1E4D8C',
   gold:      '#E8C547',
   white:     '#FFFFFF',
   offWhite:  '#F7F5F2',
@@ -23,87 +24,17 @@ const COLORS = {
   darkText:  '#1A1A1A',
   subText:   '#666666',
   cardBg:    '#FFFFFF',
-
-  planning: {
-    header:  '#7B9FD4',
-    bg:      '#C8D9F0',
-    text:    '#FFFFFF',
-    subText: '#2A4E8A',
-  },
-  financial: {
-    header:  '#4CAF50',
-    bg:      '#C8EDCA',
-    text:    '#FFFFFF',
-    subText: '#1A6B38',
-  },
-  governance: {
-    header:  '#7C5CBF',
-    bg:      '#D8CAEF',
-    text:    '#FFFFFF',
-    subText: '#5A2EA0',
-  },
-  performance: {
-    header:  '#E87A30',
-    bg:      '#F5D5B8',
-    text:    '#FFFFFF',
-    subText: '#A04010',
-  },
 };
 
 // ─── TABS ─────────────────────────────────────────────────────────────────────
 const NAV_TABS      = ['Dashboard', 'Documents', 'Planning', 'Portal', 'Account'];
-const DOCUMENT_TABS = ['Folder', 'Document Management'];
+const PLANNING_TABS = ['Templates', 'Budget'];
 
-// ─── DOCUMENT CATEGORIES ─────────────────────────────────────────────────────
-const DOC_CATEGORIES = [
-  {
-    id: 'planning',
-    title: 'PLANNING DOCUMENTS',
-    category: 'Planning',
-    icon: '📅',
-    colors: COLORS.planning,
-    tab: 'Planning',
-    items: ['ABYIP', 'CBYDP', 'Work Plans', 'Project Proposals'],
-  },
-  {
-    id: 'financial',
-    title: 'FINANCIAL DOCUMENTS',
-    category: 'Financial',
-    icon: '💲',
-    colors: COLORS.financial,
-    tab: 'Financial',
-    items: [
-      'Monthly Itemized List',
-      'Quarterly Register of Bank',
-      'Annual Budget',
-      'Disbursement Vouchers',
-      'Liquidation Reports',
-    ],
-  },
-  {
-    id: 'governance',
-    title: 'GOVERNANCE DOCUMENTS',
-    category: 'Governance',
-    icon: '⚖️',
-    colors: COLORS.governance,
-    tab: 'Governance',
-    items: ['Resolutions', 'Ordinances'],
-  },
-  {
-    id: 'performance',
-    title: 'PERFORMANCE DOCUMENTS',
-    category: 'Activities',
-    icon: '👥',
-    colors: COLORS.performance,
-    tab: 'Activities',
-    items: [
-      'Accomplishment Reports',
-      'Activity Documentation',
-      'Event Reports',
-      'Minutes of the meetings',
-    ],
-  },
-];
+// ─── BUDGET DATA ──────────────────────────────────────────────────────────────
+// (Data now fetched from Supabase based on barangay_id)
+const BUDGET_DATA = [];
+
+const EMPTY_ROWS = 4; // filler rows at bottom
 
 // ─── ICONS ────────────────────────────────────────────────────────────────────
 const BellIcon = ({ hasNotif }) => (
@@ -120,34 +51,15 @@ const MenuIcon = () => (
   </View>
 );
 
-// ─── DOCUMENT CARD (lydo-style) ───────────────────────────────────────────────
-const DocumentCard = ({ group, onItemPress }) => {
-  const { colors, title, icon, items } = group;
-  return (
-    <View style={[styles.card, { backgroundColor: colors.bg }]}>
-      <View style={[styles.cardHeader, { backgroundColor: colors.header }]}>
-        <Text style={styles.cardHeaderIcon}>{icon}</Text>
-        <Text style={styles.cardHeaderTitle}>{title}</Text>
-      </View>
-      <View style={styles.cardBody}>
-        {items.map((item, idx) => (
-          <TouchableOpacity
-            key={idx}
-            style={styles.docItem}
-            onPress={() => onItemPress && onItemPress(item, group)}
-            activeOpacity={0.7}
-          >
-            <View style={[styles.docBullet, { backgroundColor: colors.header }]} />
-            <Text style={[styles.docItemText, { color: colors.subText }]}>{item}</Text>
-          </TouchableOpacity>
-        ))}
-      </View>
-    </View>
-  );
-};
+// External link icon box — matches the screenshot action icon
+const ExternalLinkIcon = () => (
+  <View style={styles.extLinkBox}>
+    <Text style={styles.extLinkText}>↗</Text>
+  </View>
+);
 
 // ─── MAIN SCREEN ──────────────────────────────────────────────────────────────
-export default function SKDocumentScreen() {
+export default function SKPlanningBudgetScreen() {
   const router = useRouter();
   const { activeTab, setActiveTab } = useNav();
   const { logout, user } = useAuth();
@@ -156,37 +68,43 @@ export default function SKDocumentScreen() {
   const barangayName = user?.barangay?.barangay_name || 'Unknown Barangay';
   const barangayId = user?.barangayId;
 
-  const [activeDocTab, setActiveDocTab]     = useState('Folder');
   const [searchText, setSearchText]         = useState('');
   const [notifCount]                        = useState(2);
   const [sidebarVisible, setSidebarVisible] = useState(false);
-  const [documents, setDocuments]           = useState([]);
+  const [budgetData, setBudgetData]        = useState([]);
 
-  // Fetch documents for this barangay
+  // Fetch budget allocations for this barangay
   useEffect(() => {
-    const fetchDocuments = async () => {
+    const fetchBudget = async () => {
       if (!barangayId) return;
 
       try {
-        const { data: docs, error } = await supabase
-          .from('documents')
-          .select('document_id, title, folder_category, document_type, status, year, created_at')
+        const { data: budget, error } = await supabase
+          .from('budget_allocations')
+          .select('*')
           .eq('barangay_id', barangayId)
-          .order('created_at', { ascending: false });
+          .order('fiscal_year', { ascending: false });
 
         if (error) {
-          console.error('Error fetching documents:', error);
+          console.error('Error fetching budget:', error);
           return;
         }
 
-        setDocuments(docs || []);
+        const formattedBudget = budget?.map(b => ({
+          id: b.allocation_id?.toString() || '1',
+          barangay: barangayName,
+          budget: b.allocated_amount || 0,
+          action: 'readonly',
+        })) || [];
+
+        setBudgetData(formattedBudget);
       } catch (error) {
         console.error('Error:', error);
       }
     };
 
-    fetchDocuments();
-  }, [barangayId]);
+    fetchBudget();
+  }, [barangayId, barangayName]);
 
   const handleNavPress = (tab) => {
     setActiveTab(tab);
@@ -200,21 +118,13 @@ export default function SKDocumentScreen() {
 
   const handleLogout = () => { logout(); router.replace('/'); };
 
-  // Tap a bullet item → navigate to list screen with category + subType params
-  const handleItemPress = (itemName, group) => {
-    router.push({
-      pathname: '/(tabs)/sk-document-list',
-      params: { category: group.category, subType: itemName },
-    });
+  const handleFormulate = (item) => {
+    Alert.alert('Formulate Plan', `Opening plan form for ${item.barangay}…`);
   };
 
-  // Filter by search only (Folder tab shows all categories)
-  const visibleCategories = DOC_CATEGORIES.filter(cat => {
-    const matchesSearch = searchText === '' ||
-      cat.title.toLowerCase().includes(searchText.toLowerCase()) ||
-      cat.items.some(i => i.toLowerCase().includes(searchText.toLowerCase()));
-    return matchesSearch;
-  });
+  const filteredRows = BUDGET_DATA.filter(r =>
+    r.barangay.toLowerCase().includes(searchText.toLowerCase())
+  );
 
   // ── Sidebar ──
   const renderSidebar = () => (
@@ -228,15 +138,20 @@ export default function SKDocumentScreen() {
       </View>
       <View style={{ height: 28 }} />
       {NAV_TABS.map(tab => {
-        const active = tab === 'Documents';
+        const active = activeTab === tab || (tab === 'Planning');
         return (
           <TouchableOpacity
             key={tab}
-            style={[styles.navItem, active && styles.navItemActive]}
+            style={[styles.navItem, active && tab === 'Planning' && styles.navItemActive]}
             onPress={() => handleNavPress(tab)}
             activeOpacity={0.8}
           >
-            <Text style={[styles.navLabel, active && styles.navLabelActive]}>{tab}</Text>
+            <Text style={[
+              styles.navLabel,
+              active && tab === 'Planning' && styles.navLabelActive,
+            ]}>
+              {tab}
+            </Text>
           </TouchableOpacity>
         );
       })}
@@ -260,7 +175,7 @@ export default function SKDocumentScreen() {
           <TouchableOpacity style={styles.menuBtn} onPress={() => setSidebarVisible(true)}>
             <MenuIcon />
           </TouchableOpacity>
-          <Text style={styles.mobileTitle}>Documents</Text>
+          <Text style={styles.mobileTitle}>Planning – Budget</Text>
           <TouchableOpacity style={styles.bellBtn}>
             <BellIcon hasNotif={notifCount > 0} />
           </TouchableOpacity>
@@ -273,6 +188,7 @@ export default function SKDocumentScreen() {
           <View style={{ flex: 1 }}>
             <Text style={styles.headerSub}>SANGGUNIANG KABATAAN</Text>
             <Text style={styles.headerTitle}>{barangayName.toUpperCase()}</Text>
+            <Text style={styles.headerDocLabel}>Template and Budget Reference Documents</Text>
           </View>
           <TouchableOpacity style={styles.bellBtn} activeOpacity={0.7}>
             <BellIcon hasNotif={notifCount > 0} />
@@ -285,10 +201,27 @@ export default function SKDocumentScreen() {
         </View>
       )}
 
-      {/* Search Bar */}
+      {/* ── PLANNING TAB BAR (same style as MONITOR_TABS) ── */}
+      <View style={styles.planningTabBar}>
+        <TouchableOpacity
+          style={styles.planningTab}
+          onPress={() => router.push('/(tabs)/sk-planning')}
+          activeOpacity={0.8}
+        >
+          <Text style={styles.planningTabText}>Templates</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.planningTab, styles.planningTabActive]}
+          activeOpacity={0.8}
+        >
+          <Text style={[styles.planningTabText, styles.planningTabTextActive]}>Budget</Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* Search row */}
       <View style={styles.searchRow}>
         <View style={styles.searchBox}>
-          <Text style={styles.searchIcon}>🔍</Text>
+          <Text style={{ fontSize: 12, color: COLORS.midGray, marginRight: 4 }}>🔍</Text>
           <TextInput
             style={styles.searchInput}
             placeholder="Search"
@@ -304,50 +237,54 @@ export default function SKDocumentScreen() {
         </View>
       </View>
 
-      {/* Category label + All dropdown + Tab bar */}
-      {/* Category label + Tab bar */}
-      <View style={styles.categoryRow}>
-        <Text style={styles.categoryLabel}>Category:</Text>
+      {/* Section title + date received */}
+      <View style={styles.sectionTitleRow}>
+        <Text style={styles.sectionTitle}>Allocated Annual Budget</Text>
+        <Text style={styles.dateReceived}>Date Received: January, 2026</Text>
       </View>
 
-      <View style={styles.filterRow}>
-        {/* Folder / Document Management tab bar */}
-        <View style={styles.docTabBar}>
-          {DOCUMENT_TABS.map(tab => {
-            const active = activeDocTab === tab;
-            return (
-              <TouchableOpacity
-                key={tab}
-                style={[styles.docTab, active && styles.docTabActive]}
-                onPress={() => {
-                  if (tab === 'Document Management') {
-                    router.push({ pathname: '/(tabs)/sk-document-management' });
-                  }
-                }}
-                activeOpacity={0.8}
-              >
-                <Text style={[styles.docTabText, active && styles.docTabTextActive]}>
-                  {tab}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
+      {/* Budget Table */}
+      <View style={styles.tableContainer}>
+        {/* Header */}
+        <View style={styles.tableHeader}>
+          <Text style={[styles.thText, styles.colBarangay]}>Barangay</Text>
+          <Text style={[styles.thText, styles.colBudget]}>Annual Budget</Text>
+          <Text style={[styles.thText, styles.colAction]}>Action</Text>
         </View>
-      </View>
 
-      {/* Document Cards Grid */}
-      <View style={isMobile ? styles.gridMobile : styles.gridInner}>
-        {visibleCategories.length > 0 ? (
-          visibleCategories.map(cat => (
-            <View key={cat.id} style={isMobile ? styles.cardWrapperMobile : styles.cardWrapper}>
-              <DocumentCard group={cat} onItemPress={handleItemPress} />
+        {/* Data rows */}
+        {filteredRows.map((item, idx) => (
+          <View
+            key={item.id}
+            style={[styles.tableRow, idx % 2 !== 0 && styles.tableRowEven]}
+          >
+            <Text style={[styles.tdBarangay, styles.colBarangay]}>{item.barangay}</Text>
+
+            <Text style={[styles.tdBudget, styles.colBudget]}>
+              ₱ {item.budget.toLocaleString()}
+            </Text>
+
+            <View style={[styles.colAction, { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 6 }]}>
+              {item.action === 'formulate' ? (
+                <TouchableOpacity
+                  style={styles.formulateRow}
+                  onPress={() => handleFormulate(item)}
+                  activeOpacity={0.75}
+                >
+                  <Text style={styles.formulateText}>Formulate Plan</Text>
+                  <ExternalLinkIcon />
+                </TouchableOpacity>
+              ) : (
+                <Text style={styles.readOnlyText}>Read-Only</Text>
+              )}
             </View>
-          ))
-        ) : (
-          <View style={styles.emptyState}>
-            <Text style={styles.emptyText}>No documents found.</Text>
           </View>
-        )}
+        ))}
+
+        {/* Filler empty rows */}
+        {Array(Math.max(0, EMPTY_ROWS - Math.max(0, EMPTY_ROWS - filteredRows.length))).fill(null).map((_, i) => (
+          <View key={`empty-${i}`} style={[styles.tableRow, styles.tableRowEmpty]} />
+        ))}
       </View>
     </ScrollView>
   );
@@ -396,18 +333,25 @@ const styles = StyleSheet.create({
   navItem: {
     width: '100%', paddingVertical: 12, paddingHorizontal: 12,
     borderRadius: 24, marginBottom: 8, alignItems: 'center',
-    borderWidth: 1.5, borderColor: COLORS.white, backgroundColor: COLORS.navy,
-    flexDirection: 'row', justifyContent: 'center',
+    borderWidth: 1.5, borderColor: COLORS.white,
+    backgroundColor: COLORS.navy,
+    flexDirection: 'row', justifyContent: 'center', gap: 6,
   },
   navItemActive: { backgroundColor: COLORS.white, borderColor: COLORS.white },
   navLabel: { fontSize: 13, fontWeight: '600', color: 'rgba(255,255,255,0.85)', letterSpacing: 0.3 },
   navLabelActive: { color: '#000', fontWeight: '800' },
+  navBadge: {
+    width: 18, height: 18, borderRadius: 9,
+    backgroundColor: COLORS.gold, alignItems: 'center', justifyContent: 'center',
+  },
+  navBadgeText: { fontSize: 9, fontWeight: '900', color: COLORS.navy },
   logoutBtn: {
     width: '100%', paddingVertical: 12, paddingHorizontal: 12, borderRadius: 24,
     marginTop: 8, alignItems: 'center', borderWidth: 1.5, borderColor: COLORS.white,
     backgroundColor: 'rgba(255,255,255,0.1)',
   },
   logoutText: { fontSize: 13, fontWeight: '600', color: '#fff', letterSpacing: 0.3 },
+
 
   // ── Main ──
   main:        { flex: 1, backgroundColor: COLORS.offWhite, borderTopLeftRadius: 20 },
@@ -437,7 +381,12 @@ const styles = StyleSheet.create({
     fontSize: 10, fontWeight: '600', color: COLORS.subText,
     letterSpacing: 2, textTransform: 'uppercase', marginBottom: 2,
   },
-  headerTitle: { fontSize: 22, fontWeight: '900', color: COLORS.darkText },
+  headerTitle: {
+    fontSize: 22, fontWeight: '900', color: COLORS.darkText, letterSpacing: 0.3,
+    borderBottomWidth: 2, borderBottomColor: COLORS.lightGray, paddingBottom: 4, marginBottom: 6,
+  },
+  headerDocLabel: { fontSize: 14, fontWeight: '700', color: COLORS.darkText, marginTop: 4 },
+  headerRight: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
 
   // Bell
   bellBtn: {
@@ -447,84 +396,139 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.08, shadowRadius: 6, elevation: 3,
   },
   bellWrapper: { width: 20, height: 22, alignItems: 'center' },
-  bellBody:    { width: 14, height: 12, borderRadius: 7, borderWidth: 2, borderColor: '#8B0000', marginTop: 4 },
-  bellBottom:  { width: 8, height: 4, borderBottomLeftRadius: 4, borderBottomRightRadius: 4, backgroundColor: '#8B0000', marginTop: -1 },
-  bellDot:     { position: 'absolute', top: 0, right: 1, width: 7, height: 7, borderRadius: 4, backgroundColor: COLORS.gold, borderWidth: 1.5, borderColor: COLORS.cardBg },
-  notifBadge:  { position: 'absolute', top: -2, right: -2, width: 16, height: 16, borderRadius: 8, backgroundColor: COLORS.gold, alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: COLORS.white },
+  bellBody:   { width: 14, height: 12, borderRadius: 7, borderWidth: 2, borderColor: '#8B0000', marginTop: 4 },
+  bellBottom: { width: 8, height: 4, borderBottomLeftRadius: 4, borderBottomRightRadius: 4, backgroundColor: '#8B0000', marginTop: -1 },
+  bellDot:    { position: 'absolute', top: 0, right: 1, width: 7, height: 7, borderRadius: 4, backgroundColor: COLORS.gold, borderWidth: 1.5, borderColor: COLORS.cardBg },
+  notifBadge: { position: 'absolute', top: -2, right: -2, width: 16, height: 16, borderRadius: 8, backgroundColor: COLORS.gold, alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: COLORS.white },
   notifBadgeText: { fontSize: 8, fontWeight: '900', color: COLORS.navy },
 
-  // Search
-  searchRow: { marginBottom: 10 },
+  // ── Planning Tab Bar — identical to MONITOR_TABS ──
+  planningTabBar: {
+    flexDirection: 'row',
+    marginBottom: 14,
+    borderRadius: 4,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.30,
+    shadowRadius: 3,
+    elevation: 6,
+  },
+  planningTab: {
+    flex: 1,
+    paddingHorizontal: isMobile ? 8 : 40,
+    paddingVertical: 10,
+    backgroundColor: COLORS.navy,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.15)',
+    alignItems: 'center',
+  },
+  planningTabActive: {
+    backgroundColor: COLORS.gold,
+    borderRadius: 4,
+    borderColor: COLORS.gold,
+    shadowColor: COLORS.gold,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.4,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  planningTabText: { fontSize: isMobile ? 10 : 13, fontWeight: '600', color: COLORS.white },
+  planningTabTextActive: { color: COLORS.darkText, fontWeight: '800' },
+
+  // Search row
+  searchRow: {
+    flexDirection: 'row', alignItems: 'center',
+    marginBottom: 12,
+  },
   searchBox: {
     flexDirection: 'row', alignItems: 'center',
     backgroundColor: COLORS.white, borderRadius: 20,
     borderWidth: 1, borderColor: COLORS.lightGray,
     paddingHorizontal: 12, paddingVertical: 7,
-    maxWidth: isMobile ? '100%' : 280,
+    minWidth: 120, maxWidth: isMobile ? 160 : 220,
   },
-  searchIcon:  { fontSize: 12, color: COLORS.midGray, marginRight: 4 },
   searchInput: { flex: 1, fontSize: 12, color: COLORS.darkText },
 
-  // Category label
-  categoryRow:   { flexDirection: 'row', alignItems: 'center', marginBottom: 4 },
-  categoryLabel: { fontSize: 12, fontWeight: '700', color: COLORS.darkText },
-
-  // ── FILTER ROW ──
-  filterRow: {
-    flexDirection: 'row', alignItems: 'flex-start', marginBottom: 16, gap: 6,
-    zIndex: 10,
+  // Section title row
+  sectionTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 10,
+    flexWrap: 'wrap',
+    gap: 4,
+  },
+  sectionTitle: {
+    fontSize: isMobile ? 12 : 14, fontWeight: '800', color: COLORS.navy,
+  },
+  dateReceived: {
+    fontSize: isMobile ? 10 : 12, fontWeight: '600', color: COLORS.subText,
   },
 
-  // ── DOCUMENT TAB BAR (4 tabs only) ──
-  docTabBar: {
-    flex: 1, flexDirection: 'row', borderRadius: 4, overflow: 'hidden',
-    shadowColor: '#000', shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.28, shadowRadius: 3, elevation: 6,
-    height: 38,
+  // ── Budget Table ──
+  tableContainer: {
+    backgroundColor: COLORS.white,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: COLORS.lightGray,
+    overflow: 'hidden',
+    elevation: 1,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
   },
-  docTab: {
-    flex: 1, paddingHorizontal: isMobile ? 4 : 10,
-    backgroundColor: COLORS.navy, borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.15)', alignItems: 'center', justifyContent: 'center',
-  },
-  docTabActive: {
-    backgroundColor: COLORS.gold, borderRadius: 4, borderColor: COLORS.gold,
-    shadowColor: COLORS.gold, shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.4, shadowRadius: 4, elevation: 3,
-  },
-  docTabText: {
-    fontSize: isMobile ? 9 : 12, fontWeight: '600',
-    color: COLORS.white, textAlign: 'center',
-  },
-  docTabTextActive: { color: COLORS.darkText, fontWeight: '800' },
 
-  // ── Cards grid ──
-  gridInner:         { flexDirection: 'row', flexWrap: 'wrap', gap: 12, paddingBottom: 24 },
-  gridMobile:        { flexDirection: 'column', gap: 12, paddingBottom: 24 },
-  cardWrapper:       { width: '47%', minWidth: 150 },
-  cardWrapperMobile: { width: '100%' },
+  // Table header
+  tableHeader: {
 
-  // ── Individual doc card (lydo-style) ──
-  card: {
-    borderRadius: 16, overflow: 'hidden', elevation: 3,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.1, shadowRadius: 8,
-  },
-  cardHeader: {
     flexDirection: 'row', alignItems: 'center',
-    paddingHorizontal: 12, paddingVertical: 12, gap: 8,
+    backgroundColor: COLORS.navy,
+    paddingVertical: 11, paddingHorizontal: isMobile ? 10 : 16,
   },
-  cardHeaderIcon:  { fontSize: isMobile ? 16 : 18 },
-  cardHeaderTitle: {
-    fontSize: isMobile ? 8 : 10, fontWeight: '900', color: COLORS.white,
-    letterSpacing: 0.8, flex: 1, flexWrap: 'wrap',
+  thText: {
+    fontSize: isMobile ? 9 : 12, fontWeight: '800', color: COLORS.white,
   },
-  cardBody:    { padding: isMobile ? 10 : 14 },
-  docItem:     { flexDirection: 'row', alignItems: 'flex-start', gap: 8, marginBottom: 6 },
-  docBullet:   { width: 5, height: 5, borderRadius: 3, marginTop: 5, flexShrink: 0 },
-  docItemText: { fontSize: isMobile ? 11 : 12, lineHeight: 18, flex: 1 },
 
-  // Empty state
-  emptyState: { flex: 1, alignItems: 'center', marginTop: 60 },
-  emptyText:  { fontSize: 14, color: COLORS.midGray },
+  // Table rows
+  tableRow: {
+    flexDirection: 'row', alignItems: 'center',
+    paddingVertical: isMobile ? 8 : 13, paddingHorizontal: isMobile ? 10 : 16,
+    borderBottomWidth: 1, borderBottomColor: COLORS.lightGray,
+    backgroundColor: COLORS.white, minHeight: isMobile ? 42 : 50,
+  },
+  tableRowEven:  { backgroundColor: '#F5F7FA' },
+  tableRowEmpty: { minHeight: isMobile ? 42 : 50 },
+
+  // Columns
+  colBarangay: { flex: 2, paddingRight: 4 },
+  colBudget:   { flex: 1.2, paddingRight: 4 },
+  colAction:   { width: isMobile ? 70 : 120, alignItems: 'flex-end'},
+
+  tdBarangay: { fontSize: isMobile ? 10 : 13, color: COLORS.darkText, fontWeight: '500' },
+  tdBudget:   { fontSize: isMobile ? 10 : 13, color: COLORS.darkText, fontWeight: '600' },
+
+  // Formulate Plan action
+  formulateRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+  },
+  formulateText: {
+    fontSize: isMobile ? 9 : 12, alignItems: 'center',
+    color: COLORS.navy, fontWeight: '600',
+  },
+  extLinkBox: {
+    width: 20, height: 20, borderRadius: 5,
+    borderWidth: 1, borderColor: COLORS.lightGray,
+    backgroundColor: COLORS.offWhite,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  extLinkText: { fontSize: 10, color: COLORS.navy, fontWeight: '700' },
+
+  // Read-Only
+  readOnlyText: {
+    fontSize: isMobile ? 9 : 12,
+    color: COLORS.subText, fontWeight: '500',
+    textAlign: 'center', flex: 1,
+  },
 });

@@ -3,7 +3,7 @@ import {
   View, Text, TextInput, TouchableOpacity,
   StyleSheet, SafeAreaView, StatusBar,
   KeyboardAvoidingView, Platform, ScrollView,
-  Dimensions, Image,
+  Dimensions, Image, ImageBackground,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuth } from './(tabs)/authContext';
@@ -36,144 +36,181 @@ export default function LoginScreen() {
   const [emailFocused, setEmailFocused] = useState(false);
   const [passFocused, setPassFocused] = useState(false);
   const [error, setError] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
 
-  const handleLogin = () => {
+  const handleLogin = async () => {
     if (!email || !password) {
       setError('Please enter email and password');
       return;
     }
 
-    const result = login(email, password);
+    setIsLoading(true);
+    setError('');
+
+    const result = await login(email, password);
+    setIsLoading(false);
+
     if (result.success) {
-      setError('');
-      if (result.user.role === 'lydo') {
-        router.replace('/(tabs)/lydo-home');
-      } else {
-        router.replace('/(tabs)/sk-home');
-      }
+      console.log('Login success, role:', result.user.role, 'roleName:', result.user.roleName, 'status:', result.user.status);
+      setTimeout(() => {
+        if (result.user.role === 'lydo') {
+          router.replace('/lydo-dashboard');
+        } else if (result.user.role === 'sk') {
+          router.replace('/sk-dashboard');
+        } else {
+          router.replace('/sk-dashboard');
+        }
+      }, 50);
     } else {
-      setError(result.error);
+      let errorMsg = result.error;
+      if (result.error.includes('Invalid email or password')) {
+        errorMsg = 'Invalid email, password, or account not yet approved';
+      }
+      setError(errorMsg);
     }
   };
 
   return (
     <SafeAreaView style={styles.safe}>
       <StatusBar barStyle="light-content" backgroundColor={COLORS.navyDark} />
-      <KeyboardAvoidingView
-        style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+
+      {/* Full-screen background image */}
+      <ImageBackground
+        source={require('./../assets/images/municipal-hall.png')}
+        style={styles.bgImage}
+        resizeMode="cover"
+        imageStyle={styles.bgImageStyle}
       >
-        <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
-          <View style={styles.card}>
+        {/* Navy color overlay at ~60% opacity */}
+        <View style={styles.overlay} />
 
-            {/* Seal / Logo */}
-            <View style={styles.sealWrap}>
-              <Image
-                source={require('./../assets/images/rizal-logo.png')}
-                style={styles.logoImage}
-                resizeMode="contain"
-              />
-            </View>
+        <KeyboardAvoidingView
+          style={{ flex: 1 }}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        >
+          <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+            <View style={styles.card}>
 
-            {/* E-mail */}
-            <Text style={styles.label}>E-mail</Text>
-            <View style={[styles.inputWrap, emailFocused && styles.inputWrapFocus]}>
-              <TextInput
-                style={styles.input}
-                placeholder="Enter your E-mail"
-                placeholderTextColor={COLORS.placeholder}
-                keyboardType="email-address"
-                autoCapitalize="none"
-                value={email}
-                onChangeText={(text) => {
-                  setEmail(text);
-                  setError('');
-                }}
-                onFocus={() => setEmailFocused(true)}
-                onBlur={() => setEmailFocused(false)}
-              />
-            </View>
-
-            {/* Password */}
-            <Text style={styles.label}>Password</Text>
-            <View style={[styles.inputWrap, passFocused && styles.inputWrapFocus]}>
-              <TextInput
-                style={[styles.input, { flex: 1 }]}
-                placeholder="Password"
-                placeholderTextColor={COLORS.placeholder}
-                secureTextEntry={!showPassword}
-                value={password}
-                onChangeText={(text) => {
-                  setPassword(text);
-                  setError('');
-                }}
-                onFocus={() => setPassFocused(true)}
-                onBlur={() => setPassFocused(false)}
-              />
-              <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={styles.eyeBtn}>
-                <Text style={styles.eyeIcon}>{showPassword ? '⌣' : '👁'}</Text>
-              </TouchableOpacity>
-            </View>
-
-            {/* Error Message */}
-            {error !== '' && (
-              <View style={styles.errorBox}>
-                <Text style={styles.errorText}>{error}</Text>
+              {/* Seal / Logo */}
+              <View style={styles.sealWrap}>
+                <Image
+                  source={require('./../assets/images/rizal-logo.png')}
+                  style={styles.logoImage}
+                  resizeMode="contain"
+                />
               </View>
-            )}
 
-            {/* Forgot Password */}
-            <TouchableOpacity style={styles.forgotWrap} onPress={() => {}}>
-              <Text style={styles.forgotText}>Forgot Password?</Text>
-            </TouchableOpacity>
+              {/* E-mail */}
+              <Text style={styles.label}>E-mail</Text>
+              <View style={[styles.inputWrap, emailFocused && styles.inputWrapFocus]}>
+                <TextInput
+                  style={styles.input}
+                  placeholder="Enter your E-mail"
+                  placeholderTextColor={COLORS.placeholder}
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                  value={email}
+                  onChangeText={(text) => {
+                    setEmail(text);
+                    setError('');
+                  }}
+                  onFocus={() => setEmailFocused(true)}
+                  onBlur={() => setEmailFocused(false)}
+                />
+              </View>
 
-            {/* Login Button */}
-            <TouchableOpacity style={styles.loginBtn} onPress={handleLogin} activeOpacity={0.85}>
-              <Text style={styles.loginBtnText}>Login</Text>
-            </TouchableOpacity>
+              {/* Password */}
+              <Text style={styles.label}>Password</Text>
+              <View style={[styles.inputWrap, passFocused && styles.inputWrapFocus]}>
+                <TextInput
+                  style={[styles.input, { flex: 1 }]}
+                  placeholder="Password"
+                  placeholderTextColor={COLORS.placeholder}
+                  secureTextEntry={!showPassword}
+                  value={password}
+                  onChangeText={(text) => {
+                    setPassword(text);
+                    setError('');
+                  }}
+                  onFocus={() => setPassFocused(true)}
+                  onBlur={() => setPassFocused(false)}
+                />
+                <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={styles.eyeBtn}>
+                  <Text style={styles.eyeIcon}>{showPassword ? '👁' : '⌣'}</Text>
+                </TouchableOpacity>
+              </View>
 
-            {/* Sign Up Link */}
-            <View style={styles.signupRow}>
-              <Text style={styles.subText}>Don't have an account? </Text>
-              <TouchableOpacity onPress={() => router.push('/signup')}>
-                <Text style={styles.linkText}>Sign Up</Text>
+              {/* Error Message */}
+              {error !== '' && (
+                <View style={styles.errorBox}>
+                  <Text style={styles.errorText}>{error}</Text>
+                </View>
+              )}
+
+              {/* Forgot Password */}
+              <TouchableOpacity style={styles.forgotWrap} onPress={() => {}}>
+                <Text style={styles.forgotText}>Forgot Password?</Text>
+              </TouchableOpacity>
+
+              {/* Login Button */}
+              <TouchableOpacity
+                style={[styles.loginBtn, isLoading && styles.loginBtnDisabled]}
+                onPress={handleLogin}
+                activeOpacity={0.85}
+                disabled={isLoading}
+              >
+                <Text style={styles.loginBtnText}>{isLoading ? 'Logging in...' : 'Login'}</Text>
               </TouchableOpacity>
             </View>
-
-            {/* Demo Accounts Info */}
-            <View style={styles.demoBox}>
-              <Text style={styles.demoTitle}>Demo Accounts:</Text>
-              <Text style={styles.demoText}>LYDO: lydo@sk.com / lydo123</Text>
-              <Text style={styles.demoText}>SK: sk@sk.com / sk123</Text>
-            </View>
-
-          </View>
-        </ScrollView>
-      </KeyboardAvoidingView>
+          </ScrollView>
+        </KeyboardAvoidingView>
+      </ImageBackground>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: COLORS.navyDark },
+
+  // Background image fills the entire screen
+  bgImage: {
+    flex: 1,
+    width: '100%',
+    height: '100%',
+  },
+  // Scale image to fit fully without cropping bottom
+  bgImageStyle: {
+    top: -40,
+    height: '110%',
+  },
+
+  // Navy overlay at 60% opacity on top of the background image
+  overlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(30, 58, 110, 0.60)', // COLORS.navy at 60% opacity
+  },
+
   scroll: {
     flexGrow: 1,
     justifyContent: 'center',
     alignItems: 'center',
     padding: 20,
   },
+
   card: {
     width: '100%',
     maxWidth: 420,
-    backgroundColor: COLORS.navy,
+    backgroundColor: 'rgba(22, 45, 85, 0.75)',
     borderRadius: 20,
     padding: isMobile ? 20 : 32,
     paddingTop: isMobile ? 24 : 40,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.3,
+    shadowOpacity: 0.4,
     shadowRadius: 20,
     elevation: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
   },
 
   // Seal / Logo
@@ -230,6 +267,7 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   loginBtnText: { fontSize: 16, fontWeight: '800', color: COLORS.btnText, letterSpacing: 0.5 },
+  loginBtnDisabled: { opacity: 0.7 },
 
   // Sign Up link
   signupRow: {
