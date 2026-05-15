@@ -11,10 +11,12 @@ import {
   Dimensions,
   Modal,
   Image,
+  ActivityIndicator,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useNav } from './navContext';
 import { useAuth } from './authContext';
+import { supabase } from '../../utils/supabase';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const isMobile = SCREEN_WIDTH < 768;
@@ -47,23 +49,14 @@ const STATUS_COLORS = {
   Archived:    { text: '#6D4C41', bg: '#EFEBE9' },
 };
 
-// ─── INITIAL TEMPLATE DATA ────────────────────────────────────────────────────
-const INITIAL_TEMPLATES = [
-  { id: '1', name: 'Comprehensive Barangay Youth Development Plan',      status: 'Active',  category: 'Planning',  version: 1, updatedAt: '2026-01-02' },
-  { id: '2', name: 'Annual Barangay Youth Investment Program (ABYIP) 2026', status: 'Draft', category: 'Planning', version: 1, updatedAt: '2026-01-02' },
-  { id: '3', name: 'Annual Budget 2026',                                  status: 'Active',  category: 'Financial', version: 2, updatedAt: '2026-01-15' },
-  { id: '4', name: 'Quarterly Register of Cash in Bank',                  status: 'Active',  category: 'Financial', version: 1, updatedAt: '2026-01-02' },
-  { id: '5', name: 'Monthly Itemized List',                               status: 'Active',  category: 'Financial', version: 1, updatedAt: '2026-01-02' },
-  { id: '6', name: 'Accomplishment Report',                               status: 'Active',  category: 'Performance', version: 1, updatedAt: '2026-01-02' },
-];
-
-// Pre-seeded archive records (version history)
-const INITIAL_ARCHIVE = [
-  { id: 'arch-3-v1', templateId: '3', name: 'Annual Budget 2026',       version: 1, archivedAt: '2026-01-15', archivedReason: 'Replaced by newer version', category: 'Financial' },
-];
-
 const FILTER_OPTIONS = ['All', 'Currently in use',];
-const CATEGORY_FILTERS = ['All Categories', 'Planning', 'Financial', 'Performance'];
+const CATEGORY_FILTERS = ['All Categories', 'planning', 'budgeting', 'financial_records', 'monitoring_evaluation'];
+const CATEGORY_DISPLAY = {
+  'planning': 'Planning',
+  'budgeting': 'Budgeting',
+  'financial_records': 'Financial',
+  'monitoring_evaluation': 'Monitoring & Evaluation',
+};
 
 // ─── ICON COMPONENTS ──────────────────────────────────────────────────────────
 const BellIcon = ({ hasNotif }) => (
@@ -147,6 +140,7 @@ export default function LYDODocumentTemplatesScreen() {
   const [notifCount]                            = useState(2);
   const [sidebarVisible, setSidebarVisible]     = useState(false);
   const [activeDocumentTab, setActiveDocumentTab] = useState('Templates');
+  const [loading, setLoading]                   = useState(true);
   const [showCategoryDropdown, setShowCategoryDropdown] = useState(false);
   const [dropdownPos, setDropdownPos]                   = useState({ top: 0, left: 0 });
   const dropdownBtnRef                                  = useRef(null);
@@ -163,12 +157,91 @@ export default function LYDODocumentTemplatesScreen() {
   const [forwardChecked, setForwardChecked]     = useState({});
 
   // ── Dynamic template + archive state ──
-  const [templates, setTemplates]           = useState(INITIAL_TEMPLATES);
-  const [archiveRecords, setArchiveRecords] = useState(INITIAL_ARCHIVE);
+  const [templates, setTemplates]           = useState([]);
+  const [archiveRecords, setArchiveRecords] = useState([]);
+  const [distributions, setDistributions]   = useState([]);
   const [showArchiveView, setShowArchiveView] = useState(false);
   const [expandedArchiveId, setExpandedArchiveId] = useState(null);
 
   useEffect(() => { setActiveTab('Documents'); }, []);
+
+  // Fetch templates and distributions from database
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        setLoading(true);
+
+        // Fetch templates
+        const { data: templateData, error: templateError } = await supabase
+          .from('templates')
+          .select(`
+            template_id,
+            title,
+            description,
+            file_url,
+            version,
+            status,
+            template_category,
+            document_type,
+            created_at,
+            replaces_id,
+            uploaded_by
+          `)
+          .order('created_at', { ascending: false });
+
+        if (!templateError && templateData) {
+          const activeTemplates = templateData
+            .filter(t => t.status !== 'archived')
+            .map(t => ({
+              id: t.template_id.toString(),
+              name: t.title,
+              status: t.status === 'active' ? 'Active' : t.status === 'draft' ? 'Draft' : 'Archived',
+              category: t.template_category,
+              version: t.version || 1,
+              updatedAt: t.created_at ? new Date(t.created_at).toISOString().slice(0, 10) : '',
+              replacesId: t.replaces_id,
+              fileUrl: t.file_url,
+            }));
+          setTemplates(activeTemplates);
+
+          const archivedTemplates = templateData
+            .filter(t => t.status === 'archived')
+            .map(t => ({
+              id: `arch-${t.template_id}`,
+              templateId: t.template_id.toString(),
+              name: t.title,
+              version: t.version || 1,
+              archivedAt: t.created_at ? new Date(t.created_at).toISOString().slice(0, 10) : '',
+              archivedReason: 'Replaced by newer version',
+              category: t.template_category,
+            }));
+          setArchiveRecords(archivedTemplates);
+        }
+
+        // Fetch template distributions
+        const { data: distData, error: distError } = await supabase
+          .from('template_distributions')
+          .select(`
+            distribution_id,
+            template_id,
+            barangay_id,
+            distributed_by,
+            is_acknowledged,
+            distributed_at,
+            acknowledged_at
+          `);
+
+        if (!distError && distData) {
+          setDistributions(distData);
+        }
+      } catch (error) {
+        console.error('Error fetching templates:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchData();
+  }, []);
 
   // ── Auto-archive: whenever a template is marked 'Old Version', move it to Archived ──
   useEffect(() => {
@@ -206,6 +279,9 @@ export default function LYDODocumentTemplatesScreen() {
       categoryFilter === 'All Categories' || t.category === categoryFilter;
     return matchesSearch && matchesFilter && matchesCategory;
   });
+
+  // ── Helper to get display category ──
+  const getDisplayCategory = (cat) => CATEGORY_DISPLAY[cat] || cat;
 
   // ── Navigation helpers ──
   const handleNavPress = (tab) => {
@@ -281,7 +357,7 @@ export default function LYDODocumentTemplatesScreen() {
             onPress={() => { setCategoryFilter(cat); setShowCategoryDropdown(false); }}
           >
             <Text style={[styles.dropdownItemText, categoryFilter === cat && styles.dropdownItemTextActive]}>
-              {cat}
+              {cat === 'All Categories' ? cat : CATEGORY_DISPLAY[cat] || cat}
             </Text>
           </TouchableOpacity>
         ))}
@@ -435,7 +511,58 @@ export default function LYDODocumentTemplatesScreen() {
             <TouchableOpacity
               style={[styles.modalBtn, { backgroundColor: addDocType ? COLORS.navy : COLORS.midGray, flex: 1.4 }]}
               disabled={!addDocType}
-              onPress={() => { setShowAddModal(false); resetAddModal(); }}
+              onPress={async () => {
+                try {
+                  const { data: userData } = await supabase.auth.getUser();
+                  const userId = userData?.user?.id;
+
+                  // Get user_id from users table
+                  let lydoUserId = null;
+                  if (userId) {
+                    const { data: userRecord } = await supabase
+                      .from('users')
+                      .select('user_id')
+                      .eq('auth_id', userId)
+                      .single();
+                    lydoUserId = userRecord?.user_id;
+                  }
+
+                  // Insert template
+                  const { error } = await supabase.from('templates').insert({
+                    title: addDocType,
+                    description: '',
+                    file_url: addEntries[0]?.file || 'template.docx',
+                    status: 'draft',
+                    template_category: 'planning',
+                    document_type: addDocType,
+                    uploaded_by: lydoUserId,
+                    version: 1,
+                  });
+
+                  if (error) throw error;
+
+                  // Refresh data
+                  const { data: newData } = await supabase
+                    .from('templates')
+                    .select('*')
+                    .order('created_at', { ascending: false });
+
+                  if (newData) {
+                    setTemplates(newData.map(t => ({
+                      id: t.template_id.toString(),
+                      name: t.title,
+                      status: t.status === 'active' ? 'Active' : 'Draft',
+                      category: t.template_category,
+                      version: t.version || 1,
+                      updatedAt: t.created_at ? new Date(t.created_at).toISOString().slice(0, 10) : '',
+                    })));
+                  }
+                } catch (err) {
+                  console.error('Error creating template:', err);
+                }
+                setShowAddModal(false);
+                resetAddModal();
+              }}
             >
               <Text style={{ color: COLORS.white, fontWeight: '700' }}>Upload as Draft</Text>
             </TouchableOpacity>
@@ -464,7 +591,7 @@ export default function LYDODocumentTemplatesScreen() {
           <View style={{ marginBottom: 12 }}>
             <StatusBadge status={selectedTemplate?.status} />
           </View>
-          <Text style={styles.modalLabel}>Category: <Text style={styles.modalValue}>{selectedTemplate?.category}</Text></Text>
+          <Text style={styles.modalLabel}>Category: <Text style={styles.modalValue}>{getDisplayCategory(selectedTemplate?.category)}</Text></Text>
 
           <View style={styles.actionRow}>
             <TouchableOpacity style={[styles.actionBtn, { backgroundColor: '#EAF0FB' }]}>
@@ -611,28 +738,67 @@ export default function LYDODocumentTemplatesScreen() {
               <TouchableOpacity
                 style={[styles.modalBtn, { backgroundColor: checkedCount > 0 ? COLORS.navy : COLORS.midGray, flex: 1 }]}
                 disabled={checkedCount === 0}
-                onPress={() => {
-                  const today = new Date().toISOString().slice(0, 10);
-                  // Mark each replaced template as Old Version → auto-archive effect fires
-                  // Then insert a new Active v+1 entry
-                  setTemplates(prev => {
-                    let next = [...prev];
-                    Object.keys(checkedTemplates).forEach(id => {
-                      if (!checkedTemplates[id]) return;
-                      const idx = next.findIndex(t => t.id === id);
-                      if (idx === -1) return;
-                      const old = next[idx];
-                      next[idx] = { ...old, status: 'Old Version' }; // triggers auto-archive
-                      next.splice(idx + 1, 0, {
-                        ...old,
-                        id:        `${id}-v${old.version + 1}`,
-                        version:   old.version + 1,
-                        status:    'Active',
-                        updatedAt: today,
+                onPress={async () => {
+                  try {
+                    const today = new Date().toISOString().slice(0, 10);
+
+                    for (const templateId of Object.keys(checkedTemplates)) {
+                      if (!checkedTemplates[templateId]) continue;
+
+                      // Get current template
+                      const currentTemplate = templates.find(t => t.id === templateId);
+                      if (!currentTemplate) continue;
+
+                      // Update old template status to archived
+                      await supabase
+                        .from('templates')
+                        .update({ status: 'archived' })
+                        .eq('template_id', parseInt(templateId));
+
+                      // Create new version
+                      const { data: userData } = await supabase.auth.getUser();
+                      let lydoUserId = null;
+                      if (userData?.user?.id) {
+                        const { data: userRecord } = await supabase
+                          .from('users')
+                          .select('user_id')
+                          .eq('auth_id', userData.user.id)
+                          .single();
+                        lydoUserId = userRecord?.user_id;
+                      }
+
+                      await supabase.from('templates').insert({
+                        title: currentTemplate.name,
+                        description: '',
+                        file_url: uploadedFiles[templateId] || `${currentTemplate.name}.docx`,
+                        status: 'active',
+                        template_category: currentTemplate.category,
+                        document_type: currentTemplate.name,
+                        uploaded_by: lydoUserId,
+                        version: (currentTemplate.version || 1) + 1,
+                        replaces_id: parseInt(templateId),
                       });
-                    });
-                    return next;
-                  });
+                    }
+
+                    // Refresh templates
+                    const { data: newData } = await supabase
+                      .from('templates')
+                      .select('*')
+                      .order('created_at', { ascending: false });
+
+                    if (newData) {
+                      setTemplates(newData.map(t => ({
+                        id: t.template_id.toString(),
+                        name: t.title,
+                        status: t.status === 'active' ? 'Active' : t.status === 'draft' ? 'Draft' : 'Archived',
+                        category: t.template_category,
+                        version: t.version || 1,
+                        updatedAt: t.created_at ? new Date(t.created_at).toISOString().slice(0, 10) : '',
+                      })));
+                    }
+                  } catch (err) {
+                    console.error('Error replacing templates:', err);
+                  }
                   setShowReplaceModal(false);
                   setCheckedTemplates({});
                   setUploadedFiles({});
@@ -715,7 +881,51 @@ export default function LYDODocumentTemplatesScreen() {
                 flex: 1,
               }]}
               disabled={forwardCheckedCount === 0}
-              onPress={() => { setShowForwardModal(false); setForwardChecked({}); }}
+              onPress={async () => {
+                try {
+                  // Get current user
+                  const { data: userData } = await supabase.auth.getUser();
+                  let lydoUserId = null;
+                  if (userData?.user?.id) {
+                    const { data: userRecord } = await supabase
+                      .from('users')
+                      .select('user_id')
+                      .eq('auth_id', userData.user.id)
+                      .single();
+                    lydoUserId = userRecord?.user_id;
+                  }
+
+                  // Get all barangays
+                  const { data: barangays } = await supabase
+                    .from('barangays')
+                    .select('barangay_id');
+
+                  // Distribute selected templates to all barangays
+                  for (const templateId of Object.keys(forwardChecked)) {
+                    if (!forwardChecked[templateId]) continue;
+
+                    for (const brgy of barangays || []) {
+                      await supabase.from('template_distributions').insert({
+                        template_id: parseInt(templateId),
+                        barangay_id: brgy.barangay_id,
+                        distributed_by: lydoUserId,
+                        is_acknowledged: false,
+                      });
+                    }
+                  }
+
+                  // Refresh distributions
+                  const { data: newDist } = await supabase
+                    .from('template_distributions')
+                    .select('*');
+
+                  if (newDist) setDistributions(newDist);
+                } catch (err) {
+                  console.error('Error forwarding templates:', err);
+                }
+                setShowForwardModal(false);
+                setForwardChecked({});
+              }}
             >
               <Text style={{ color: COLORS.white, fontWeight: '700' }}>Forward</Text>
             </TouchableOpacity>
@@ -832,7 +1042,7 @@ export default function LYDODocumentTemplatesScreen() {
               activeOpacity={0.75}
             >
               <Text style={styles.filterPillText}>
-                {categoryFilter === 'All Categories' ? 'Template ▾' : `${categoryFilter} ▾`}
+                {categoryFilter === 'All Categories' ? 'Template ▾' : `${CATEGORY_DISPLAY[categoryFilter] || categoryFilter} ▾`}
               </Text>
             </TouchableOpacity>
           </View>
@@ -942,7 +1152,12 @@ export default function LYDODocumentTemplatesScreen() {
             <Text style={[styles.tableHeaderText, { width: 100, textAlign: 'right' }]}>Status</Text>
           </View>
 
-          {filteredTemplates.length > 0 ? (
+          {loading ? (
+            <View style={styles.emptyState}>
+              <ActivityIndicator size="large" color={COLORS.navy} />
+              <Text style={styles.emptyText}>Loading templates...</Text>
+            </View>
+          ) : filteredTemplates.length > 0 ? (
             filteredTemplates.map((item, idx) => (
               <React.Fragment key={item.id}>
                 <TemplateRow item={item} onPress={setSelectedTemplate} />
