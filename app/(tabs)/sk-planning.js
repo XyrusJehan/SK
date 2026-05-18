@@ -30,53 +30,13 @@ const COLORS = {
 const NAV_TABS      = ['Dashboard', 'Documents', 'Planning', 'Portal', 'Account'];
 const PLANNING_TABS = ['Templates', 'Budget'];
 
-// ─── TEMPLATE CATEGORIES (from screenshot) ───────────────────────────────────
-const TEMPLATE_SECTIONS = [
-  {
-    id: 'planning',
-    title: 'Planning Templates',
-    color: '#EAF0FB',
-    borderColor: '#B8CAE8',
-    items: [
-      { id: 'p1', name: 'Comprehensive Barangay Youth Development Plan' },
-      { id: 'p2', name: 'SK PPA Template' },
-      { id: 'p3', name: 'Annual Barangay Youth Investment Program' },
-      { id: 'p4', name: 'Program of Work' },
-    ],
-  },
-  {
-    id: 'budgeting',
-    title: 'Budgeting Templates',
-    color: '#EAFBEA',
-    borderColor: '#B8E4B8',
-    items: [
-      { id: 'b1', name: 'Approved Annual Budget' },
-      { id: 'b2', name: 'SK Supplemental Budget' },
-    ],
-  },
-  {
-    id: 'financial',
-    title: 'Financial Records and Evaluation Templates',
-    color: '#FDF5E6',
-    borderColor: '#E8D5A8',
-    items: [
-      { id: 'f1', name: 'Registry of Cash Receipts and Deposits' },
-      { id: 'f2', name: 'Registry of Cash Disbursements' },
-      { id: 'f3', name: 'Monthly Itemized List' },
-      { id: 'f4', name: 'Quarterly Financial Reports' },
-    ],
-  },
-  {
-    id: 'monitoring',
-    title: 'Monitoring and Evaluation',
-    color: '#F3EAFB',
-    borderColor: '#C8B0E4',
-    items: [
-      { id: 'm1', name: 'Barangay Youth Investment Monitoring Form' },
-      { id: 'm2', name: 'Monthly/Quarterly Accomplishment Report' },
-    ],
-  },
-];
+// ─── TEMPLATE CATEGORY CONFIG ─────────────────────────────────────────────────
+const CATEGORY_CONFIG = {
+  planning: { title: 'Planning Templates', color: '#EAF0FB', borderColor: '#B8CAE8' },
+  budgeting: { title: 'Budgeting Templates', color: '#EAFBEA', borderColor: '#B8E4B8' },
+  financial_records: { title: 'Financial Records and Evaluation Templates', color: '#FDF5E6', borderColor: '#E8D5A8' },
+  monitoring_evaluation: { title: 'Monitoring and Evaluation', color: '#F3EAFB', borderColor: '#C8B0E4' },
+};
 
 // ─── ALL TEMPLATES — (now fetched from Supabase based on barangay_id) ─────
 // (Data fetched via useEffect)
@@ -158,7 +118,7 @@ export default function SKPlanningScreen() {
 
   const [activePlanningTab, setActivePlanningTab] = useState('Templates');
   const [searchText, setSearchText]               = useState('');
-  const [showAll, setShowAll]                     = useState(true); // false = Active Templates filter
+  const [showAll, setShowAll]                     = useState(false); // false = Active Templates filter
   const [notifCount]                              = useState(2);
   const [sidebarVisible, setSidebarVisible]       = useState(false);
   const [selectedItem, setSelectedItem]           = useState(null);
@@ -176,6 +136,7 @@ export default function SKPlanningScreen() {
         const { data: distributions, error } = await supabase
           .from('template_distributions')
           .select(`
+            distribution_id,
             distributed_at,
             is_acknowledged,
             template_id,
@@ -186,7 +147,9 @@ export default function SKPlanningScreen() {
               template_category,
               document_type,
               status,
-              created_at
+              created_at,
+              file_url,
+              version
             )
           `)
           .eq('barangay_id', barangayId);
@@ -202,6 +165,8 @@ export default function SKPlanningScreen() {
           type: d.templates?.template_category || 'Unknown',
           source: 'LYDO',
           dateReceived: new Date(d.templates?.created_at || d.distributed_at).toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' }),
+          fileUrl: d.templates?.file_url || '',
+          version: d.templates?.version || 1,
         })) || [];
 
         setTemplates(formattedTemplates);
@@ -261,13 +226,14 @@ export default function SKPlanningScreen() {
 
   const handleEdit = (item) => { setSelectedItem(item); setShowEditModal(true); };
 
-  // Filter sections/items by search
-  const filteredSections = TEMPLATE_SECTIONS.map(sec => ({
-    ...sec,
-    items: sec.items.filter(it =>
-      it.name.toLowerCase().includes(searchText.toLowerCase())
-    ),
-  })).filter(sec => sec.items.length > 0);
+  // Get all categories as sections, then filter items by search
+  const templateSections = Object.entries(CATEGORY_CONFIG).map(([id, config]) => ({
+    id,
+    ...config,
+    items: templates
+      .filter(t => (t.type || 'planning') === id)
+      .filter(t => t.name.toLowerCase().includes(searchText.toLowerCase())),
+  }));
 
   // ── Sidebar ──
   const renderSidebar = () => (
@@ -307,6 +273,26 @@ export default function SKPlanningScreen() {
   );
 
   // ── Edit Modal ──
+  const handleViewTemplate = () => {
+    if (selectedItem?.fileUrl) {
+      Alert.alert('View Template', `Opening: ${selectedItem.fileUrl}`);
+      // In production, you would open the URL in a WebView or Linking
+    } else {
+      Alert.alert('No File', 'This template has no file attached.');
+    }
+    setShowEditModal(false);
+  };
+
+  const handleDownloadTemplate = () => {
+    if (selectedItem?.fileUrl) {
+      Alert.alert('Download', `Downloading: ${selectedItem.name}`);
+      // In production, you would use expo-file-system or Linking to download
+    } else {
+      Alert.alert('No File', 'This template has no file to download.');
+    }
+    setShowEditModal(false);
+  };
+
   const renderEditModal = () => (
     <Modal
       visible={showEditModal}
@@ -322,23 +308,24 @@ export default function SKPlanningScreen() {
         <View style={styles.modalCard} onStartShouldSetResponder={() => true}>
           <Text style={styles.modalTitle}>Edit Template</Text>
           <Text style={styles.modalSubtitle}>{selectedItem?.name}</Text>
+          <Text style={styles.modalVersion}>Version {selectedItem?.version || 1}</Text>
           <View style={styles.modalDivider} />
           <View style={styles.modalActions}>
             <TouchableOpacity
               style={[styles.modalActionBtn, { backgroundColor: '#EAF0FB' }]}
-              onPress={() => { Alert.alert('View', 'Opening template…'); setShowEditModal(false); }}
+              onPress={handleViewTemplate}
             >
               <Text style={[styles.modalActionText, { color: COLORS.navy }]}>👁  View</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.modalActionBtn, { backgroundColor: '#EAFBEA' }]}
-              onPress={() => { Alert.alert('Download', 'Downloading…'); setShowEditModal(false); }}
+              onPress={handleDownloadTemplate}
             >
               <Text style={[styles.modalActionText, { color: '#2E7D32' }]}>⬇  Download</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.modalActionBtn, { backgroundColor: '#FDF5E6' }]}
-              onPress={() => { Alert.alert('Replace', 'Replace coming soon.'); setShowEditModal(false); }}
+              onPress={() => { Alert.alert('Info', 'Template creation is handled by LYDO.'); setShowEditModal(false); }}
             >
               <Text style={[styles.modalActionText, { color: '#B45309' }]}>↔  Create</Text>
             </TouchableOpacity>
@@ -443,13 +430,6 @@ export default function SKPlanningScreen() {
           {/* All / Active Templates filter pills */}
           <View style={styles.filterRow}>
             <TouchableOpacity
-              style={showAll ? styles.filterLinkActive : styles.filterLink}
-              onPress={() => setShowAll(true)}
-              activeOpacity={0.8}
-            >
-              <Text style={[styles.filterLinkText, showAll && styles.filterLinkTextActive]}>All</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
               style={!showAll ? styles.filterLinkActive : styles.filterLink}
               onPress={() => setShowAll(false)}
               activeOpacity={0.8}
@@ -497,8 +477,8 @@ export default function SKPlanningScreen() {
 
           {/* ── ACTIVE TEMPLATES view: category grid ── */}
           {!showAll && (
-            filteredSections.length > 0 ? (
-              filteredSections.map(sec => (
+            templateSections.length > 0 ? (
+              templateSections.map(sec => (
                 <TemplateSection key={sec.id} section={sec} onEdit={handleEdit} />
               ))
             ) : (
@@ -818,7 +798,8 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.18, shadowRadius: 20, elevation: 12,
   },
   modalTitle:    { fontSize: 16, fontWeight: '800', color: COLORS.darkText, marginBottom: 6 },
-  modalSubtitle: { fontSize: 13, color: COLORS.subText, lineHeight: 18, marginBottom: 14 },
+  modalSubtitle: { fontSize: 13, color: COLORS.subText, lineHeight: 18, marginBottom: 4 },
+  modalVersion:  { fontSize: 11, color: COLORS.midGray, marginBottom: 14 },
   modalDivider:  { height: 1, backgroundColor: COLORS.lightGray, marginBottom: 14 },
   modalActions:  { flexDirection: 'row', gap: 8, marginBottom: 16 },
   modalActionBtn: {
