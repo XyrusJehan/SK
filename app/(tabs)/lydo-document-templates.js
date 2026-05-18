@@ -208,6 +208,7 @@ export default function LYDODocumentTemplatesScreen() {
   const [showForwardModal, setShowForwardModal] = useState(false);
   const [forwardChecked, setForwardChecked]     = useState({});
   const [uploading, setUploading]               = useState(false);
+  const [loadingMessage, setLoadingMessage]     = useState('');
 
   // ── Dynamic template + archive state ──
   const [templates, setTemplates]           = useState([]);
@@ -680,21 +681,20 @@ export default function LYDODocumentTemplatesScreen() {
               style={[styles.modalBtn, { backgroundColor: (addEntries[0]?.docType && addEntries[0]?.name && !uploading) ? COLORS.navy : COLORS.midGray, flex: 1.4 }]}
               disabled={!addEntries[0]?.docType || !addEntries[0]?.name || uploading}
               onPress={async () => {
+                let resultMsg = null;
+                let isSuccess = false;
                 try {
+                  setLoadingMessage('Uploading template…');
                   setUploading(true);
+                  setShowAddModal(false);
 
-                  // Get user ID directly from auth context
                   if (!authUser?.userId) {
                     throw new Error('You must be logged in to create a template');
                   }
 
                   const lydoUserId = authUser.userId;
-                  console.log('LYDO User ID from auth:', lydoUserId);
-                  console.log('User email:', authUser.email);
-
                   const allowedCategories = ['planning', 'budgeting', 'financial_records', 'monitoring_evaluation'];
 
-                  // Block if any entry's docType already exists in active templates
                   const existingDocTypes = new Set(
                     templates.filter(t => t.status !== 'Archived').map(t => t.documentType).filter(Boolean)
                   );
@@ -703,21 +703,17 @@ export default function LYDODocumentTemplatesScreen() {
                     throw new Error(`"${duplicate.docType}" already exists. Use Replace instead.`);
                   }
 
-                  // Build insert data for all entries
                   const insertRows = [];
                   for (const entry of addEntries) {
                     if (!entry.name || !entry.docType) continue;
-
                     let fileUrl = '';
                     if (entry.file?.uri) {
                       fileUrl = await uploadFileToStorage(entry.file, entry.name);
                     }
-
                     const categoryValue = entry.docCategory || 'planning';
                     if (!allowedCategories.includes(categoryValue)) {
                       throw new Error('Invalid category for "' + entry.name + '"');
                     }
-
                     insertRows.push({
                       title: entry.name.trim(),
                       description: '',
@@ -730,23 +726,13 @@ export default function LYDODocumentTemplatesScreen() {
                     });
                   }
 
-                  console.log('===== INSERTING TEMPLATES =====');
-                  console.log('Rows:', JSON.stringify(insertRows, null, 2));
-
                   const { error: insertError, data: insertedData } = await supabase
                     .from('templates')
                     .insert(insertRows)
                     .select();
 
-                  if (insertError) {
-                    console.error('Insert FAILED:', insertError);
-                    throw new Error('Failed to create template: ' + insertError.message);
-                  }
+                  if (insertError) throw new Error('Failed to create template: ' + insertError.message);
 
-                  console.log('Templates inserted successfully:', insertedData);
-                  Alert.alert('Success', `${insertRows.length} template${insertRows.length > 1 ? 's' : ''} created successfully!`);
-
-                  // Refresh data
                   const { data: newData } = await supabase
                     .from('templates')
                     .select('*')
@@ -766,13 +752,19 @@ export default function LYDODocumentTemplatesScreen() {
                         fileUrl: t.file_url,
                       })));
                   }
+
+                  isSuccess = true;
+                  resultMsg = `${insertRows.length} template${insertRows.length > 1 ? 's' : ''} created successfully!`;
                 } catch (err) {
                   console.error('Error creating template:', err);
-                  Alert.alert('Error', err.message || 'Failed to create template');
+                  isSuccess = false;
+                  resultMsg = err.message || 'Failed to create template';
                 } finally {
-                  setUploading(false);
-                  setShowAddModal(false);
                   resetAddModal();
+                  setUploading(false);
+                  setTimeout(() => {
+                    Alert.alert(isSuccess ? 'Success' : 'Error', resultMsg);
+                  }, 500);
                 }
               }}
             >
@@ -1006,35 +998,35 @@ export default function LYDODocumentTemplatesScreen() {
                 style={[styles.modalBtn, { backgroundColor: (checkedCount > 0 && !uploading) ? COLORS.navy : COLORS.midGray, flex: 1 }]}
                 disabled={checkedCount === 0 || uploading}
                 onPress={async () => {
+                  let resultMsg = null;
+                  let isSuccess = false;
                   try {
                     if (!authUser?.userId) {
                       throw new Error('You must be logged in to replace templates');
                     }
                     const lydoUserId = authUser.userId;
+                    setLoadingMessage('Replacing template…');
                     setUploading(true);
+                    setShowReplaceModal(false);
+                    setDropdownOpen(false);
 
                     for (const templateId of Object.keys(checkedTemplates)) {
                       if (!checkedTemplates[templateId]) continue;
 
-                      // Get current template
                       const currentTemplate = templates.find(t => t.id === templateId);
                       if (!currentTemplate) continue;
 
-                      // Upload new file (if provided), otherwise keep the existing file URL
                       let fileUrl = currentTemplate.fileUrl || 'no_file_attached';
                       if (uploadedFiles[templateId]?.uri) {
                         const uploaded = await uploadFileToStorage(uploadedFiles[templateId], currentTemplate.name);
                         if (uploaded) fileUrl = uploaded;
                       }
 
-                      // Archive the old template
                       await supabase
                         .from('templates')
                         .update({ status: 'archived' })
                         .eq('template_id', parseInt(templateId));
 
-                      // Insert new version
-                      console.log('Replace - User ID:', lydoUserId);
                       await supabase.from('templates').insert({
                         title: currentTemplate.name,
                         description: '',
@@ -1048,7 +1040,6 @@ export default function LYDODocumentTemplatesScreen() {
                       });
                     }
 
-                    // Refresh templates + archive records from latest DB state
                     const { data: newData } = await supabase
                       .from('templates')
                       .select('*')
@@ -1082,16 +1073,19 @@ export default function LYDODocumentTemplatesScreen() {
                     }
 
                     const count = Object.values(checkedTemplates).filter(Boolean).length;
-                    Alert.alert('Success', `${count} template${count > 1 ? 's' : ''} replaced successfully!`);
+                    isSuccess = true;
+                    resultMsg = `${count} template${count > 1 ? 's' : ''} replaced successfully!`;
                   } catch (err) {
                     console.error('Error replacing templates:', err);
-                    Alert.alert('Error', err.message || 'Failed to replace template');
+                    isSuccess = false;
+                    resultMsg = err.message || 'Failed to replace template';
                   } finally {
-                    setUploading(false);
-                    setShowReplaceModal(false);
                     setCheckedTemplates({});
                     setUploadedFiles({});
-                    setDropdownOpen(false);
+                    setUploading(false);
+                    setTimeout(() => {
+                      Alert.alert(isSuccess ? 'Success' : 'Error', resultMsg);
+                    }, 500);
                   }
                 }}
               >
@@ -1172,21 +1166,22 @@ export default function LYDODocumentTemplatesScreen() {
               }]}
               disabled={forwardCheckedCount === 0}
               onPress={async () => {
+                let resultMsg = null;
+                let isSuccess = false;
                 try {
-                  // Get current user from auth context
                   if (!authUser?.userId) {
                     throw new Error('You must be logged in to forward templates');
                   }
 
                   const lydoUserId = authUser.userId;
-                  console.log('Forward - User ID:', lydoUserId);
+                  setLoadingMessage('Forwarding templates…');
+                  setUploading(true);
+                  setShowForwardModal(false);
 
-                  // Get all barangays
                   const { data: barangays } = await supabase
                     .from('barangays')
                     .select('barangay_id');
 
-                  // Distribute selected templates to all barangays
                   for (const templateId of Object.keys(forwardChecked)) {
                     if (!forwardChecked[templateId]) continue;
 
@@ -1200,17 +1195,26 @@ export default function LYDODocumentTemplatesScreen() {
                     }
                   }
 
-                  // Refresh distributions
                   const { data: newDist } = await supabase
                     .from('template_distributions')
                     .select('*');
 
                   if (newDist) setDistributions(newDist);
+
+                  const count = Object.values(forwardChecked).filter(Boolean).length;
+                  isSuccess = true;
+                  resultMsg = `${count} template${count > 1 ? 's' : ''} forwarded to all barangays successfully!`;
                 } catch (err) {
                   console.error('Error forwarding templates:', err);
+                  isSuccess = false;
+                  resultMsg = err.message || 'Failed to forward templates';
+                } finally {
+                  setForwardChecked({});
+                  setUploading(false);
+                  setTimeout(() => {
+                    Alert.alert(isSuccess ? 'Success' : 'Error', resultMsg);
+                  }, 500);
                 }
-                setShowForwardModal(false);
-                setForwardChecked({});
               }}
             >
               <Text style={{ color: COLORS.white, fontWeight: '700' }}>Forward</Text>
@@ -1460,6 +1464,29 @@ export default function LYDODocumentTemplatesScreen() {
     </ScrollView>
   );
 
+  const renderLoadingOverlay = () => (
+    <Modal visible={uploading} transparent animationType="fade">
+      <View style={{
+        flex: 1, backgroundColor: 'rgba(0,0,0,0.45)',
+        justifyContent: 'center', alignItems: 'center',
+      }}>
+        <View style={{
+          backgroundColor: COLORS.white, borderRadius: 18,
+          paddingVertical: 32, paddingHorizontal: 40,
+          alignItems: 'center', minWidth: 220,
+          shadowColor: '#000', shadowOffset: { width: 0, height: 8 },
+          shadowOpacity: 0.18, shadowRadius: 20, elevation: 10,
+        }}>
+          <ActivityIndicator size="large" color={COLORS.navy} />
+          <Text style={{
+            marginTop: 18, fontSize: 15, fontWeight: '700',
+            color: COLORS.darkText, textAlign: 'center',
+          }}>{loadingMessage}</Text>
+        </View>
+      </View>
+    </Modal>
+  );
+
   return (
     <SafeAreaView style={styles.safe}>
       <StatusBar barStyle="light-content" backgroundColor={COLORS.navy} />
@@ -1469,6 +1496,7 @@ export default function LYDODocumentTemplatesScreen() {
       {renderDetailModal()}
       {renderReplaceModal()}
       {renderForwardModal()}
+      {renderLoadingOverlay()}
 
       <View style={styles.layout}>
         {/* Mobile Sidebar Overlay */}
