@@ -13,6 +13,7 @@ import {
   Image,
   ActivityIndicator,
   Alert,
+  Linking,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useNav } from './navContext';
@@ -831,7 +832,26 @@ export default function LYDODocumentTemplatesScreen() {
             >
               <Text style={[styles.actionBtnText, { color: '#3AAA5C' }]}>→ Forward</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={[styles.actionBtn, { backgroundColor: '#FDF0E6' }]}>
+            <TouchableOpacity
+              style={[styles.actionBtn, { backgroundColor: '#FDF0E6' }]}
+              onPress={async () => {
+                const url = selectedTemplate?.fileUrl;
+                if (!url || url === 'no_file_attached') {
+                  Alert.alert('No File', 'This template has no file attached.');
+                  return;
+                }
+                try {
+                  const supported = await Linking.canOpenURL(url);
+                  if (supported) {
+                    await Linking.openURL(url);
+                  } else {
+                    Alert.alert('Error', 'Unable to open this file URL.');
+                  }
+                } catch (err) {
+                  Alert.alert('Error', 'Failed to open file: ' + err.message);
+                }
+              }}
+            >
               <Text style={[styles.actionBtnText, { color: '#E87A30' }]}>⬇ Download</Text>
             </TouchableOpacity>
           </View>
