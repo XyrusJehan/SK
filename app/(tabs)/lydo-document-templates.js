@@ -12,11 +12,14 @@ import {
   Modal,
   Image,
   ActivityIndicator,
+  Alert,
+  Linking,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useNav } from './navContext';
 import { useAuth } from './authContext';
 import { supabase } from '../../utils/supabase';
+import * as DocumentPicker from 'expo-document-picker';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const isMobile = SCREEN_WIDTH < 768;
@@ -53,10 +56,58 @@ const FILTER_OPTIONS = ['All', 'Currently in use',];
 const CATEGORY_FILTERS = ['All Categories', 'planning', 'budgeting', 'financial_records', 'monitoring_evaluation'];
 const CATEGORY_DISPLAY = {
   'planning': 'Planning',
-  'budgeting': 'Budgeting',
-  'financial_records': 'Financial',
-  'monitoring_evaluation': 'Monitoring & Evaluation',
+  'budgeting': 'Budgetary and Financial',
+  'financial_records': 'Reporting and Transparency',
+  'monitoring_evaluation': 'Legislative and Administrative',
 };
+
+// Category options for Add modal dropdown
+const CATEGORY_OPTIONS = [
+  { id: 'planning', name: 'Planning' },
+  { id: 'budgeting', name: 'Budgetary and Financial' },
+  { id: 'financial_records', name: 'Reporting and Transparency' },
+  { id: 'monitoring_evaluation', name: 'Legislative and Administrative' },
+];
+
+// Document types grouped by category — selecting a type auto-fills the category
+const DOCUMENT_TYPES = [
+  {
+    categoryId: 'planning',
+    categoryName: 'Planning Templates',
+    types: [
+      'Comprehensive Barangay Youth Development Plan (CBYDP)',
+      'Annual Barangay Youth Investment Program (ABYIP)',
+    ],
+  },
+  {
+    categoryId: 'budgeting',
+    categoryName: 'Budgetary and Financial Templates',
+    types: [
+      'SK Annual Budget',
+      'SK Supplemental Budget',
+      'Registry of Cash Receipts and Deposits (RCRD)',
+      'Registry of Cash Disbursements (RCD)',
+    ],
+  },
+  {
+    categoryId: 'financial_records',
+    categoryName: 'Reporting and Transparency Templates',
+    types: [
+      'Monthly/Quarterly Accomplishment Report',
+      'SK Full Disclosure Policy (SKFDP) Postings',
+    ],
+  },
+  {
+    categoryId: 'monitoring_evaluation',
+    categoryName: 'Legislative and Administrative Templates',
+    types: [
+      'Internal Rules of Procedure (IRP)',
+      'SK Resolution',
+      'Minutes of the Meeting',
+      'Katipunan ng Kabataan (KK) Assembly Minutes',
+    ],
+  },
+];
 
 // ─── ICON COMPONENTS ──────────────────────────────────────────────────────────
 const BellIcon = ({ hasNotif }) => (
@@ -132,7 +183,7 @@ const TemplateRow = ({ item, onPress }) => (
 export default function LYDODocumentTemplatesScreen() {
   const router = useRouter();
   const { activeTab, setActiveTab } = useNav();
-  const { logout } = useAuth();
+  const { logout, user: authUser } = useAuth();
 
   const [searchText, setSearchText]             = useState('');
   const [activeFilter, setActiveFilter]         = useState('All');
@@ -146,8 +197,9 @@ export default function LYDODocumentTemplatesScreen() {
   const dropdownBtnRef                                  = useRef(null);
   const [showAddModal, setShowAddModal]         = useState(false);
   const [addDocType, setAddDocType]             = useState('');
+  const [addCategory, setAddCategory]           = useState('');
   const [addDocTypeOpen, setAddDocTypeOpen]     = useState(false);
-  const [addEntries, setAddEntries]             = useState([{ id: 1, name: '', file: null }]);
+  const [addEntries, setAddEntries]             = useState([{ id: 1, name: '', file: null, docType: '', docCategory: '', docTypeOpen: false }]);
   const [selectedTemplate, setSelectedTemplate] = useState(null);
   const [showReplaceModal, setShowReplaceModal] = useState(false);
   const [checkedTemplates, setCheckedTemplates] = useState({});
@@ -155,6 +207,8 @@ export default function LYDODocumentTemplatesScreen() {
   const [uploadedFiles, setUploadedFiles]       = useState({});
   const [showForwardModal, setShowForwardModal] = useState(false);
   const [forwardChecked, setForwardChecked]     = useState({});
+  const [uploading, setUploading]               = useState(false);
+  const [loadingMessage, setLoadingMessage]     = useState('');
 
   // ── Dynamic template + archive state ──
   const [templates, setTemplates]           = useState([]);
@@ -197,6 +251,7 @@ export default function LYDODocumentTemplatesScreen() {
               name: t.title,
               status: t.status === 'active' ? 'Active' : t.status === 'draft' ? 'Draft' : 'Archived',
               category: t.template_category,
+              documentType: t.document_type,
               version: t.version || 1,
               updatedAt: t.created_at ? new Date(t.created_at).toISOString().slice(0, 10) : '',
               replacesId: t.replaces_id,
@@ -366,12 +421,82 @@ export default function LYDODocumentTemplatesScreen() {
   );
 
   // ── Add Template Modal ──
-  const DOC_TYPE_OPTIONS = templates.filter(t => t.status !== 'Archived').map(t => t.name);
 
   const resetAddModal = () => {
     setAddDocType('');
+    setAddCategory('');
     setAddDocTypeOpen(false);
-    setAddEntries([{ id: Date.now(), name: '', file: null }]);
+    setAddEntries([{ id: Date.now(), name: '', file: null, docType: '', docCategory: '', docTypeOpen: false }]);
+    setUploading(false);
+  };
+
+  // File picker function
+  const pickDocument = async (entryId) => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'],
+        copyToCacheDirectory: true,
+      });
+
+      if (result.canceled) {
+        return;
+      }
+
+      const file = result.assets[0];
+      console.log('File picked:', file.name, file.uri, file.mimeType);
+      setAddEntries(prev => prev.map(e =>
+        e.id === entryId ? { ...e, file: { uri: file.uri, name: file.name, type: file.mimeType || 'application/octet-stream' } } : e
+      ));
+    } catch (error) {
+      console.error('Error picking document:', error);
+      Alert.alert('Error', 'Failed to pick document');
+    }
+  };
+
+  // Upload file to Supabase storage
+  const uploadFileToStorage = async (file, templateTitle) => {
+    if (!file || !file.uri) {
+      console.log('No file to upload');
+      return '';
+    }
+
+    try {
+      const sanitizedName = file.name.replace(/[^\w\s.-]/g, '').replace(/\s+/g, '_');
+      const fileName = `${Date.now()}_${sanitizedName}`;
+
+      console.log('Uploading file:', file.name);
+      console.log('File URI:', file.uri);
+
+      const response = await fetch(file.uri);
+      const blob = await response.blob();
+
+      console.log('Uploading to bucket: templates, size:', blob.size);
+
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from('templates')
+        .upload(fileName, blob, {
+          contentType: file.type || 'application/octet-stream',
+        });
+
+      if (uploadError) {
+        console.error('Upload error:', uploadError);
+        Alert.alert('Upload Error', uploadError.message);
+        return '';
+      }
+
+      console.log('Upload success:', uploadData);
+
+      const { data: urlData } = supabase.storage
+        .from('templates')
+        .getPublicUrl(fileName);
+
+      console.log('File URL:', urlData.publicUrl);
+      return urlData.publicUrl;
+    } catch (error) {
+      console.error('Error uploading file:', error);
+      Alert.alert('Error', 'Failed to upload file');
+      return '';
+    }
   };
 
   const renderAddModal = () => (
@@ -402,54 +527,102 @@ export default function LYDODocumentTemplatesScreen() {
             onStartShouldSetResponder={() => true}
           >
 
-            {/* Document Type Dropdown */}
-            <Text style={styles.replaceLabel}>Document Type</Text>
-            <TouchableOpacity
-              style={[styles.dropdownTrigger, addDocTypeOpen && styles.dropdownTriggerOpen]}
-              onPress={() => setAddDocTypeOpen(v => !v)}
-              activeOpacity={0.8}
-            >
-              <Text style={[styles.dropdownTriggerText, !addDocType && { color: COLORS.midGray }]} numberOfLines={1}>
-                {addDocType || 'Select document type…'}
-              </Text>
-              <Text style={styles.dropdownCaret}>{addDocTypeOpen ? '▲' : '▼'}</Text>
-            </TouchableOpacity>
-
-            {addDocTypeOpen && (
-              <View style={styles.checklistPanel}>
-                {DOC_TYPE_OPTIONS.map((opt, idx) => (
-                  <View key={opt}>
-                    <TouchableOpacity
-                      style={styles.checklistRow}
-                      onPress={() => {
-                        setAddDocType(opt);
-                        setAddDocTypeOpen(false);
-                        // auto-fill the first entry name if empty
-                        setAddEntries(prev => prev.map((e, i) =>
-                          i === 0 && !e.name ? { ...e, name: opt } : e
-                        ));
-                      }}
-                      activeOpacity={0.7}
-                    >
-                      <View style={[styles.checkbox, addDocType === opt && styles.checkboxChecked]}>
-                        {addDocType === opt && <Text style={styles.checkmark}>✓</Text>}
-                      </View>
-                      <Text style={styles.checklistText} numberOfLines={2}>{opt}</Text>
-                    </TouchableOpacity>
-                    {idx < DOC_TYPE_OPTIONS.length - 1 && <View style={styles.checklistDivider} />}
-                  </View>
-                ))}
-              </View>
-            )}
-
             {/* Entries */}
             {addEntries.map((entry, idx) => (
-              <View key={entry.id} style={idx > 0 ? { marginTop: 16 } : { marginTop: 14 }}>
+              <View key={entry.id} style={idx > 0 ? { marginTop: 16 } : { marginTop: 4 }}>
+
+                {/* Divider for additional entries */}
+                {idx > 0 && (
+                  <View style={{ height: 1, backgroundColor: COLORS.lightGray, marginBottom: 14 }} />
+                )}
+
+                {/* Document Type per entry */}
+                <Text style={styles.replaceLabel}>Document Type</Text>
+                <TouchableOpacity
+                  style={[styles.dropdownTrigger, entry.docTypeOpen && styles.dropdownTriggerOpen]}
+                  onPress={() =>
+                    setAddEntries(prev => prev.map(e =>
+                      e.id === entry.id
+                        ? { ...e, docTypeOpen: !e.docTypeOpen }
+                        : { ...e, docTypeOpen: false }
+                    ))
+                  }
+                  activeOpacity={0.8}
+                >
+                  <Text style={[styles.dropdownTriggerText, !entry.docType && { color: COLORS.midGray }]} numberOfLines={1}>
+                    {entry.docType || 'Select document type…'}
+                  </Text>
+                  <Text style={styles.dropdownCaret}>{entry.docTypeOpen ? '▲' : '▼'}</Text>
+                </TouchableOpacity>
+
+                {/* Auto-filled category badge */}
+                {entry.docCategory !== '' && !entry.docTypeOpen && (
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 6, marginBottom: 2 }}>
+                    <Text style={{ fontSize: 11, color: COLORS.subText }}>Category:</Text>
+                    <View style={{
+                      backgroundColor: '#EEF2FB', borderRadius: 6,
+                      paddingHorizontal: 8, paddingVertical: 3,
+                      borderWidth: 1, borderColor: '#BBC8E6',
+                    }}>
+                      <Text style={{ fontSize: 11, fontWeight: '700', color: COLORS.navy }}>
+                        {CATEGORY_DISPLAY[entry.docCategory] || entry.docCategory}
+                      </Text>
+                    </View>
+                  </View>
+                )}
+
+                {entry.docTypeOpen && (
+                  <View style={[styles.checklistPanel, { maxHeight: 220 }]}>
+                    <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" nestedScrollEnabled={true}>
+                      {(() => {
+                        const existingTypes = new Set(
+                          templates.filter(t => t.status !== 'Archived').map(t => t.documentType).filter(Boolean)
+                        );
+                        const takenByOtherEntries = new Set(
+                          addEntries.filter(e => e.id !== entry.id && e.docType).map(e => e.docType)
+                        );
+                        const available = DOCUMENT_TYPES.flatMap(g =>
+                          g.types.map(t => ({ docType: t, categoryId: g.categoryId }))
+                        ).filter(item => !existingTypes.has(item.docType) && !takenByOtherEntries.has(item.docType));
+
+                        if (available.length === 0) {
+                          return (
+                            <View style={{ padding: 16, alignItems: 'center' }}>
+                              <Text style={{ fontSize: 13, color: COLORS.midGray }}>All document types already exist</Text>
+                            </View>
+                          );
+                        }
+                        return available.map((item, i) => (
+                          <View key={item.docType}>
+                            <TouchableOpacity
+                              style={styles.checklistRow}
+                              onPress={() =>
+                                setAddEntries(prev => prev.map(e =>
+                                  e.id === entry.id
+                                    ? { ...e, docType: item.docType, docCategory: item.categoryId, docTypeOpen: false }
+                                    : e
+                                ))
+                              }
+                              activeOpacity={0.7}
+                            >
+                              <View style={[styles.checkbox, entry.docType === item.docType && styles.checkboxChecked]}>
+                                {entry.docType === item.docType && <Text style={styles.checkmark}>✓</Text>}
+                              </View>
+                              <Text style={styles.checklistText} numberOfLines={2}>{item.docType}</Text>
+                            </TouchableOpacity>
+                            {i < available.length - 1 && <View style={styles.checklistDivider} />}
+                          </View>
+                        ));
+                      })()}
+                    </ScrollView>
+                  </View>
+                )}
+
                 {/* Template Name */}
-                <Text style={styles.replaceLabel}>Template Name</Text>
+                <Text style={[styles.replaceLabel, { marginTop: 10 }]}>Template Name</Text>
                 <TextInput
                   style={styles.addNameInput}
-                  placeholder={addDocType || 'Template name…'}
+                  placeholder="Template name…"
                   placeholderTextColor={COLORS.midGray}
                   value={entry.name}
                   onChangeText={text =>
@@ -461,16 +634,12 @@ export default function LYDODocumentTemplatesScreen() {
                 <TouchableOpacity
                   style={[styles.uploadBox, entry.file && styles.uploadBoxDone, { marginTop: 8 }]}
                   activeOpacity={0.75}
-                  onPress={() =>
-                    setAddEntries(prev => prev.map(e =>
-                      e.id === entry.id ? { ...e, file: `${entry.name || addDocType || 'template'}.docx` } : e
-                    ))
-                  }
+                  onPress={() => pickDocument(entry.id)}
                 >
                   {entry.file ? (
                     <>
                       <Text style={styles.uploadDoneIcon}>✓</Text>
-                      <Text style={styles.uploadDoneText} numberOfLines={1}>{entry.file}</Text>
+                      <Text style={styles.uploadDoneText} numberOfLines={1}>{entry.file.name}</Text>
                       <TouchableOpacity onPress={() =>
                         setAddEntries(prev => prev.map(e => e.id === entry.id ? { ...e, file: null } : e))
                       }>
@@ -480,7 +649,7 @@ export default function LYDODocumentTemplatesScreen() {
                   ) : (
                     <>
                       <Text style={styles.uploadIcon}>⬆</Text>
-                      <Text style={styles.uploadText}>Upload  Here</Text>
+                      <Text style={styles.uploadText}>Upload Here</Text>
                     </>
                   )}
                 </TouchableOpacity>
@@ -491,7 +660,7 @@ export default function LYDODocumentTemplatesScreen() {
             <View style={{ alignItems: 'flex-end', marginTop: 12 }}>
               <TouchableOpacity
                 style={styles.addEntryBtn}
-                onPress={() => setAddEntries(prev => [...prev, { id: Date.now(), name: addDocType, file: null }])}
+                onPress={() => setAddEntries(prev => [...prev, { id: Date.now(), name: '', file: null, docType: '', docCategory: '', docTypeOpen: false }])}
                 activeOpacity={0.8}
               >
                 <Text style={styles.addEntryBtnText}>＋</Text>
@@ -509,62 +678,97 @@ export default function LYDODocumentTemplatesScreen() {
               <Text style={{ color: COLORS.darkText, fontWeight: '600' }}>Cancel</Text>
             </TouchableOpacity>
             <TouchableOpacity
-              style={[styles.modalBtn, { backgroundColor: addDocType ? COLORS.navy : COLORS.midGray, flex: 1.4 }]}
-              disabled={!addDocType}
+              style={[styles.modalBtn, { backgroundColor: (addEntries[0]?.docType && addEntries[0]?.name && !uploading) ? COLORS.navy : COLORS.midGray, flex: 1.4 }]}
+              disabled={!addEntries[0]?.docType || !addEntries[0]?.name || uploading}
               onPress={async () => {
+                let resultMsg = null;
+                let isSuccess = false;
                 try {
-                  const { data: userData } = await supabase.auth.getUser();
-                  const userId = userData?.user?.id;
+                  setLoadingMessage('Uploading template…');
+                  setUploading(true);
+                  setShowAddModal(false);
 
-                  // Get user_id from users table
-                  let lydoUserId = null;
-                  if (userId) {
-                    const { data: userRecord } = await supabase
-                      .from('users')
-                      .select('user_id')
-                      .eq('auth_id', userId)
-                      .single();
-                    lydoUserId = userRecord?.user_id;
+                  if (!authUser?.userId) {
+                    throw new Error('You must be logged in to create a template');
                   }
 
-                  // Insert template
-                  const { error } = await supabase.from('templates').insert({
-                    title: addDocType,
-                    description: '',
-                    file_url: addEntries[0]?.file || 'template.docx',
-                    status: 'draft',
-                    template_category: 'planning',
-                    document_type: addDocType,
-                    uploaded_by: lydoUserId,
-                    version: 1,
-                  });
+                  const lydoUserId = authUser.userId;
+                  const allowedCategories = ['planning', 'budgeting', 'financial_records', 'monitoring_evaluation'];
 
-                  if (error) throw error;
+                  const existingDocTypes = new Set(
+                    templates.filter(t => t.status !== 'Archived').map(t => t.documentType).filter(Boolean)
+                  );
+                  const duplicate = addEntries.find(e => e.docType && existingDocTypes.has(e.docType));
+                  if (duplicate) {
+                    throw new Error(`"${duplicate.docType}" already exists. Use Replace instead.`);
+                  }
 
-                  // Refresh data
+                  const insertRows = [];
+                  for (const entry of addEntries) {
+                    if (!entry.name || !entry.docType) continue;
+                    let fileUrl = '';
+                    if (entry.file?.uri) {
+                      fileUrl = await uploadFileToStorage(entry.file, entry.name);
+                    }
+                    const categoryValue = entry.docCategory || 'planning';
+                    if (!allowedCategories.includes(categoryValue)) {
+                      throw new Error('Invalid category for "' + entry.name + '"');
+                    }
+                    insertRows.push({
+                      title: entry.name.trim(),
+                      description: '',
+                      file_url: fileUrl || 'no_file_attached',
+                      status: 'active',
+                      template_category: categoryValue,
+                      document_type: entry.docType,
+                      uploaded_by: lydoUserId,
+                      version: 1,
+                    });
+                  }
+
+                  const { error: insertError, data: insertedData } = await supabase
+                    .from('templates')
+                    .insert(insertRows)
+                    .select();
+
+                  if (insertError) throw new Error('Failed to create template: ' + insertError.message);
+
                   const { data: newData } = await supabase
                     .from('templates')
                     .select('*')
                     .order('created_at', { ascending: false });
 
                   if (newData) {
-                    setTemplates(newData.map(t => ({
-                      id: t.template_id.toString(),
-                      name: t.title,
-                      status: t.status === 'active' ? 'Active' : 'Draft',
-                      category: t.template_category,
-                      version: t.version || 1,
-                      updatedAt: t.created_at ? new Date(t.created_at).toISOString().slice(0, 10) : '',
-                    })));
+                    setTemplates(newData
+                      .filter(t => t.status !== 'archived')
+                      .map(t => ({
+                        id: t.template_id.toString(),
+                        name: t.title,
+                        status: t.status === 'active' ? 'Active' : t.status === 'draft' ? 'Draft' : 'Archived',
+                        category: t.template_category,
+                        documentType: t.document_type,
+                        version: t.version || 1,
+                        updatedAt: t.created_at ? new Date(t.created_at).toISOString().slice(0, 10) : '',
+                        fileUrl: t.file_url,
+                      })));
                   }
+
+                  isSuccess = true;
+                  resultMsg = `${insertRows.length} template${insertRows.length > 1 ? 's' : ''} created successfully!`;
                 } catch (err) {
                   console.error('Error creating template:', err);
+                  isSuccess = false;
+                  resultMsg = err.message || 'Failed to create template';
+                } finally {
+                  resetAddModal();
+                  setUploading(false);
+                  setTimeout(() => {
+                    Alert.alert(isSuccess ? 'Success' : 'Error', resultMsg);
+                  }, 500);
                 }
-                setShowAddModal(false);
-                resetAddModal();
               }}
             >
-              <Text style={{ color: COLORS.white, fontWeight: '700' }}>Upload as Draft</Text>
+              <Text style={{ color: COLORS.white, fontWeight: '700' }}>{uploading ? 'Uploading...' : 'Upload'}</Text>
             </TouchableOpacity>
           </View>
 
@@ -594,13 +798,52 @@ export default function LYDODocumentTemplatesScreen() {
           <Text style={styles.modalLabel}>Category: <Text style={styles.modalValue}>{getDisplayCategory(selectedTemplate?.category)}</Text></Text>
 
           <View style={styles.actionRow}>
-            <TouchableOpacity style={[styles.actionBtn, { backgroundColor: '#EAF0FB' }]}>
+            <TouchableOpacity
+              style={[styles.actionBtn, { backgroundColor: '#EAF0FB' }]}
+              onPress={() => {
+                setShowReplaceModal(true);
+                // Pre-select this template
+                if (selectedTemplate) {
+                  setCheckedTemplates(prev => ({ ...prev, [selectedTemplate.id]: true }));
+                }
+                setSelectedTemplate(null);
+              }}
+            >
               <Text style={[styles.actionBtnText, { color: '#5B8DD9' }]}>↔ Replace</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={[styles.actionBtn, { backgroundColor: '#E8F7EE' }]}>
+            <TouchableOpacity
+              style={[styles.actionBtn, { backgroundColor: '#E8F7EE' }]}
+              onPress={() => {
+                setShowForwardModal(true);
+                // Pre-select this template
+                if (selectedTemplate) {
+                  setForwardChecked(prev => ({ ...prev, [selectedTemplate.id]: true }));
+                }
+                setSelectedTemplate(null);
+              }}
+            >
               <Text style={[styles.actionBtnText, { color: '#3AAA5C' }]}>→ Forward</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={[styles.actionBtn, { backgroundColor: '#FDF0E6' }]}>
+            <TouchableOpacity
+              style={[styles.actionBtn, { backgroundColor: '#FDF0E6' }]}
+              onPress={async () => {
+                const url = selectedTemplate?.fileUrl;
+                if (!url || url === 'no_file_attached') {
+                  Alert.alert('No File', 'This template has no file attached.');
+                  return;
+                }
+                try {
+                  const supported = await Linking.canOpenURL(url);
+                  if (supported) {
+                    await Linking.openURL(url);
+                  } else {
+                    Alert.alert('Error', 'Unable to open this file URL.');
+                  }
+                } catch (err) {
+                  Alert.alert('Error', 'Failed to open file: ' + err.message);
+                }
+              }}
+            >
               <Text style={[styles.actionBtnText, { color: '#E87A30' }]}>⬇ Download</Text>
             </TouchableOpacity>
           </View>
@@ -700,12 +943,28 @@ export default function LYDODocumentTemplatesScreen() {
                       <TouchableOpacity
                         style={[styles.uploadBox, uploadedFiles[t.id] && styles.uploadBoxDone]}
                         activeOpacity={0.75}
-                        onPress={() => setUploadedFiles(prev => ({ ...prev, [t.id]: `${t.name}.docx` }))}
+                        onPress={async () => {
+                          try {
+                            const result = await DocumentPicker.getDocumentAsync({
+                              type: ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'],
+                              copyToCacheDirectory: true,
+                            });
+                            if (!result.canceled) {
+                              const file = result.assets[0];
+                              setUploadedFiles(prev => ({
+                                ...prev,
+                                [t.id]: { uri: file.uri, name: file.name, type: file.mimeType || 'application/octet-stream' },
+                              }));
+                            }
+                          } catch (err) {
+                            Alert.alert('Error', 'Failed to pick file');
+                          }
+                        }}
                       >
                         {uploadedFiles[t.id] ? (
                           <>
                             <Text style={styles.uploadDoneIcon}>✓</Text>
-                            <Text style={styles.uploadDoneText} numberOfLines={1}>{uploadedFiles[t.id]}</Text>
+                            <Text style={styles.uploadDoneText} numberOfLines={1}>{uploadedFiles[t.id].name}</Text>
                             <TouchableOpacity onPress={() => setUploadedFiles(prev => { const n = {...prev}; delete n[t.id]; return n; })}>
                               <Text style={styles.uploadRemove}>✕</Text>
                             </TouchableOpacity>
@@ -713,7 +972,7 @@ export default function LYDODocumentTemplatesScreen() {
                         ) : (
                           <>
                             <Text style={styles.uploadIcon}>⬆</Text>
-                            <Text style={styles.uploadText}>Upload Here</Text>
+                            <Text style={styles.uploadText}>Upload New Version</Text>
                           </>
                         )}
                       </TouchableOpacity>
@@ -736,76 +995,101 @@ export default function LYDODocumentTemplatesScreen() {
                 <Text style={{ color: COLORS.darkText, fontWeight: '600' }}>Cancel</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[styles.modalBtn, { backgroundColor: checkedCount > 0 ? COLORS.navy : COLORS.midGray, flex: 1 }]}
-                disabled={checkedCount === 0}
+                style={[styles.modalBtn, { backgroundColor: (checkedCount > 0 && !uploading) ? COLORS.navy : COLORS.midGray, flex: 1 }]}
+                disabled={checkedCount === 0 || uploading}
                 onPress={async () => {
+                  let resultMsg = null;
+                  let isSuccess = false;
                   try {
-                    const today = new Date().toISOString().slice(0, 10);
+                    if (!authUser?.userId) {
+                      throw new Error('You must be logged in to replace templates');
+                    }
+                    const lydoUserId = authUser.userId;
+                    setLoadingMessage('Replacing template…');
+                    setUploading(true);
+                    setShowReplaceModal(false);
+                    setDropdownOpen(false);
 
                     for (const templateId of Object.keys(checkedTemplates)) {
                       if (!checkedTemplates[templateId]) continue;
 
-                      // Get current template
                       const currentTemplate = templates.find(t => t.id === templateId);
                       if (!currentTemplate) continue;
 
-                      // Update old template status to archived
+                      let fileUrl = currentTemplate.fileUrl || 'no_file_attached';
+                      if (uploadedFiles[templateId]?.uri) {
+                        const uploaded = await uploadFileToStorage(uploadedFiles[templateId], currentTemplate.name);
+                        if (uploaded) fileUrl = uploaded;
+                      }
+
                       await supabase
                         .from('templates')
                         .update({ status: 'archived' })
                         .eq('template_id', parseInt(templateId));
 
-                      // Create new version
-                      const { data: userData } = await supabase.auth.getUser();
-                      let lydoUserId = null;
-                      if (userData?.user?.id) {
-                        const { data: userRecord } = await supabase
-                          .from('users')
-                          .select('user_id')
-                          .eq('auth_id', userData.user.id)
-                          .single();
-                        lydoUserId = userRecord?.user_id;
-                      }
-
                       await supabase.from('templates').insert({
                         title: currentTemplate.name,
                         description: '',
-                        file_url: uploadedFiles[templateId] || `${currentTemplate.name}.docx`,
+                        file_url: fileUrl,
                         status: 'active',
                         template_category: currentTemplate.category,
-                        document_type: currentTemplate.name,
+                        document_type: currentTemplate.documentType,
                         uploaded_by: lydoUserId,
                         version: (currentTemplate.version || 1) + 1,
                         replaces_id: parseInt(templateId),
                       });
                     }
 
-                    // Refresh templates
                     const { data: newData } = await supabase
                       .from('templates')
                       .select('*')
                       .order('created_at', { ascending: false });
 
                     if (newData) {
-                      setTemplates(newData.map(t => ({
-                        id: t.template_id.toString(),
-                        name: t.title,
-                        status: t.status === 'active' ? 'Active' : t.status === 'draft' ? 'Draft' : 'Archived',
-                        category: t.template_category,
-                        version: t.version || 1,
-                        updatedAt: t.created_at ? new Date(t.created_at).toISOString().slice(0, 10) : '',
-                      })));
+                      setTemplates(newData
+                        .filter(t => t.status !== 'archived')
+                        .map(t => ({
+                          id: t.template_id.toString(),
+                          name: t.title,
+                          status: t.status === 'active' ? 'Active' : t.status === 'draft' ? 'Draft' : 'Archived',
+                          category: t.template_category,
+                          documentType: t.document_type,
+                          version: t.version || 1,
+                          updatedAt: t.created_at ? new Date(t.created_at).toISOString().slice(0, 10) : '',
+                          fileUrl: t.file_url,
+                        })));
+
+                      setArchiveRecords(newData
+                        .filter(t => t.status === 'archived')
+                        .map(t => ({
+                          id: `arch-${t.template_id}`,
+                          templateId: t.template_id.toString(),
+                          name: t.title,
+                          version: t.version || 1,
+                          archivedAt: t.created_at ? new Date(t.created_at).toISOString().slice(0, 10) : '',
+                          archivedReason: 'Replaced by newer version',
+                          category: t.template_category,
+                        })));
                     }
+
+                    const count = Object.values(checkedTemplates).filter(Boolean).length;
+                    isSuccess = true;
+                    resultMsg = `${count} template${count > 1 ? 's' : ''} replaced successfully!`;
                   } catch (err) {
                     console.error('Error replacing templates:', err);
+                    isSuccess = false;
+                    resultMsg = err.message || 'Failed to replace template';
+                  } finally {
+                    setCheckedTemplates({});
+                    setUploadedFiles({});
+                    setUploading(false);
+                    setTimeout(() => {
+                      Alert.alert(isSuccess ? 'Success' : 'Error', resultMsg);
+                    }, 500);
                   }
-                  setShowReplaceModal(false);
-                  setCheckedTemplates({});
-                  setUploadedFiles({});
-                  setDropdownOpen(false);
                 }}
               >
-                <Text style={{ color: COLORS.white, fontWeight: '700' }}>Replace</Text>
+                <Text style={{ color: COLORS.white, fontWeight: '700' }}>{uploading ? 'Replacing…' : 'Replace'}</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -882,25 +1166,22 @@ export default function LYDODocumentTemplatesScreen() {
               }]}
               disabled={forwardCheckedCount === 0}
               onPress={async () => {
+                let resultMsg = null;
+                let isSuccess = false;
                 try {
-                  // Get current user
-                  const { data: userData } = await supabase.auth.getUser();
-                  let lydoUserId = null;
-                  if (userData?.user?.id) {
-                    const { data: userRecord } = await supabase
-                      .from('users')
-                      .select('user_id')
-                      .eq('auth_id', userData.user.id)
-                      .single();
-                    lydoUserId = userRecord?.user_id;
+                  if (!authUser?.userId) {
+                    throw new Error('You must be logged in to forward templates');
                   }
 
-                  // Get all barangays
+                  const lydoUserId = authUser.userId;
+                  setLoadingMessage('Forwarding templates…');
+                  setUploading(true);
+                  setShowForwardModal(false);
+
                   const { data: barangays } = await supabase
                     .from('barangays')
                     .select('barangay_id');
 
-                  // Distribute selected templates to all barangays
                   for (const templateId of Object.keys(forwardChecked)) {
                     if (!forwardChecked[templateId]) continue;
 
@@ -914,17 +1195,26 @@ export default function LYDODocumentTemplatesScreen() {
                     }
                   }
 
-                  // Refresh distributions
                   const { data: newDist } = await supabase
                     .from('template_distributions')
                     .select('*');
 
                   if (newDist) setDistributions(newDist);
+
+                  const count = Object.values(forwardChecked).filter(Boolean).length;
+                  isSuccess = true;
+                  resultMsg = `${count} template${count > 1 ? 's' : ''} forwarded to all barangays successfully!`;
                 } catch (err) {
                   console.error('Error forwarding templates:', err);
+                  isSuccess = false;
+                  resultMsg = err.message || 'Failed to forward templates';
+                } finally {
+                  setForwardChecked({});
+                  setUploading(false);
+                  setTimeout(() => {
+                    Alert.alert(isSuccess ? 'Success' : 'Error', resultMsg);
+                  }, 500);
                 }
-                setShowForwardModal(false);
-                setForwardChecked({});
               }}
             >
               <Text style={{ color: COLORS.white, fontWeight: '700' }}>Forward</Text>
@@ -1050,7 +1340,7 @@ export default function LYDODocumentTemplatesScreen() {
 
         {/* Action Buttons */}
         <View style={styles.actionButtonsContainer}>
-          <TouchableOpacity style={styles.addBtn} onPress={() => setShowAddModal(true)} activeOpacity={0.8}>
+          <TouchableOpacity style={styles.addBtn} onPress={() => { resetAddModal(); setShowAddModal(true); }} activeOpacity={0.8}>
             <Text style={styles.addBtnText}>+ Add</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.replaceBtn} activeOpacity={0.8} onPress={() => setShowReplaceModal(true)}>
@@ -1174,6 +1464,29 @@ export default function LYDODocumentTemplatesScreen() {
     </ScrollView>
   );
 
+  const renderLoadingOverlay = () => (
+    <Modal visible={uploading} transparent animationType="fade">
+      <View style={{
+        flex: 1, backgroundColor: 'rgba(0,0,0,0.45)',
+        justifyContent: 'center', alignItems: 'center',
+      }}>
+        <View style={{
+          backgroundColor: COLORS.white, borderRadius: 18,
+          paddingVertical: 32, paddingHorizontal: 40,
+          alignItems: 'center', minWidth: 220,
+          shadowColor: '#000', shadowOffset: { width: 0, height: 8 },
+          shadowOpacity: 0.18, shadowRadius: 20, elevation: 10,
+        }}>
+          <ActivityIndicator size="large" color={COLORS.navy} />
+          <Text style={{
+            marginTop: 18, fontSize: 15, fontWeight: '700',
+            color: COLORS.darkText, textAlign: 'center',
+          }}>{loadingMessage}</Text>
+        </View>
+      </View>
+    </Modal>
+  );
+
   return (
     <SafeAreaView style={styles.safe}>
       <StatusBar barStyle="light-content" backgroundColor={COLORS.navy} />
@@ -1183,6 +1496,7 @@ export default function LYDODocumentTemplatesScreen() {
       {renderDetailModal()}
       {renderReplaceModal()}
       {renderForwardModal()}
+      {renderLoadingOverlay()}
 
       <View style={styles.layout}>
         {/* Mobile Sidebar Overlay */}
@@ -1578,6 +1892,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14, paddingVertical: 12, gap: 12,
   },
   checklistDivider: { height: 1, backgroundColor: COLORS.lightGray, marginHorizontal: 14 },
+  categoryHeader: {
+    paddingHorizontal: 14, paddingVertical: 8,
+    backgroundColor: COLORS.offWhite, borderBottomWidth: 1,
+    borderBottomColor: COLORS.lightGray,
+  },
+  categoryHeaderText: { fontSize: 11, fontWeight: '800', color: COLORS.navy, textTransform: 'uppercase', letterSpacing: 0.5 },
   checklistText: { flex: 1, fontSize: 13, color: COLORS.darkText, lineHeight: 18 },
   checkbox: {
     width: 20, height: 20, borderRadius: 5,
