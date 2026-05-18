@@ -20,6 +20,8 @@ import { useNav } from './navContext';
 import { useAuth } from './authContext';
 import { supabase } from '../../utils/supabase';
 import * as DocumentPicker from 'expo-document-picker';
+import * as FileSystem from 'expo-file-system';
+import * as Sharing from 'expo-sharing';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const isMobile = SCREEN_WIDTH < 768;
@@ -209,6 +211,10 @@ export default function LYDODocumentTemplatesScreen() {
   const [forwardChecked, setForwardChecked]     = useState({});
   const [uploading, setUploading]               = useState(false);
   const [loadingMessage, setLoadingMessage]     = useState('');
+  const [showPreviewModal, setShowPreviewModal] = useState(false);
+  const [previewUrl, setPreviewUrl]             = useState('');
+  const [previewTitle, setPreviewTitle]         = useState('');
+  const [previewLoading, setPreviewLoading]     = useState(true);
 
   // ── Dynamic template + archive state ──
   const [templates, setTemplates]           = useState([]);
@@ -269,6 +275,7 @@ export default function LYDODocumentTemplatesScreen() {
               archivedAt: t.created_at ? new Date(t.created_at).toISOString().slice(0, 10) : '',
               archivedReason: 'Replaced by newer version',
               category: t.template_category,
+              fileUrl: t.file_url || '',
             }));
           setArchiveRecords(archivedTemplates);
         }
@@ -802,7 +809,6 @@ export default function LYDODocumentTemplatesScreen() {
               style={[styles.actionBtn, { backgroundColor: '#EAF0FB' }]}
               onPress={() => {
                 setShowReplaceModal(true);
-                // Pre-select this template
                 if (selectedTemplate) {
                   setCheckedTemplates(prev => ({ ...prev, [selectedTemplate.id]: true }));
                 }
@@ -815,7 +821,6 @@ export default function LYDODocumentTemplatesScreen() {
               style={[styles.actionBtn, { backgroundColor: '#E8F7EE' }]}
               onPress={() => {
                 setShowForwardModal(true);
-                // Pre-select this template
                 if (selectedTemplate) {
                   setForwardChecked(prev => ({ ...prev, [selectedTemplate.id]: true }));
                 }
@@ -1069,6 +1074,7 @@ export default function LYDODocumentTemplatesScreen() {
                           archivedAt: t.created_at ? new Date(t.created_at).toISOString().slice(0, 10) : '',
                           archivedReason: 'Replaced by newer version',
                           category: t.template_category,
+                          fileUrl: t.file_url || '',
                         })));
                     }
 
@@ -1223,6 +1229,66 @@ export default function LYDODocumentTemplatesScreen() {
 
         </View>
       </TouchableOpacity>
+    </Modal>
+  );
+
+  // ── Preview helper — download to cache then open with device's native viewer ──
+  const openPreview = async (url, title) => {
+    if (!url || url === 'no_file_attached') {
+      Alert.alert('No File', 'This template has no file attached.');
+      return;
+    }
+    try {
+      setPreviewTitle(title || 'Document');
+      setPreviewLoading(true);
+
+      // Derive extension from the URL path (ignore query params)
+      const ext = (url.split('?')[0].split('.').pop() || 'pdf').toLowerCase();
+      const mimeType = ext === 'pdf'
+        ? 'application/pdf'
+        : 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+      const UTI = ext === 'pdf'
+        ? 'com.adobe.pdf'
+        : 'org.openxmlformats.wordprocessingml.document';
+
+      const localUri = `${FileSystem.cacheDirectory}preview_${Date.now()}.${ext}`;
+      const { uri } = await FileSystem.downloadAsync(url, localUri);
+
+      setPreviewLoading(false);
+
+      // shareAsync opens iOS Quick Look / Android native viewer for the file
+      await Sharing.shareAsync(uri, { mimeType, UTI });
+    } catch (err) {
+      setPreviewLoading(false);
+      Alert.alert('Error', 'Failed to open document: ' + err.message);
+    }
+  };
+
+  // ── Preview loading overlay ──
+  const renderPreviewModal = () => (
+    <Modal visible={previewLoading} transparent animationType="fade">
+      <View style={{
+        flex: 1, backgroundColor: 'rgba(0,0,0,0.45)',
+        justifyContent: 'center', alignItems: 'center',
+      }}>
+        <View style={{
+          backgroundColor: COLORS.white, borderRadius: 18,
+          paddingVertical: 32, paddingHorizontal: 40,
+          alignItems: 'center', minWidth: 220,
+          shadowColor: '#000', shadowOffset: { width: 0, height: 8 },
+          shadowOpacity: 0.18, shadowRadius: 20, elevation: 10,
+        }}>
+          <ActivityIndicator size="large" color={COLORS.navy} />
+          <Text style={{
+            marginTop: 14, fontSize: 15, fontWeight: '700',
+            color: COLORS.darkText, textAlign: 'center',
+          }}>Opening document…</Text>
+          <Text style={{
+            marginTop: 6, fontSize: 12,
+            color: COLORS.subText, textAlign: 'center',
+          }}>{previewTitle}</Text>
+        </View>
+      </View>
     </Modal>
   );
 
@@ -1418,10 +1484,29 @@ export default function LYDODocumentTemplatesScreen() {
                         <Text style={[styles.archiveDetailValue, { flex: 1, textAlign: 'right' }]}>{record.archivedReason}</Text>
                       </View>
                       <View style={[styles.archiveDetailRow, { gap: 8, marginTop: 8 }]}>
-                        <TouchableOpacity style={styles.archiveActionBtn}>
+                        <TouchableOpacity
+                          style={styles.archiveActionBtn}
+                          onPress={async () => {
+                            const url = record.fileUrl;
+                            if (!url || url === 'no_file_attached') {
+                              Alert.alert('No File', 'This archived template has no file attached.');
+                              return;
+                            }
+                            try {
+                              const supported = await Linking.canOpenURL(url);
+                              if (supported) await Linking.openURL(url);
+                              else Alert.alert('Error', 'Unable to open this file URL.');
+                            } catch (err) {
+                              Alert.alert('Error', 'Failed to open file: ' + err.message);
+                            }
+                          }}
+                        >
                           <Text style={styles.archiveActionBtnText}>⬇ Download</Text>
                         </TouchableOpacity>
-                        <TouchableOpacity style={[styles.archiveActionBtn, { backgroundColor: '#FDF0E6' }]}>
+                        <TouchableOpacity
+                          style={[styles.archiveActionBtn, { backgroundColor: '#FDF0E6' }]}
+                          onPress={() => openPreview(record.fileUrl, record.name)}
+                        >
                           <Text style={[styles.archiveActionBtnText, { color: '#E87A30' }]}>👁 Preview</Text>
                         </TouchableOpacity>
                       </View>
@@ -1496,6 +1581,7 @@ export default function LYDODocumentTemplatesScreen() {
       {renderDetailModal()}
       {renderReplaceModal()}
       {renderForwardModal()}
+      {renderPreviewModal()}
       {renderLoadingOverlay()}
 
       <View style={styles.layout}>
