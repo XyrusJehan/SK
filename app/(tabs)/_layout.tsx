@@ -32,7 +32,7 @@ export default function TabLayout() {
         <Tabs.Screen name="sk-planning-budget" />
         <Tabs.Screen name="sk-portal" />
         <Tabs.Screen name="sk-portal-feedback" />
-        <Tabs.Screen name="lydo-home" />
+        <Tabs.Screen name="lydo-dashboard" />
         <Tabs.Screen name="lydo-document" />
         <Tabs.Screen name="lydo-document-list" />
         <Tabs.Screen name="lydo-document-reports" />
@@ -40,6 +40,7 @@ export default function TabLayout() {
         <Tabs.Screen name="lydo-monitor" />
         <Tabs.Screen name="lydo-monitor-budget" />
         <Tabs.Screen name="lydo-monitor-report" />
+        <Tabs.Screen name="sk-account" />
       </Tabs>
     </NavProvider>
   );

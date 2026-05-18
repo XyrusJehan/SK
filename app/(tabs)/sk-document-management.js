@@ -28,7 +28,7 @@ const COLORS = {
 };
 
 // ─── CONSTANTS ────────────────────────────────────────────────────────────────
-const NAV_TABS       = ['Dashboard', 'Documents', 'Planning', 'Portal'];
+const NAV_TABS       = ['Dashboard', 'Documents', 'Planning', 'Portal', 'Account'];
 const DOCUMENT_TABS  = ['Folder', 'Document Management'];
 const STATUS_TABS    = ['All', 'Drafts', 'Saved', 'Submitted', 'Approved'];
 const DRAFT_TYPES    = ['All Types', 'Planning', 'Financial', 'Governance', 'Performance'];
@@ -235,6 +235,7 @@ export default function SKDocumentManagementScreen() {
     if (tab === 'Documents') router.push('/(tabs)/sk-document');
     if (tab === 'Planning')  router.push('/(tabs)/sk-planning');
     if (tab === 'Portal')    router.push('/(tabs)/sk-portal');
+    if (tab === 'Account')   router.push('/(tabs)/sk-account');
   };
 
   const formatDate = (dateStr) => {

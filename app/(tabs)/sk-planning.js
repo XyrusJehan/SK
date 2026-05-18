@@ -27,7 +27,7 @@ const COLORS = {
 };
 
 // ─── NAV & PLANNING TABS ─────────────────────────────────────────────────────
-const NAV_TABS      = ['Dashboard', 'Documents', 'Planning', 'Portal'];
+const NAV_TABS      = ['Dashboard', 'Documents', 'Planning', 'Portal', 'Account'];
 const PLANNING_TABS = ['Templates', 'Budget'];
 
 // ─── TEMPLATE CATEGORIES (from screenshot) ───────────────────────────────────
@@ -247,6 +247,7 @@ export default function SKPlanningScreen() {
     if (tab === 'Dashboard') router.push('/(tabs)/sk-dashboard');
     if (tab === 'Documents') router.push('/(tabs)/sk-document');
     if (tab === 'Portal')    router.push('/(tabs)/sk-portal');
+    if (tab === 'Account')   router.push('/(tabs)/sk-account');
   };
 
   const handleLogout = () => { logout(); router.replace('/'); };
@@ -339,7 +340,7 @@ export default function SKPlanningScreen() {
               style={[styles.modalActionBtn, { backgroundColor: '#FDF5E6' }]}
               onPress={() => { Alert.alert('Replace', 'Replace coming soon.'); setShowEditModal(false); }}
             >
-              <Text style={[styles.modalActionText, { color: '#B45309' }]}>↔  Replace</Text>
+              <Text style={[styles.modalActionText, { color: '#B45309' }]}>↔  Create</Text>
             </TouchableOpacity>
           </View>
           <TouchableOpacity
