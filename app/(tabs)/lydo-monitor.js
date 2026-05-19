@@ -1,12 +1,13 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
   View, Text, TextInput, ScrollView, TouchableOpacity,
   StyleSheet, SafeAreaView, StatusBar, Dimensions,
   Modal, Alert, KeyboardAvoidingView, Platform, Image,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { useNav } from './navContext';
 import { useAuth } from './authContext';
+import { supabase } from '../../utils/supabase';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const isMobile = SCREEN_WIDTH < 768;
@@ -30,8 +31,8 @@ const COLORS = {
   comment:   '#E0E0E0',
 };
 
-const NAV_TABS     = ['Dashboard', 'Documents', 'Monitor'];
-const MONITOR_TABS = ['Consultation', 'Budget', 'Report', 'Accounts'];
+const NAV_TABS     = ['Dashboard', 'Documents', 'Monitor', 'Barangay'];
+const MONITOR_TABS = ['Consultation', 'Budget', 'Report'];
 
 // ─── CBYDP DOCUMENT SECTIONS (tappable for highlight) ────────────────────────
 const DOC_SECTIONS = [
@@ -689,16 +690,76 @@ export default function LYDOMonitorScreen() {
   const [documentFilter, setDocumentFilter]         = useState('');
   const [notifCount]                            = useState(2);
   const [sidebarVisible, setSidebarVisible]     = useState(false);
+  const [consultationDocs, setConsultationDocs] = useState([]);
 
   // Document modal states
   const [viewingItem, setViewingItem]   = useState(null); // open view modal
   const [commentItem, setCommentItem]   = useState(null); // open comment modal
+
+  // Fetch consultation documents (submitted documents)
+  const fetchConsultationDocs = useCallback(async () => {
+    try {
+      const { data: docs, error } = await supabase
+        .from('documents')
+        .select(`
+          document_id,
+          title,
+          folder_category,
+          document_type,
+          status,
+          year,
+          created_at,
+          saved_at,
+          submitted_at,
+          barangay:barangays(barangay_id, barangay_name),
+          submitted_by_user:users!documents_submitted_by_fkey(user_id, first_name, last_name)
+        `)
+        .eq('status', 'submitted')
+        .order('submitted_at', { ascending: false });
+
+      if (error) {
+        console.error('Error fetching consultation docs:', error);
+        return;
+      }
+
+      const formattedDocs = (docs || []).map(doc => {
+        const date = doc.submitted_at || doc.created_at;
+        const dateObj = date ? new Date(date) : new Date();
+        return {
+          id: doc.document_id.toString(),
+          barangay: doc.barangay?.barangay_name || 'Unknown Barangay',
+          document: doc.title || 'Untitled Document',
+          time: dateObj.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
+          submittedDate: doc.submitted_at ? new Date(doc.submitted_at).toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: '2-digit' }) : null,
+          feedbackDate: doc.submitted_at ? new Date(doc.submitted_at).toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: '2-digit' }) : null,
+          approvedDate: null,
+          status: 'submitted',
+          commentCount: 0,
+        };
+      });
+
+      setConsultationDocs(formattedDocs);
+    } catch (error) {
+      console.error('Error:', error);
+    }
+  }, []);
+
+  // Fetch on screen focus
+  useFocusEffect(
+    useCallback(() => {
+      if (activeMonitorTab === 'Consultation') {
+        fetchConsultationDocs();
+      }
+    }, [activeMonitorTab, fetchConsultationDocs])
+  );
 
   const handleNavPress = (tab) => {
     setActiveTab(tab);
     setSidebarVisible(false);
     if (tab === 'Dashboard')      router.push('/(tabs)/lydo-dashboard');
     if (tab === 'Documents') router.push('/(tabs)/lydo-document');
+    if (tab === 'Monitor')   router.push('/(tabs)/lydo-monitor');
+    if (tab === 'Barangay') router.push('/(tabs)/lydo-accounts');
   };
 
   const handleLogout = () => {
@@ -706,18 +767,30 @@ export default function LYDOMonitorScreen() {
     router.replace('/');
   };
 
-  const rows = (TABLE_DATA[activeMonitorTab] || [])
-    .filter(r => {
-      if (viewFilter === 'approved') return r.approvedDate !== null;
-      if (viewFilter === 'revision') return r.status === 'returned' || r.status === 'awaiting';
-      return true;
-    })
-    .filter(r =>
-      r.barangay.toLowerCase().includes(searchText.toLowerCase()) ||
-      r.document.toLowerCase().includes(searchText.toLowerCase())
-    )
-    .filter(r => barangayFilter === '' || r.barangay.toLowerCase().includes(barangayFilter.toLowerCase()))
-    .filter(r => documentFilter === '' || r.document.toLowerCase().includes(documentFilter.toLowerCase()));
+  // Use fetched consultation docs or fallback to TABLE_DATA
+  const getRows = () => {
+    let data;
+    if (activeMonitorTab === 'Consultation') {
+      data = consultationDocs;
+    } else {
+      data = TABLE_DATA[activeMonitorTab] || [];
+    }
+
+    return data
+      .filter(r => {
+        if (viewFilter === 'approved') return r.approvedDate !== null;
+        if (viewFilter === 'revision') return r.status === 'returned' || r.status === 'awaiting';
+        return true;
+      })
+      .filter(r =>
+        r.barangay?.toLowerCase().includes(searchText.toLowerCase()) ||
+        r.document?.toLowerCase().includes(searchText.toLowerCase())
+      )
+      .filter(r => barangayFilter === '' || r.barangay?.toLowerCase().includes(barangayFilter.toLowerCase()))
+      .filter(r => documentFilter === '' || r.document?.toLowerCase().includes(documentFilter.toLowerCase()));
+  };
+
+  const rows = getRows();
 
   const dateColLabel = viewFilter === 'approved' ? 'Approved Date' : 'Date of Feedback';
 
@@ -790,7 +863,7 @@ export default function LYDOMonitorScreen() {
           return (
             <TouchableOpacity key={tab}
               style={[styles.monitorTab, active && styles.monitorTabActive]}
-              onPress={() => tab === 'Budget' ? router.push('/(tabs)/lydo-monitor-budget') : tab === 'Report' ? router.push('/(tabs)/lydo-monitor-report') : tab === 'Accounts' ? router.push('/(tabs)/lydo-monitor-accounts') : setActiveMonitorTab(tab)} activeOpacity={0.8}>
+              onPress={() => tab === 'Budget' ? router.push('/(tabs)/lydo-monitor-budget') : tab === 'Report' ? router.push('/(tabs)/lydo-monitor-report') : setActiveMonitorTab(tab)} activeOpacity={0.8}>
               <Text style={[styles.monitorTabText, active && styles.monitorTabTextActive]}>{tab}</Text>
             </TouchableOpacity>
           );
@@ -832,13 +905,13 @@ export default function LYDOMonitorScreen() {
           <Dropdown
             label="Barangay"
             value={barangayFilter || 'All'}
-            options={['All', ...new Set((TABLE_DATA[activeMonitorTab] || []).map(r => r.barangay))]}
+            options={['All', ...new Set((activeMonitorTab === 'Consultation' ? consultationDocs : TABLE_DATA[activeMonitorTab] || []).map(r => r.barangay).filter(Boolean))]}
             onSelect={v => setBarangayFilter(v === 'All' ? '' : v)}
           />
           <Dropdown
             label="Document"
             value={documentFilter || 'All'}
-            options={['All', ...new Set((TABLE_DATA[activeMonitorTab] || []).map(r => r.document))]}
+            options={['All', ...new Set((activeMonitorTab === 'Consultation' ? consultationDocs : TABLE_DATA[activeMonitorTab] || []).map(r => r.document).filter(Boolean))]}
             onSelect={v => setDocumentFilter(v === 'All' ? '' : v)}
           />
         </View>

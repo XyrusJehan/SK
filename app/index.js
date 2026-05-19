@@ -76,7 +76,7 @@ export default function LoginScreen() {
 
       {/* Full-screen background image */}
       <ImageBackground
-        source={require('./../assets/images/municipal-hall.png')}
+        source={require('./../assets/images/municipalhall.png')}
         style={styles.bgImage}
         resizeMode="cover"
         imageStyle={styles.bgImageStyle}
