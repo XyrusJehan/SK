@@ -30,8 +30,8 @@ const COLORS = {
   comment:   '#E0E0E0',
 };
 
-const NAV_TABS     = ['Home', 'Documents', 'Monitor'];
-const MONITOR_TABS = ['Consultation', 'Budget', 'Report', 'Submitted'];
+const NAV_TABS     = ['Dashboard', 'Documents', 'Monitor', 'Barangay'];
+const MONITOR_TABS = ['Consultation', 'Budget', 'Report'];
 
 // ─── CBYDP DOCUMENT SECTIONS (tappable for highlight) ────────────────────────
 const DOC_SECTIONS = [
@@ -697,8 +697,10 @@ export default function LYDOMonitorScreen() {
   const handleNavPress = (tab) => {
     setActiveTab(tab);
     setSidebarVisible(false);
-    if (tab === 'Home')      router.push('/(tabs)/lydo-home');
+    if (tab === 'Dashboard')      router.push('/(tabs)/lydo-dashboard');
     if (tab === 'Documents') router.push('/(tabs)/lydo-document');
+    if (tab === 'Monitor')   router.push('/(tabs)/lydo-monitor');
+    if (tab === 'Barangay') router.push('/(tabs)/lydo-accounts');
   };
 
   const handleLogout = () => {

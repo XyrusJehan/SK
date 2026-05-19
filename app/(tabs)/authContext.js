@@ -1,4 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
 import { supabase } from '../../utils/supabase';
 
 const AuthContext = createContext();
@@ -10,19 +12,43 @@ const ROLE_MAP = {
   'resident': 'public',
 };
 
-// Simple hash function for password hashing
-function hashPassword(password) {
-  let hash = 0;
-  for (let i = 0; i < password.length; i++) {
-    const char = password.charCodeAt(i);
-    hash = ((hash << 5) - hash) + char;
-    hash = hash & hash;
+// Encryption key (should be stored securely in production)
+const ENCRYPTION_KEY = 'SKApp2024SecretKey';
+
+// Simple XOR-based encryption (no base64 to preserve length)
+function xorEncrypt(text, key) {
+  let result = '';
+  for (let i = 0; i < text.length; i++) {
+    result += String.fromCharCode(text.charCodeAt(i) ^ key.charCodeAt(i % key.length));
   }
-  return 'hash_' + Math.abs(hash).toString(16) + '_' + password.length.toString();
+  return result;
+}
+
+// Simple XOR-based decryption
+function xorDecrypt(encoded, key) {
+  let result = '';
+  for (let i = 0; i < encoded.length; i++) {
+    result += String.fromCharCode(encoded.charCodeAt(i) ^ key.charCodeAt(i % key.length));
+  }
+  return result;
+}
+
+// Encrypt password for storage
+export function encryptPassword(password) {
+  return xorEncrypt(password, ENCRYPTION_KEY);
+}
+
+// Decrypt password for display/verification
+export function decryptPassword(encryptedPassword) {
+  try {
+    return xorDecrypt(encryptedPassword, ENCRYPTION_KEY);
+  } catch (e) {
+    return encryptedPassword; // Return as-is if decryption fails (plain text or old hash)
+  }
 }
 
 // Validate password requirements
-function validatePassword(password) {
+export function validatePassword(password) {
   if (password.length < 8) {
     return 'Password must be at least 8 characters';
   }
@@ -47,21 +73,27 @@ export function AuthProvider({ children }) {
 
   useEffect(() => {
     // Check for stored session
-    const storedUser = localStorage.getItem('sk_user');
-    if (storedUser) {
-      setUser(JSON.parse(storedUser));
-    }
-    setIsLoading(false);
+    const checkStoredSession = async () => {
+      try {
+        const storedUser = await AsyncStorage.getItem('sk_user');
+        if (storedUser) {
+          setUser(JSON.parse(storedUser));
+        }
+      } catch (error) {
+        console.error('Error reading stored session:', error);
+      }
+      setIsLoading(false);
+    };
+    checkStoredSession();
   }, []);
 
   const login = async (email, password) => {
     try {
-      // Query users table
+      // First check if user exists (without status filter)
       const { data: userData, error: userError } = await supabase
         .from('users')
         .select('*')
         .eq('email', email.toLowerCase())
-        .eq('status', 'active')
         .maybeSingle();
 
       if (userError) {
@@ -73,9 +105,22 @@ export function AuthProvider({ children }) {
         return { success: false, error: 'Invalid email or password' };
       }
 
-      // Verify password (accept both hashed and plain text for backward compatibility)
-      const hashedInput = hashPassword(password);
-      if (userData.password !== hashedInput && userData.password !== password) {
+      // Check account status
+      if (userData.status === 'pending') {
+        return { success: false, error: 'Account is pending approval. Please wait for admin to approve your registration.' };
+      }
+
+      if (userData.status === 'inactive') {
+        return { success: false, error: 'Account has been deactivated. Please contact the admin.' };
+      }
+
+      if (userData.status !== 'active') {
+        return { success: false, error: 'Invalid account status' };
+      }
+
+      // Verify password (accept plain text and encrypted for backward compatibility)
+      const decryptedStored = decryptPassword(userData.password);
+      if (userData.password !== password && decryptedStored !== password) {
         return { success: false, error: 'Invalid email or password' };
       }
 
@@ -122,7 +167,7 @@ export function AuthProvider({ children }) {
       };
 
       setUser(userSession);
-      localStorage.setItem('sk_user', JSON.stringify(userSession));
+      await AsyncStorage.setItem('sk_user', JSON.stringify(userSession));
       return { success: true, user: userSession };
 
     } catch (error) {
@@ -131,9 +176,9 @@ export function AuthProvider({ children }) {
     }
   };
 
-  const logout = () => {
+  const logout = async () => {
     setUser(null);
-    localStorage.removeItem('sk_user');
+    await AsyncStorage.removeItem('sk_user');
   };
 
   const signup = async (email, password, firstName, lastName) => {
@@ -162,8 +207,8 @@ export function AuthProvider({ children }) {
         .eq('role_name', 'resident')
         .maybeSingle();
 
-      // Hash password before storing
-      const hashedPassword = hashPassword(password);
+      // Encrypt password before storing
+      const encryptedPassword = encryptPassword(password);
 
       // Insert user with 'pending' status — requires admin approval before login
       const { error: insertError } = await supabase
@@ -172,8 +217,10 @@ export function AuthProvider({ children }) {
           first_name: firstName,
           last_name: lastName,
           email: email.toLowerCase(),
-          password: hashedPassword,
+          password: encryptedPassword,
           role_id: roleData?.role_id || 1,
+          position: null,
+          barangay_id: null,
           status: 'pending',
         });
 
