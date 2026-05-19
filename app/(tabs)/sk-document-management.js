@@ -442,7 +442,7 @@ export default function SKDocumentManagementScreen() {
 
   // ── Sidebar ──
   const renderSidebar = () => (
-    <View style={styles.sidebar}>
+    <View style={[styles.sidebar, isMobile && !sidebarVisible && styles.sidebarHidden]}>
       <View style={styles.logoPill}>
         <Image
           source={require('./../../assets/images/sk-logo.png')}
@@ -806,7 +806,7 @@ export default function SKDocumentManagementScreen() {
             onPress={() => setSidebarVisible(false)}
           />
         )}
-        {isMobile ? sidebarVisible && renderSidebar() : renderSidebar()}
+        {renderSidebar()}
         {renderContent()}
 
         {/* ── Delete Confirmation Modal ── */}
@@ -982,10 +982,14 @@ export default function SKDocumentManagementScreen() {
               {viewerModal.fileUrl && (
                 <TouchableOpacity
                   style={styles.viewerOpenBtn}
-                  onPress={() => Linking.openURL(viewerModal.fileUrl)}
+                  onPress={() => {
+                    setViewerModal({ visible: false, fileUrl: null, title: '' });
+                    setDocumentToDownload({ fileUrl: viewerModal.fileUrl, title: viewerModal.title });
+                    setDownloadModalVisible(true);
+                  }}
                   activeOpacity={0.8}
                 >
-                  <Feather name="external-link" size={18} color={COLORS.gold} />
+                  <Feather name="download" size={18} color={COLORS.gold} />
                 </TouchableOpacity>
               )}
             </View>
@@ -1096,11 +1100,17 @@ const styles = StyleSheet.create({
   sidebar: {
     width: 250, backgroundColor: COLORS.navy,
     alignItems: 'center', paddingTop: 20, paddingBottom: 24,
-    paddingHorizontal: 10, zIndex: 10,
+    paddingHorizontal: 10, zIndex: 20,
+    ...(isMobile ? {
+      position: 'absolute', top: 0, left: 0, bottom: 0, zIndex: 20,
+    } : {}),
+  },
+  sidebarHidden: {
+    display: 'none',
   },
   sidebarOverlay: {
     position: 'absolute', left: 0, top: 0, bottom: 0, right: 0,
-    backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 5,
+    backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 15,
   },
   logoPill: {
     marginTop: 20, width: 70, height: 70, borderRadius: 35,
