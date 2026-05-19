@@ -2,8 +2,14 @@ import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import {
   View, Text, TextInput, ScrollView, TouchableOpacity,
   StyleSheet, SafeAreaView, StatusBar, Dimensions, Image, Modal,
-  Linking,
+  Linking, ActivityIndicator,
 } from 'react-native';
+import { Platform } from 'react-native';
+// WebView: use react-native-webview on native, iframe on web
+let WebView = null;
+if (Platform.OS !== 'web') {
+  WebView = require('react-native-webview').WebView;
+}
 import { useRouter, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { useNav } from './navContext';
@@ -141,25 +147,21 @@ export default function SKDocumentManagementScreen() {
   const [downloadModalVisible, setDownloadModalVisible] = useState(false);
   const [documentToDownload, setDocumentToDownload] = useState(null);
   const [alertModal, setAlertModal] = useState({ visible: false, type: 'success', title: '', message: '' });
+  const [viewerModal, setViewerModal] = useState({ visible: false, fileUrl: null, title: '' });
+  const [webViewLoading, setWebViewLoading] = useState(false);
 
   const showAlert = (type, title, message) => {
     setAlertModal({ visible: true, type, title, message });
   };
   const hideAlert = () => setAlertModal(a => ({ ...a, visible: false }));
 
-  const handleViewPress = async (doc) => {
+  const handleViewPress = (doc) => {
     if (!doc.fileUrl) {
       showAlert('error', 'No File', 'This document does not have an attached file.');
       return;
     }
-
-    // Open the file URL in browser/app
-    try {
-      await Linking.openURL(doc.fileUrl);
-    } catch (err) {
-      console.error('View error:', err);
-      showAlert('error', 'View Failed', 'Could not open the file.');
-    }
+    setViewerModal({ visible: true, fileUrl: doc.fileUrl, title: doc.title });
+    setWebViewLoading(true);
   };
 
   // Fetch documents for this barangay - reusable function
@@ -957,6 +959,74 @@ export default function SKDocumentManagementScreen() {
         </Modal>
 
         {/* ── Alert / Feedback Modal ── */}
+        {/* ── Document Viewer Modal ── */}
+        <Modal
+          visible={viewerModal.visible}
+          animationType="slide"
+          transparent={false}
+          onRequestClose={() => setViewerModal({ visible: false, fileUrl: null, title: '' })}
+        >
+          <SafeAreaView style={{ flex: 1, backgroundColor: COLORS.navy }}>
+            {/* Viewer Header */}
+            <View style={styles.viewerHeader}>
+              <TouchableOpacity
+                style={styles.viewerBackBtn}
+                onPress={() => setViewerModal({ visible: false, fileUrl: null, title: '' })}
+                activeOpacity={0.8}
+              >
+                <Feather name="arrow-left" size={20} color={COLORS.white} />
+              </TouchableOpacity>
+              <Text style={styles.viewerTitle} numberOfLines={1}>
+                {viewerModal.title}
+              </Text>
+              {viewerModal.fileUrl && (
+                <TouchableOpacity
+                  style={styles.viewerOpenBtn}
+                  onPress={() => Linking.openURL(viewerModal.fileUrl)}
+                  activeOpacity={0.8}
+                >
+                  <Feather name="external-link" size={18} color={COLORS.gold} />
+                </TouchableOpacity>
+              )}
+            </View>
+
+            {/* WebView / iframe */}
+            <View style={{ flex: 1, backgroundColor: COLORS.offWhite, overflow: 'hidden' }}>
+              {viewerModal.fileUrl && (
+                Platform.OS === 'web' ? (
+                  <iframe
+                    src={`https://docs.google.com/gview?embedded=true&url=${encodeURIComponent(viewerModal.fileUrl)}`}
+                    style={{ flex: 1, width: '100%', height: '100%', border: 'none' }}
+                    title={viewerModal.title}
+                  />
+                ) : (
+                  <WebView
+                    source={{
+                      uri: `https://docs.google.com/gview?embedded=true&url=${encodeURIComponent(viewerModal.fileUrl)}`,
+                    }}
+                    style={{ flex: 1 }}
+                    onLoadStart={() => setWebViewLoading(true)}
+                    onLoadEnd={() => setWebViewLoading(false)}
+                    onError={() => {
+                      setWebViewLoading(false);
+                      showAlert('error', 'Load Failed', 'Could not load the document. Try opening it externally.');
+                      setViewerModal({ visible: false, fileUrl: null, title: '' });
+                    }}
+                    startInLoadingState={true}
+                    renderLoading={() => (
+                      <View style={styles.viewerLoading}>
+                        <ActivityIndicator size="large" color={COLORS.navy} />
+                        <Text style={styles.viewerLoadingText}>Loading document…</Text>
+                      </View>
+                    )}
+                  />
+                )
+              )}
+            </View>
+          </SafeAreaView>
+        </Modal>
+
+        {/* ── Alert / Feedback Modal ── */}
         <Modal
           visible={alertModal.visible}
           animationType="fade"
@@ -1318,6 +1388,43 @@ const styles = StyleSheet.create({
   },
   modalBtnDisabled: {
     opacity: 0.55,
+  },
+
+  // ── Document Viewer ──
+  viewerHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.navy,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    gap: 10,
+  },
+  viewerBackBtn: {
+    padding: 6,
+    borderRadius: 8,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+  },
+  viewerTitle: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: '700',
+    color: COLORS.white,
+  },
+  viewerOpenBtn: {
+    padding: 6,
+    borderRadius: 8,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+  },
+  viewerLoading: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.offWhite,
+    gap: 12,
+  },
+  viewerLoadingText: {
+    fontSize: 13,
+    color: COLORS.subText,
   },
 
 });
