@@ -137,6 +137,12 @@ export default function SKDocumentManagementScreen() {
   const [forwardModalVisible, setForwardModalVisible] = useState(false);
   const [documentToForward, setDocumentToForward] = useState(null);
   const [forwarding, setForwarding] = useState(false);
+  const [alertModal, setAlertModal] = useState({ visible: false, type: 'success', title: '', message: '' });
+
+  const showAlert = (type, title, message) => {
+    setAlertModal({ visible: true, type, title, message });
+  };
+  const hideAlert = () => setAlertModal(a => ({ ...a, visible: false }));
 
   // Fetch documents for this barangay - reusable function
   const fetchDocuments = useCallback(async () => {
@@ -291,7 +297,7 @@ export default function SKDocumentManagementScreen() {
 
       if (error) {
         console.error('Error deleting document:', error);
-        alert('Failed to delete document: ' + error.message);
+        showAlert('error', 'Delete Failed', 'Failed to delete the document. Please try again.');
         setDeleting(false);
         return;
       }
@@ -339,7 +345,7 @@ export default function SKDocumentManagementScreen() {
       }
     } catch (error) {
       console.error('Error:', error);
-      alert('An error occurred while deleting');
+      showAlert('error', 'Unexpected Error', 'An error occurred while deleting the document.');
     }
     setDeleting(false);
   };
@@ -357,7 +363,7 @@ export default function SKDocumentManagementScreen() {
     console.log('Document to forward:', documentToForward);
 
     if (!documentToForward || !user?.userId) {
-      alert('Error: User not found. Please login again.');
+      showAlert('error', 'Authentication Error', 'User not found. Please log in again.');
       return;
     }
 
@@ -386,7 +392,7 @@ export default function SKDocumentManagementScreen() {
 
       if (versionError) {
         console.error('Error creating version:', versionError);
-        alert('Failed to forward document: ' + versionError.message);
+        showAlert('error', 'Forward Failed', 'Failed to forward the document. Please try again.');
         setForwarding(false);
         return;
       }
@@ -402,7 +408,7 @@ export default function SKDocumentManagementScreen() {
 
       if (updateError) {
         console.error('Error updating document:', updateError);
-        alert('Failed to forward document: ' + updateError.message);
+        showAlert('error', 'Forward Failed', 'Failed to update the document status. Please try again.');
         setForwarding(false);
         return;
       }
@@ -413,10 +419,10 @@ export default function SKDocumentManagementScreen() {
       // Refresh all documents to reflect the latest status
       await fetchDocuments();
 
-      alert('Document forwarded to LYDO for consultation successfully!');
+      showAlert('success', 'Document Forwarded', 'The document has been successfully forwarded to LYDO for consultation.');
     } catch (error) {
       console.error('Error:', error);
-      alert('An error occurred while forwarding the document');
+      showAlert('error', 'Unexpected Error', 'An error occurred while forwarding the document.');
     }
     setForwarding(false);
   };
@@ -824,7 +830,7 @@ export default function SKDocumentManagementScreen() {
         {isMobile ? sidebarVisible && renderSidebar() : renderSidebar()}
         {renderContent()}
 
-        {/* Delete Confirmation Modal */}
+        {/* ── Delete Confirmation Modal ── */}
         <Modal
           visible={deleteModalVisible}
           animationType="fade"
@@ -833,17 +839,21 @@ export default function SKDocumentManagementScreen() {
         >
           <View style={styles.modalOverlay}>
             <View style={styles.modalContent}>
-              <View style={styles.modalHeader}>
-                <Text style={styles.modalTitle}>Delete Document</Text>
-                <TouchableOpacity onPress={() => setDeleteModalVisible(false)} activeOpacity={0.7}>
-                  <Text style={styles.modalClose}>✕</Text>
-                </TouchableOpacity>
+              {/* Icon accent strip */}
+              <View style={styles.modalIconStrip}>
+                <View style={[styles.modalIconCircle, { backgroundColor: '#FEE2E2' }]}>
+                  <Feather name="trash-2" size={28} color={COLORS.red} />
+                </View>
               </View>
               <View style={styles.modalBody}>
+                <Text style={styles.modalTitle}>Delete Document</Text>
                 <Text style={styles.modalBodyText}>
-                  Are you sure you want to delete "{documentToDelete?.title}"? This action cannot be undone.
+                  You are about to permanently delete{' '}
+                  <Text style={styles.modalHighlight}>"{documentToDelete?.title}"</Text>.
+                  {'\n\n'}This action cannot be undone.
                 </Text>
               </View>
+              <View style={styles.modalDivider} />
               <View style={styles.modalFooter}>
                 <TouchableOpacity
                   style={styles.modalCancelBtn}
@@ -853,20 +863,26 @@ export default function SKDocumentManagementScreen() {
                   <Text style={styles.modalCancelBtnText}>Cancel</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
-                  style={[styles.modalDeleteBtn, deleting && styles.modalDeleteBtnDisabled]}
+                  style={[styles.modalActionBtn, styles.modalDeleteBtn, deleting && styles.modalBtnDisabled]}
                   onPress={handleConfirmDelete}
                   disabled={deleting}
                   activeOpacity={0.8}
                 >
-                  <Text style={styles.modalDeleteBtnText}>{deleting ? 'Deleting...' : 'Delete'}</Text>
+                  {deleting ? (
+                    <Text style={styles.modalActionBtnText}>Deleting…</Text>
+                  ) : (
+                    <>
+                      <Feather name="trash-2" size={14} color={COLORS.white} style={{ marginRight: 6 }} />
+                      <Text style={styles.modalActionBtnText}>Delete</Text>
+                    </>
+                  )}
                 </TouchableOpacity>
               </View>
             </View>
           </View>
-          
         </Modal>
 
-        {/* Forward Confirmation Modal */}
+        {/* ── Forward Confirmation Modal ── */}
         <Modal
           visible={forwardModalVisible}
           animationType="fade"
@@ -875,17 +891,20 @@ export default function SKDocumentManagementScreen() {
         >
           <View style={styles.modalOverlay}>
             <View style={styles.modalContent}>
-              <View style={styles.modalHeader}>
-                <Text style={styles.modalTitle}>Forward to LYDO</Text>
-                <TouchableOpacity onPress={() => setForwardModalVisible(false)} activeOpacity={0.7}>
-                  <Text style={styles.modalClose}>✕</Text>
-                </TouchableOpacity>
+              <View style={styles.modalIconStrip}>
+                <View style={[styles.modalIconCircle, { backgroundColor: '#DBEAFE' }]}>
+                  <Feather name="send" size={26} color={COLORS.blue} />
+                </View>
               </View>
               <View style={styles.modalBody}>
+                <Text style={styles.modalTitle}>Forward to LYDO</Text>
                 <Text style={styles.modalBodyText}>
-                  Are you sure you want to forward "{documentToForward?.title}" to LYDO for consultation? This action will change the document status to submitted.
+                  You are about to submit{' '}
+                  <Text style={styles.modalHighlight}>"{documentToForward?.title}"</Text>
+                  {' '}to LYDO for consultation.
                 </Text>
               </View>
+              <View style={styles.modalDivider} />
               <View style={styles.modalFooter}>
                 <TouchableOpacity
                   style={styles.modalCancelBtn}
@@ -895,12 +914,64 @@ export default function SKDocumentManagementScreen() {
                   <Text style={styles.modalCancelBtnText}>Cancel</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
-                  style={[styles.modalDeleteBtn, forwarding && styles.modalDeleteBtnDisabled]}
+                  style={[styles.modalActionBtn, styles.modalForwardBtn, forwarding && styles.modalBtnDisabled]}
                   onPress={handleConfirmForward}
                   disabled={forwarding}
                   activeOpacity={0.8}
                 >
-                  <Text style={styles.modalDeleteBtnText}>{forwarding ? 'Forwarding...' : 'Forward'}</Text>
+                  {forwarding ? (
+                    <Text style={styles.modalActionBtnText}>Forwarding…</Text>
+                  ) : (
+                    <>
+                      <Feather name="send" size={14} color={COLORS.white} style={{ marginRight: 6 }} />
+                      <Text style={styles.modalActionBtnText}>Forward</Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
+
+        {/* ── Alert / Feedback Modal ── */}
+        <Modal
+          visible={alertModal.visible}
+          animationType="fade"
+          transparent={true}
+          onRequestClose={hideAlert}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={[styles.modalContent, styles.alertModalContent]}>
+              <View style={styles.modalIconStrip}>
+                <View style={[styles.modalIconCircle, {
+                  backgroundColor:
+                    alertModal.type === 'success' ? '#D1FAE5' :
+                    alertModal.type === 'error'   ? '#FEE2E2' : '#FEF9C3',
+                }]}>
+                  <Feather
+                    name={alertModal.type === 'success' ? 'check-circle' : alertModal.type === 'error' ? 'alert-circle' : 'info'}
+                    size={28}
+                    color={alertModal.type === 'success' ? '#059669' : alertModal.type === 'error' ? COLORS.red : '#B45309'}
+                  />
+                </View>
+              </View>
+              <View style={styles.modalBody}>
+                <Text style={styles.modalTitle}>{alertModal.title}</Text>
+                <Text style={styles.modalBodyText}>{alertModal.message}</Text>
+              </View>
+              <View style={styles.modalDivider} />
+              <View style={[styles.modalFooter, { justifyContent: 'center' }]}>
+                <TouchableOpacity
+                  style={[styles.modalActionBtn, {
+                    backgroundColor:
+                      alertModal.type === 'success' ? '#059669' :
+                      alertModal.type === 'error'   ? COLORS.red : '#B45309',
+                    flex: 0, paddingHorizontal: 36,
+                  }]}
+                  onPress={hideAlert}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.modalActionBtnText}>OK</Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -1134,36 +1205,85 @@ const styles = StyleSheet.create({
   emptyText:    { fontSize: 14, fontWeight: '700', color: COLORS.darkText, marginBottom: 4 },
   emptySubText: { fontSize: 12, color: COLORS.midGray },
 
-  // Delete Modal
+  // ── Modals ──
   modalOverlay: {
-    ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center',
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(10,20,40,0.55)',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   modalContent: {
-    width: '90%', maxWidth: 400, backgroundColor: COLORS.white,
-    borderRadius: 16, overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25, shadowRadius: 10, elevation: 10,
+    width: '88%', maxWidth: 380,
+    backgroundColor: COLORS.white,
+    borderRadius: 20,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.25,
+    shadowRadius: 20,
+    elevation: 20,
   },
-  modalHeader: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: 20, paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: COLORS.lightGray,
-    backgroundColor: COLORS.navy,
+  alertModalContent: {
+    maxWidth: 340,
   },
-  modalTitle: { fontSize: 18, fontWeight: '800', color: COLORS.white },
-  modalClose: { fontSize: 18, color: COLORS.white, padding: 4 },
-  modalBody: { padding: 20 },
-  modalBodyText: { fontSize: 14, color: COLORS.darkText, lineHeight: 20 },
+  // Icon strip at top of modal
+  modalIconStrip: {
+    alignItems: 'center',
+    paddingTop: 28,
+    paddingBottom: 4,
+    backgroundColor: COLORS.white,
+  },
+  modalIconCircle: {
+    width: 64, height: 64, borderRadius: 32,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  // Body
+  modalBody: {
+    paddingHorizontal: 24, paddingTop: 14, paddingBottom: 20, alignItems: 'center',
+  },
+  modalTitle: {
+    fontSize: 17, fontWeight: '800', color: COLORS.darkText,
+    textAlign: 'center', marginBottom: 10, letterSpacing: 0.2,
+  },
+  modalBodyText: {
+    fontSize: 13.5, color: COLORS.subText, lineHeight: 20,
+    textAlign: 'center',
+  },
+  modalHighlight: {
+    fontWeight: '700', color: COLORS.darkText,
+  },
+  modalDivider: {
+    height: 1, backgroundColor: COLORS.lightGray, marginHorizontal: 0,
+  },
+  // Footer
   modalFooter: {
-    flexDirection: 'row', gap: 12, paddingHorizontal: 20, paddingVertical: 16,
-    borderTopWidth: 1, borderTopColor: COLORS.lightGray, backgroundColor: COLORS.offWhite,
+    flexDirection: 'row', gap: 10,
+    paddingHorizontal: 20, paddingVertical: 16,
+    backgroundColor: COLORS.offWhite,
   },
   modalCancelBtn: {
-    flex: 1, paddingVertical: 14, borderRadius: 8, borderWidth: 1, borderColor: COLORS.midGray,
+    flex: 1, paddingVertical: 13, borderRadius: 10,
+    borderWidth: 1.5, borderColor: COLORS.lightGray,
     alignItems: 'center', backgroundColor: COLORS.white,
   },
-  modalCancelBtnText: { fontSize: 14, fontWeight: '700', color: COLORS.subText },
-  modalDeleteBtn: {
-    flex: 1, paddingVertical: 14, borderRadius: 8, alignItems: 'center', backgroundColor: COLORS.red,
+  modalCancelBtnText: {
+    fontSize: 14, fontWeight: '700', color: COLORS.subText,
   },
-  modalDeleteBtnDisabled: { backgroundColor: COLORS.midGray },
-  modalDeleteBtnText: { fontSize: 14, fontWeight: '700', color: COLORS.white },
+  // Generic action button
+  modalActionBtn: {
+    flex: 1, flexDirection: 'row', paddingVertical: 13, borderRadius: 10,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  modalActionBtnText: {
+    fontSize: 14, fontWeight: '700', color: COLORS.white,
+  },
+  modalDeleteBtn: {
+    backgroundColor: COLORS.red,
+  },
+  modalForwardBtn: {
+    backgroundColor: COLORS.blue,
+  },
+  modalBtnDisabled: {
+    opacity: 0.55,
+  },
 });
