@@ -147,6 +147,21 @@ export default function SKDocumentManagementScreen() {
   };
   const hideAlert = () => setAlertModal(a => ({ ...a, visible: false }));
 
+  const handleViewPress = async (doc) => {
+    if (!doc.fileUrl) {
+      showAlert('error', 'No File', 'This document does not have an attached file.');
+      return;
+    }
+
+    // Open the file URL in browser/app
+    try {
+      await Linking.openURL(doc.fileUrl);
+    } catch (err) {
+      console.error('View error:', err);
+      showAlert('error', 'View Failed', 'Could not open the file.');
+    }
+  };
+
   // Fetch documents for this barangay - reusable function
   const fetchDocuments = useCallback(async () => {
     if (!barangayId) {
@@ -725,12 +740,12 @@ export default function SKDocumentManagementScreen() {
                     <TouchableOpacity activeOpacity={0.7} onPress={() => handleDownloadPress(doc)}>
                       <SaveIcon />
                     </TouchableOpacity>
-                    <TouchableOpacity activeOpacity={0.7} onPress={() => {}}>
+                    <TouchableOpacity activeOpacity={0.7} onPress={() => handleViewPress(doc)}>
                       <ViewIcon />
                     </TouchableOpacity>
                   </>
                 ) : doc.status === 'submitted' ? (
-                  <TouchableOpacity activeOpacity={0.7} onPress={() => {}}>
+                  <TouchableOpacity activeOpacity={0.7} onPress={() => handleViewPress(doc)}>
                     <ViewIcon />
                   </TouchableOpacity>
                 ) : doc.status === 'returned' ? (
@@ -738,7 +753,7 @@ export default function SKDocumentManagementScreen() {
                     <TouchableOpacity activeOpacity={0.7} onPress={() => {}}>
                       <EditIcon />
                     </TouchableOpacity>
-                    <TouchableOpacity activeOpacity={0.7} onPress={() => {}}>
+                    <TouchableOpacity activeOpacity={0.7} onPress={() => handleViewPress(doc)}>
                       <ViewIcon />
                     </TouchableOpacity>
                   </>
@@ -747,7 +762,7 @@ export default function SKDocumentManagementScreen() {
                     <TouchableOpacity activeOpacity={0.7} onPress={() => handleDownloadPress(doc)}>
                       <SaveIcon />
                     </TouchableOpacity>
-                    <TouchableOpacity activeOpacity={0.7} onPress={() => {}}>
+                    <TouchableOpacity activeOpacity={0.7} onPress={() => handleViewPress(doc)}>
                       <ViewIcon />
                     </TouchableOpacity>
                   </>
@@ -759,7 +774,7 @@ export default function SKDocumentManagementScreen() {
                     <TouchableOpacity activeOpacity={0.7} onPress={() => handleDeletePress(doc)}>
                       <DeleteIcon />
                     </TouchableOpacity>
-                    <TouchableOpacity activeOpacity={0.7} onPress={() => {}}>
+                    <TouchableOpacity activeOpacity={0.7} onPress={() => handleViewPress(doc)}>
                       <ViewIcon />
                     </TouchableOpacity>
                   </>
@@ -1304,4 +1319,5 @@ const styles = StyleSheet.create({
   modalBtnDisabled: {
     opacity: 0.55,
   },
+
 });
