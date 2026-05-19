@@ -2,6 +2,7 @@ import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import {
   View, Text, TextInput, ScrollView, TouchableOpacity,
   StyleSheet, SafeAreaView, StatusBar, Dimensions, Image, Modal,
+  Linking,
 } from 'react-native';
 import { useRouter, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
@@ -137,6 +138,8 @@ export default function SKDocumentManagementScreen() {
   const [forwardModalVisible, setForwardModalVisible] = useState(false);
   const [documentToForward, setDocumentToForward] = useState(null);
   const [forwarding, setForwarding] = useState(false);
+  const [downloadModalVisible, setDownloadModalVisible] = useState(false);
+  const [documentToDownload, setDocumentToDownload] = useState(null);
   const [alertModal, setAlertModal] = useState({ visible: false, type: 'success', title: '', message: '' });
 
   const showAlert = (type, title, message) => {
@@ -155,7 +158,7 @@ export default function SKDocumentManagementScreen() {
       // Fetch documents with submitted_by
       const { data: docs, error } = await supabase
         .from('documents')
-        .select('document_id, title, folder_category, document_type, status, year, created_at, submitted_by')
+        .select('document_id, title, folder_category, document_type, status, year, created_at, submitted_by, file_url, saved_at')
         .eq('barangay_id', barangayId)
         .order('created_at', { ascending: false });
 
@@ -186,10 +189,13 @@ export default function SKDocumentManagementScreen() {
         // Get latest version
         const { data: versions } = await supabase
           .from('document_versions')
-          .select('version_id, file_url, created_at')
+          .select('version_id, version_number, file_url, created_at')
           .eq('document_id', doc.document_id)
           .order('version_number', { ascending: false })
           .limit(1);
+
+        // Prefer the latest version's file_url, fall back to the documents table file_url
+        const resolvedFileUrl = versions?.[0]?.file_url || doc.file_url || null;
 
         return {
           id: doc.document_id,
@@ -199,8 +205,8 @@ export default function SKDocumentManagementScreen() {
           status: doc.status || 'draft',
           year: doc.year,
           createdBy: usersMap[doc.submitted_by] || 'Unknown',
-          lastModified: doc.created_at || new Date().toISOString(),
-          fileUrl: versions?.[0]?.file_url || null,
+          lastModified: doc.saved_at || doc.created_at || new Date().toISOString(),
+          fileUrl: resolvedFileUrl,
         };
       }));
 
@@ -213,48 +219,8 @@ export default function SKDocumentManagementScreen() {
   // Auto-fetch on screen focus - always fetch fresh data
   useFocusEffect(
     useCallback(() => {
-      (async () => {
-        if (!barangayId) return;
-
-        const { data: docs } = await supabase
-          .from('documents')
-          .select('document_id, title, folder_category, document_type, status, year, created_at, submitted_by')
-          .eq('barangay_id', barangayId)
-          .order('created_at', { ascending: false });
-
-        if (!docs) return;
-
-        const userIds = [...new Set(docs.map(d => d.submitted_by).filter(Boolean))];
-        let usersMap = {};
-        if (userIds.length > 0) {
-          const { data: users } = await supabase.from('users').select('user_id, first_name, last_name').in('user_id', userIds);
-          usersMap = (users || []).reduce((acc, u) => { acc[u.user_id] = `${u.first_name} ${u.last_name}`; return acc; }, {});
-        }
-
-        const formattedDocs = await Promise.all(docs.map(async doc => {
-          const { data: versions } = await supabase
-            .from('document_versions')
-            .select('version_id, file_url, created_at')
-            .eq('document_id', doc.document_id)
-            .order('version_number', { ascending: false })
-            .limit(1);
-
-          return {
-            id: doc.document_id,
-            title: doc.title || 'Untitled',
-            type: doc.document_type || 'Unknown',
-            category: doc.folder_category || 'planning',
-            status: doc.status || 'draft',
-            year: doc.year,
-            createdBy: usersMap[doc.submitted_by] || 'Unknown',
-            lastModified: doc.created_at || new Date().toISOString(),
-            fileUrl: versions?.[0]?.file_url || null,
-          };
-        }));
-
-        setDocuments(formattedDocs);
-      })();
-    }, [barangayId])
+      fetchDocuments();
+    }, [fetchDocuments])
   );
 
   const handleNavPress = (tab) => {
@@ -305,49 +271,36 @@ export default function SKDocumentManagementScreen() {
       setDeleteModalVisible(false);
       setDocumentToDelete(null);
 
-      // Force refresh by directly fetching fresh data
-      const { data: docs } = await supabase
-        .from('documents')
-        .select('document_id, title, folder_category, document_type, status, year, created_at, submitted_by')
-        .eq('barangay_id', barangayId)
-        .order('created_at', { ascending: false });
-
-      if (docs) {
-        const userIds = [...new Set(docs.map(d => d.submitted_by).filter(Boolean))];
-        let usersMap = {};
-        if (userIds.length > 0) {
-          const { data: users } = await supabase.from('users').select('user_id, first_name, last_name').in('user_id', userIds);
-          usersMap = (users || []).reduce((acc, u) => { acc[u.user_id] = `${u.first_name} ${u.last_name}`; return acc; }, {});
-        }
-
-        const formattedDocs = await Promise.all(docs.map(async doc => {
-          const { data: versions } = await supabase
-            .from('document_versions')
-            .select('version_id, file_url, created_at')
-            .eq('document_id', doc.document_id)
-            .order('version_number', { ascending: false })
-            .limit(1);
-
-          return {
-            id: doc.document_id,
-            title: doc.title || 'Untitled',
-            type: doc.document_type || 'Unknown',
-            category: doc.folder_category || 'planning',
-            status: doc.status || 'draft',
-            year: doc.year,
-            createdBy: usersMap[doc.submitted_by] || 'Unknown',
-            lastModified: doc.created_at || new Date().toISOString(),
-            fileUrl: versions?.[0]?.file_url || null,
-          };
-        }));
-
-        setDocuments(formattedDocs);
-      }
+      // Refresh document list
+      await fetchDocuments();
     } catch (error) {
       console.error('Error:', error);
       showAlert('error', 'Unexpected Error', 'An error occurred while deleting the document.');
     }
     setDeleting(false);
+  };
+
+  // Handle download button press - show modal
+  const handleDownloadPress = (doc) => {
+    setDocumentToDownload(doc);
+    setDownloadModalVisible(true);
+  };
+
+  // Handle download confirm
+  const handleDownloadConfirm = async () => {
+    if (!documentToDownload?.fileUrl) {
+      showAlert('error', 'No File', 'This document does not have an attached file.');
+      return;
+    }
+
+    setDownloadModalVisible(false);
+    setDocumentToDownload(null);
+    try {
+      await Linking.openURL(documentToDownload.fileUrl);
+    } catch (error) {
+      console.error('Download error:', error);
+      showAlert('error', 'Download Failed', `Could not open the file: ${error.message}`);
+    }
   };
 
   // Handle forward button press
@@ -732,7 +685,7 @@ export default function SKDocumentManagementScreen() {
             >
               {/* Title */}
               <View style={{ flex: isMobile ? 2 : 3, flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                {doc.fileUrl && (
+                {doc.fileUrl && doc.status === 'draft' && (
                   <Text style={{ fontSize: 12 }}>📎</Text>
                 )}
                 <Text
@@ -769,7 +722,7 @@ export default function SKDocumentManagementScreen() {
                     <TouchableOpacity activeOpacity={0.7} onPress={() => handleForwardPress(doc)}>
                       <ForwardIcon />
                     </TouchableOpacity>
-                    <TouchableOpacity activeOpacity={0.7} onPress={() => {}}>
+                    <TouchableOpacity activeOpacity={0.7} onPress={() => handleDownloadPress(doc)}>
                       <SaveIcon />
                     </TouchableOpacity>
                     <TouchableOpacity activeOpacity={0.7} onPress={() => {}}>
@@ -784,6 +737,15 @@ export default function SKDocumentManagementScreen() {
                   <>
                     <TouchableOpacity activeOpacity={0.7} onPress={() => {}}>
                       <EditIcon />
+                    </TouchableOpacity>
+                    <TouchableOpacity activeOpacity={0.7} onPress={() => {}}>
+                      <ViewIcon />
+                    </TouchableOpacity>
+                  </>
+                ) : doc.status === 'approved' ? (
+                  <>
+                    <TouchableOpacity activeOpacity={0.7} onPress={() => handleDownloadPress(doc)}>
+                      <SaveIcon />
                     </TouchableOpacity>
                     <TouchableOpacity activeOpacity={0.7} onPress={() => {}}>
                       <ViewIcon />
@@ -902,6 +864,8 @@ export default function SKDocumentManagementScreen() {
                   You are about to submit{' '}
                   <Text style={styles.modalHighlight}>"{documentToForward?.title}"</Text>
                   {' '}to LYDO for consultation.
+                  {'\n\n'}The document status will change to{' '}
+                  <Text style={[styles.modalHighlight, { color: COLORS.blue }]}>Submitted</Text>.
                 </Text>
               </View>
               <View style={styles.modalDivider} />
@@ -933,6 +897,50 @@ export default function SKDocumentManagementScreen() {
           </View>
         </Modal>
 
+        {/* ── Download Confirmation Modal ── */}
+        <Modal
+          visible={downloadModalVisible}
+          animationType="fade"
+          transparent={true}
+          onRequestClose={() => { setDownloadModalVisible(false); setDocumentToDownload(null); }}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <View style={styles.modalIconStrip}>
+                <View style={[styles.modalIconCircle, { backgroundColor: '#DBEAFE' }]}>
+                  <Feather name="download" size={26} color={COLORS.blue} />
+                </View>
+              </View>
+              <View style={styles.modalBody}>
+                <Text style={styles.modalTitle}>Download Document</Text>
+                <Text style={styles.modalBodyText}>
+                  Do you want to download{' '}
+                  <Text style={styles.modalHighlight}>"{documentToDownload?.title}"</Text>?
+   
+                </Text>
+              </View>
+              <View style={styles.modalDivider} />
+              <View style={styles.modalFooter}>
+                <TouchableOpacity
+                  style={styles.modalCancelBtn}
+                  onPress={() => { setDownloadModalVisible(false); setDocumentToDownload(null); }}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.modalCancelBtnText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.modalActionBtn, { backgroundColor: COLORS.blue }]}
+                  onPress={handleDownloadConfirm}
+                  activeOpacity={0.8}
+                >
+                  <Feather name="download" size={14} color={COLORS.white} style={{ marginRight: 6 }} />
+                  <Text style={styles.modalActionBtnText}>Download</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
+
         {/* ── Alert / Feedback Modal ── */}
         <Modal
           visible={alertModal.visible}
@@ -946,12 +954,21 @@ export default function SKDocumentManagementScreen() {
                 <View style={[styles.modalIconCircle, {
                   backgroundColor:
                     alertModal.type === 'success' ? '#D1FAE5' :
-                    alertModal.type === 'error'   ? '#FEE2E2' : '#FEF9C3',
+                    alertModal.type === 'error'   ? '#FEE2E2' :
+                    alertModal.type === 'info'    ? '#DBEAFE' : '#FEF9C3',
                 }]}>
                   <Feather
-                    name={alertModal.type === 'success' ? 'check-circle' : alertModal.type === 'error' ? 'alert-circle' : 'info'}
+                    name={
+                      alertModal.type === 'success' ? 'check-circle' :
+                      alertModal.type === 'error'   ? 'alert-circle' :
+                      alertModal.type === 'info'    ? 'download' : 'info'
+                    }
                     size={28}
-                    color={alertModal.type === 'success' ? '#059669' : alertModal.type === 'error' ? COLORS.red : '#B45309'}
+                    color={
+                      alertModal.type === 'success' ? '#059669' :
+                      alertModal.type === 'error'   ? COLORS.red :
+                      alertModal.type === 'info'    ? COLORS.blue : '#B45309'
+                    }
                   />
                 </View>
               </View>
@@ -965,7 +982,8 @@ export default function SKDocumentManagementScreen() {
                   style={[styles.modalActionBtn, {
                     backgroundColor:
                       alertModal.type === 'success' ? '#059669' :
-                      alertModal.type === 'error'   ? COLORS.red : '#B45309',
+                      alertModal.type === 'error'   ? COLORS.red :
+                      alertModal.type === 'info'    ? COLORS.blue : '#B45309',
                     flex: 0, paddingHorizontal: 36,
                   }]}
                   onPress={hideAlert}
