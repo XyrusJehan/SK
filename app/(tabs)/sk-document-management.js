@@ -4,6 +4,7 @@ import {
   StyleSheet, SafeAreaView, StatusBar, Dimensions, Image, Modal,
 } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
+import { Feather } from '@expo/vector-icons';
 import { useNav } from './navContext';
 import { useAuth } from './authContext';
 import { supabase } from '../../utils/supabase';
@@ -30,7 +31,7 @@ const COLORS = {
 // ─── CONSTANTS ────────────────────────────────────────────────────────────────
 const NAV_TABS       = ['Dashboard', 'Documents', 'Planning', 'Portal', 'Account'];
 const DOCUMENT_TABS  = ['Folder', 'Document Management'];
-const STATUS_TABS    = ['All', 'Drafts', 'Saved', 'Submitted', 'Approved'];
+const STATUS_TABS    = ['All', 'Drafts', 'Saved', 'Submitted', 'Approved', 'Returned'];
 const DRAFT_TYPES    = ['All Types', 'Planning', 'Financial', 'Governance', 'Performance'];
 const SORT_OPTIONS   = ['Newest', 'Oldest', 'Title A-Z', 'Title Z-A'];
 
@@ -54,24 +55,38 @@ const BellIcon = ({ hasNotif }) => (
   </View>
 );
 
-// Edit icon (pencil)
+// Edit icon
 const EditIcon = () => (
   <View style={styles.actionIconWrap}>
-    <Text style={[styles.actionIconText, { color: COLORS.navy }]}>✏️</Text>
+    <Feather name="edit-2" size={isMobile ? 13 : 15} color={COLORS.navy} />
   </View>
 );
 
-// Delete icon (trash)
+// Delete icon
 const DeleteIcon = () => (
   <View style={styles.actionIconWrap}>
-    <Text style={[styles.actionIconText, { color: COLORS.red }]}>🗑️</Text>
+    <Feather name="trash-2" size={isMobile ? 13 : 15} color={COLORS.red} />
   </View>
 );
 
-// View icon (eye)
+// View icon
 const ViewIcon = () => (
   <View style={styles.actionIconWrap}>
-    <Text style={[styles.actionIconText, { color: COLORS.teal }]}>👁️</Text>
+    <Feather name="eye" size={isMobile ? 13 : 15} color={COLORS.teal} />
+  </View>
+);
+
+// Forward icon (send / paper plane)
+const ForwardIcon = () => (
+  <View style={styles.actionIconWrap}>
+    <Feather name="send" size={isMobile ? 13 : 15} color={COLORS.blue} />
+  </View>
+);
+
+// Save icon (download)
+const SaveIcon = () => (
+  <View style={styles.actionIconWrap}>
+    <Feather name="download" size={isMobile ? 13 : 15} color={COLORS.navy} />
   </View>
 );
 
@@ -108,12 +123,17 @@ export default function SKDocumentManagementScreen() {
   const [sortBy, setSortBy]                   = useState('Newest');
   const [sidebarVisible, setSidebarVisible]   = useState(false);
   const [typeDropdownOpen, setTypeDropdownOpen] = useState(false);
+  const [yearDropdownOpen, setYearDropdownOpen] = useState(false);
   const [sortDropdownOpen, setSortDropdownOpen] = useState(false);
+  const [selectedYear, setSelectedYear] = useState('All Years');
   const [notifCount]                          = useState(2);
   const [documents, setDocuments]             = useState([]);
   const [deleteModalVisible, setDeleteModalVisible] = useState(false);
   const [documentToDelete, setDocumentToDelete] = useState(null);
   const [deleting, setDeleting] = useState(false);
+  const [forwardModalVisible, setForwardModalVisible] = useState(false);
+  const [documentToForward, setDocumentToForward] = useState(null);
+  const [forwarding, setForwarding] = useState(false);
 
   // Fetch documents for this barangay - reusable function
   const fetchDocuments = useCallback(async () => {
@@ -320,12 +340,88 @@ export default function SKDocumentManagementScreen() {
     }
     setDeleting(false);
   };
- 
+
+  // Handle forward button press
+  const handleForwardPress = (doc) => {
+    console.log('Forward pressed for doc:', doc);
+    setDocumentToForward(doc);
+    setForwardModalVisible(true);
+  };
+
+  // Handle confirm forward to LYDO for consultation
+  const handleConfirmForward = async () => {
+    console.log('Forward confirm - user:', user);
+    console.log('Document to forward:', documentToForward);
+
+    if (!documentToForward || !user?.userId) {
+      alert('Error: User not found. Please login again.');
+      return;
+    }
+
+    setForwarding(true);
+    try {
+      // Get current max version number
+      const { data: existingVersions } = await supabase
+        .from('document_versions')
+        .select('version_number')
+        .eq('document_id', documentToForward.id)
+        .order('version_number', { ascending: false })
+        .limit(1);
+
+      const newVersionNumber = (existingVersions?.[0]?.version_number || 0) + 1;
+
+      // Create version record with action 'submitted'
+      const { error: versionError } = await supabase
+        .from('document_versions')
+        .insert({
+          document_id: documentToForward.id,
+          version_number: newVersionNumber,
+          file_url: documentToForward.fileUrl || '',
+          action: 'submitted',
+          actioned_by: user.userId,
+        });
+
+      if (versionError) {
+        console.error('Error creating version:', versionError);
+        alert('Failed to forward document: ' + versionError.message);
+        setForwarding(false);
+        return;
+      }
+
+      // Update document status to 'submitted' and set submitted_at
+      const { error: updateError } = await supabase
+        .from('documents')
+        .update({
+          status: 'submitted',
+          submitted_at: new Date().toISOString(),
+        })
+        .eq('document_id', documentToForward.id);
+
+      if (updateError) {
+        console.error('Error updating document:', updateError);
+        alert('Failed to forward document: ' + updateError.message);
+        setForwarding(false);
+        return;
+      }
+
+      setForwardModalVisible(false);
+      setDocumentToForward(null);
+
+      // Refresh all documents to reflect the latest status
+      await fetchDocuments();
+
+      alert('Document forwarded to LYDO for consultation successfully!');
+    } catch (error) {
+      console.error('Error:', error);
+      alert('An error occurred while forwarding the document');
+    }
+    setForwarding(false);
+  };
 
   // Filtered + sorted documents
   const visibleDocs = useMemo(() => {
     // Filter by status tab (draft, saved, submitted, approved)
-    const statusMap = { 'All': null, 'Drafts': 'draft', 'Saved': 'saved', 'Submitted': 'submitted', 'Approved': 'approved' };
+    const statusMap = { 'All': null, 'Drafts': 'draft', 'Saved': 'saved', 'Submitted': 'submitted', 'Approved': 'approved', 'Returned': 'returned' };
     const statusFilter = statusMap[activeStatusTab];
     let docs = statusFilter !== null && statusFilter ? documents.filter(d => d.status === statusFilter) : documents;
 
@@ -338,6 +434,11 @@ export default function SKDocumentManagementScreen() {
         'Performance': 'performance',
       };
       docs = docs.filter(d => d.category === categoryMap[draftType]);
+    }
+
+    // Filter by year
+    if (selectedYear !== 'All Years') {
+      docs = docs.filter(d => String(d.year) === String(selectedYear));
     }
 
     // Filter by search
@@ -358,7 +459,7 @@ export default function SKDocumentManagementScreen() {
       case 'Title Z-A': return [...docs].sort((a, b) => b.title.localeCompare(a.title));
       default:          return docs;
     }
-  }, [activeStatusTab, draftType, searchText, sortBy]);
+  }, [activeStatusTab, draftType, selectedYear, searchText, sortBy]);
 
   // ── Sidebar ──
   const renderSidebar = () => (
@@ -490,7 +591,7 @@ export default function SKDocumentManagementScreen() {
         <View style={styles.dropdownWrap}>
           <TouchableOpacity
             style={styles.dropdownBtn}
-            onPress={() => { setTypeDropdownOpen(v => !v); setSortDropdownOpen(false); }}
+            onPress={() => { setTypeDropdownOpen(v => !v); setSortDropdownOpen(false); setYearDropdownOpen(false); }}
             activeOpacity={0.8}
           >
             <Text style={styles.dropdownBtnText}>{draftType}</Text>
@@ -515,11 +616,40 @@ export default function SKDocumentManagementScreen() {
           )}
         </View>
 
+        {/* Year Dropdown */}
+        <View style={styles.dropdownWrap}>
+          <TouchableOpacity
+            style={styles.dropdownBtn}
+            onPress={() => { setYearDropdownOpen(v => !v); setTypeDropdownOpen(false); setSortDropdownOpen(false); }}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.dropdownBtnText}>{selectedYear}</Text>
+            <Text style={styles.dropdownArrow}>{yearDropdownOpen ? '▲' : '▼'}</Text>
+          </TouchableOpacity>
+          {yearDropdownOpen && (
+            <View style={styles.dropdownMenu}>
+              {['All Years', ...Array.from({ length: 6 }, (_, i) => String(new Date().getFullYear() - i))].map(opt => (
+                <TouchableOpacity
+                  key={opt}
+                  style={[styles.dropdownItem, selectedYear === opt && styles.dropdownItemActive]}
+                  onPress={() => { setSelectedYear(opt); setYearDropdownOpen(false); }}
+                  activeOpacity={0.8}
+                >
+                  <Text style={[styles.dropdownItemText, selectedYear === opt && styles.dropdownItemTextActive]}>
+                    {opt}
+                  </Text>
+                  {selectedYear === opt && <Text style={styles.dropdownCheck}>✓</Text>}
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
+        </View>
+
         {/* Sorted By Dropdown */}
         <View style={styles.dropdownWrap}>
           <TouchableOpacity
             style={styles.dropdownBtn}
-            onPress={() => { setSortDropdownOpen(v => !v); setTypeDropdownOpen(false); }}
+            onPress={() => { setSortDropdownOpen(v => !v); setTypeDropdownOpen(false); setYearDropdownOpen(false); }}
             activeOpacity={0.8}
           >
             <Text style={styles.dropdownBtnLabel}>Sorted By  </Text>
@@ -550,9 +680,9 @@ export default function SKDocumentManagementScreen() {
       <View style={styles.statusTabsRow}>
         {STATUS_TABS.map(tab => {
           const active = activeStatusTab === tab;
-          const statusMap = { 'Drafts': 'draft', 'Saved': 'saved', 'Submitted': 'submitted', 'Approved': 'approved' };
+          const statusMap = { 'Drafts': 'draft', 'Saved': 'saved', 'Submitted': 'submitted', 'Approved': 'approved', 'Returned': 'returned' };
           const statusFilter = statusMap[tab];
-          const count = statusFilter ? documents.filter(d => d.status === statusFilter).length : 0;
+          const count = statusFilter ? documents.filter(d => d.status === statusFilter).length : documents.length;
           return (
             <TouchableOpacity
               key={tab}
@@ -625,15 +755,44 @@ export default function SKDocumentManagementScreen() {
 
               {/* Actions */}
               <View style={[styles.actionRow, { flex: 1 }]}>
-                <TouchableOpacity activeOpacity={0.7} onPress={() => {}}>
-                  <EditIcon />
-                </TouchableOpacity>
-                <TouchableOpacity activeOpacity={0.7} onPress={() => handleDeletePress(doc)}>
-                  <DeleteIcon />
-                </TouchableOpacity>
-                <TouchableOpacity activeOpacity={0.7} onPress={() => {}}>
-                  <ViewIcon />
-                </TouchableOpacity>
+                {doc.status === 'saved' || doc.status === 'draft' ? (
+                  <>
+                    <TouchableOpacity activeOpacity={0.7} onPress={() => handleForwardPress(doc)}>
+                      <ForwardIcon />
+                    </TouchableOpacity>
+                    <TouchableOpacity activeOpacity={0.7} onPress={() => {}}>
+                      <SaveIcon />
+                    </TouchableOpacity>
+                    <TouchableOpacity activeOpacity={0.7} onPress={() => {}}>
+                      <ViewIcon />
+                    </TouchableOpacity>
+                  </>
+                ) : doc.status === 'submitted' ? (
+                  <TouchableOpacity activeOpacity={0.7} onPress={() => {}}>
+                    <ViewIcon />
+                  </TouchableOpacity>
+                ) : doc.status === 'returned' ? (
+                  <>
+                    <TouchableOpacity activeOpacity={0.7} onPress={() => {}}>
+                      <EditIcon />
+                    </TouchableOpacity>
+                    <TouchableOpacity activeOpacity={0.7} onPress={() => {}}>
+                      <ViewIcon />
+                    </TouchableOpacity>
+                  </>
+                ) : (
+                  <>
+                    <TouchableOpacity activeOpacity={0.7} onPress={() => {}}>
+                      <EditIcon />
+                    </TouchableOpacity>
+                    <TouchableOpacity activeOpacity={0.7} onPress={() => handleDeletePress(doc)}>
+                      <DeleteIcon />
+                    </TouchableOpacity>
+                    <TouchableOpacity activeOpacity={0.7} onPress={() => {}}>
+                      <ViewIcon />
+                    </TouchableOpacity>
+                  </>
+                )}
               </View>
             </View>
           ))
@@ -703,8 +862,49 @@ export default function SKDocumentManagementScreen() {
           </View>
           
         </Modal>
+
+        {/* Forward Confirmation Modal */}
+        <Modal
+          visible={forwardModalVisible}
+          animationType="fade"
+          transparent={true}
+          onRequestClose={() => setForwardModalVisible(false)}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Forward to LYDO</Text>
+                <TouchableOpacity onPress={() => setForwardModalVisible(false)} activeOpacity={0.7}>
+                  <Text style={styles.modalClose}>✕</Text>
+                </TouchableOpacity>
+              </View>
+              <View style={styles.modalBody}>
+                <Text style={styles.modalBodyText}>
+                  Are you sure you want to forward "{documentToForward?.title}" to LYDO for consultation? This action will change the document status to submitted.
+                </Text>
+              </View>
+              <View style={styles.modalFooter}>
+                <TouchableOpacity
+                  style={styles.modalCancelBtn}
+                  onPress={() => setForwardModalVisible(false)}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.modalCancelBtnText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.modalDeleteBtn, forwarding && styles.modalDeleteBtnDisabled]}
+                  onPress={handleConfirmForward}
+                  disabled={forwarding}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.modalDeleteBtnText}>{forwarding ? 'Forwarding...' : 'Forward'}</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
       </View>
-      
+
     </SafeAreaView>
     
   );

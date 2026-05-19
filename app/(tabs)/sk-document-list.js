@@ -139,8 +139,35 @@ export default function SKDocumentListScreen() {
   const [uploading, setUploading] = useState(false);
   const [selectedFile, setSelectedFile] = useState(null);
 
-  // Get document types for selected category
-  const currentDocTypes = DOCUMENT_TYPES[uploadCategory] || [];
+  // Track document types already uploaded for the selected category
+  const [existingDocTypes, setExistingDocTypes] = useState([]);
+
+  // Fetch existing document types whenever the upload modal opens or category changes
+  useEffect(() => {
+    const fetchExistingDocTypes = async () => {
+      if (!barangayId || !uploadModalVisible) return;
+      try {
+        const { data, error } = await supabase
+          .from('documents')
+          .select('document_type')
+          .eq('barangay_id', barangayId)
+          .eq('folder_category', uploadCategory);
+
+        if (!error && data) {
+          setExistingDocTypes(data.map(d => d.document_type).filter(Boolean));
+        }
+      } catch (err) {
+        console.error('Error fetching existing doc types:', err);
+      }
+    };
+
+    fetchExistingDocTypes();
+  }, [barangayId, uploadCategory, uploadModalVisible]);
+
+  // Get document types for selected category, excluding already-uploaded ones
+  const currentDocTypes = (DOCUMENT_TYPES[uploadCategory] || []).filter(
+    type => !existingDocTypes.includes(type)
+  );
 
   // Fetch documents for this barangay filtered by category
   useEffect(() => {
@@ -376,6 +403,7 @@ export default function SKDocumentListScreen() {
     setCategoryDropdownOpen(false);
     setDocTypeDropdownOpen(false);
     setSelectedFile(null);
+    setExistingDocTypes([]);
   };
 
   // ── Sidebar ──
@@ -693,7 +721,7 @@ export default function SKDocumentListScreen() {
                 </TouchableOpacity>
                 {docTypeDropdownOpen && (
                   <ScrollView style={styles.modalDropdownMenu} showsVerticalScrollIndicator={false}>
-                    {currentDocTypes.map(type => (
+                    {currentDocTypes.length > 0 ? currentDocTypes.map(type => (
                       <TouchableOpacity
                         key={type}
                         style={[styles.modalDropdownItem, uploadDocType === type && styles.modalDropdownItemActive]}
@@ -705,7 +733,13 @@ export default function SKDocumentListScreen() {
                         </Text>
                         {uploadDocType === type && <Text style={styles.modalDropdownCheck}>✓</Text>}
                       </TouchableOpacity>
-                    ))}
+                    )) : (
+                      <View style={{ paddingVertical: 16, paddingHorizontal: 14 }}>
+                        <Text style={{ fontSize: 13, color: COLORS.subText, textAlign: 'center' }}>
+                          All document types for this category have already been uploaded.
+                        </Text>
+                      </View>
+                    )}
                   </ScrollView>
                 )}
               </View>
