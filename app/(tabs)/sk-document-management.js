@@ -3,7 +3,7 @@ import {
   View, Text, TextInput, ScrollView, TouchableOpacity,
   StyleSheet, SafeAreaView, StatusBar, Dimensions, Image, Modal,
 } from 'react-native';
-import { useRouter, useFocusEffect } from 'expo-router';
+import { useRouter, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { useNav } from './navContext';
 import { useAuth } from './authContext';
@@ -109,6 +109,7 @@ const TypeBadge = ({ type }) => {
 // ─── MAIN SCREEN ──────────────────────────────────────────────────────────────
 export default function SKDocumentManagementScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams();
   const { setActiveTab } = useNav();
   const { logout, user } = useAuth();
 
@@ -117,7 +118,9 @@ export default function SKDocumentManagementScreen() {
   const barangayId = user?.barangayId;
 
   const [activeDocTab, setActiveDocTab] = useState('Document Management');
-  const [activeStatusTab, setActiveStatusTab] = useState('All');
+  const [activeStatusTab, setActiveStatusTab] = useState(
+    STATUS_TABS.includes(params?.initialTab) ? params.initialTab : 'All'
+  );
   const [searchText, setSearchText]           = useState('');
   const [draftType, setDraftType]             = useState('All Types');
   const [sortBy, setSortBy]                   = useState('Newest');
@@ -459,7 +462,7 @@ export default function SKDocumentManagementScreen() {
       case 'Title Z-A': return [...docs].sort((a, b) => b.title.localeCompare(a.title));
       default:          return docs;
     }
-  }, [activeStatusTab, draftType, selectedYear, searchText, sortBy]);
+  }, [activeStatusTab, draftType, selectedYear, searchText, sortBy, documents]);
 
   // ── Sidebar ──
   const renderSidebar = () => (

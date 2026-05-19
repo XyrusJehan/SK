@@ -386,8 +386,8 @@ export default function SKDocumentListScreen() {
       setUploadModalVisible(false);
       setUploading(false);
 
-      // Navigate to document management to see the new draft
-      router.push('/(tabs)/sk-document-management');
+      // Navigate to document management - Saved tab to see the new document
+      router.push({ pathname: '/(tabs)/sk-document-management', params: { initialTab: 'Saved' } });
     } catch (error) {
       console.error('Error:', error);
       alert('An error occurred while uploading');
