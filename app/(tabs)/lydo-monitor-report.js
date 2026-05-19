@@ -391,6 +391,8 @@ export default function LYDOMonitorReportScreen() {
   const { logout } = useAuth();
 
   const [activeMonitorTab, setActiveMonitorTab] = useState('Report');
+  // Sub-tabs under Report: 'Transparency' | 'Submission'
+  const [reportSubTab, setReportSubTab] = useState('Transparency');
   // 'All' means show consolidated view; specific doc shows single-doc view
   const [selectedDoc,  setSelectedDoc]  = useState('All');
   const [selectedYear, setSelectedYear] = useState('2026');
@@ -528,25 +530,32 @@ export default function LYDOMonitorReportScreen() {
         })}
       </View>
 
-      {/* ── Filter Row: All button + Document Dropdown + Year + Search ── */}
-      <View style={styles.filterRow}>
-        {/* Search box */}
-        <View style={styles.searchBox}>
-          <Text style={{ fontSize: 11, marginRight: 4, color: COLORS.midGray }}>🔍</Text>
-          <TextInput
-            style={styles.searchInput}
-            placeholder="Search"
-            placeholderTextColor={COLORS.midGray}
-            value={searchText}
-            onChangeText={setSearchText}
-          />
-          {searchText.length > 0 && (
-            <TouchableOpacity onPress={() => setSearchText('')}>
-              <Text style={{ color: COLORS.midGray, fontSize: 11 }}>✕</Text>
+      {/* ── Report Sub-Tabs: Transparency / Submission ── */}
+      <View style={styles.subTabBar}>
+        {['Transparency', 'Submission'].map(sub => {
+          const active = reportSubTab === sub;
+          return (
+            <TouchableOpacity
+              key={sub}
+              style={[styles.subTab, active && styles.subTabActive]}
+              onPress={() => setReportSubTab(sub)}
+              activeOpacity={0.8}
+            >
+              <Text style={[styles.subTabText, active && styles.subTabTextActive]}>{sub}</Text>
             </TouchableOpacity>
-          )}
-        </View>
+          );
+        })}
+      </View>
 
+      {/* ── Report Sub-title ── */}
+      <Text style={styles.reportSubTitle}>
+        {reportSubTab === 'Transparency'
+          ? 'Full Disclosure Policy (FDP)  Monitoring Report'
+          : 'Submission Compliance Report'}
+      </Text>
+
+      {/* ── Filter Row: All + Document + Year + Search + Save Report ── */}
+      <View style={styles.filterRow}>
         {/* "All" toggle button */}
         <TouchableOpacity
           style={[styles.allBtn, isAllView && styles.allBtnActive]}
@@ -571,6 +580,39 @@ export default function LYDOMonitorReportScreen() {
           options={YEAR_OPTIONS}
           onSelect={setSelectedYear}
         />
+
+        {/* Search box */}
+        <View style={styles.searchBox}>
+          <Text style={{ fontSize: 11, marginRight: 4, color: COLORS.midGray }}>🔍</Text>
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Search"
+            placeholderTextColor={COLORS.midGray}
+            value={searchText}
+            onChangeText={setSearchText}
+          />
+          {searchText.length > 0 && (
+            <TouchableOpacity onPress={() => setSearchText('')}>
+              <Text style={{ color: COLORS.midGray, fontSize: 11 }}>✕</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+
+        {/* Spacer */}
+        <View style={{ flex: 1 }} />
+
+        {/* Save Report button */}
+        <TouchableOpacity
+          style={styles.saveReportBtn}
+          onPress={() => setPdfModalVisible(true)}
+          activeOpacity={0.85}
+        >
+          <View style={styles.saveReportIconWrap}>
+            <View style={styles.saveReportArrow} />
+            <View style={styles.saveReportArrowBase} />
+          </View>
+          <Text style={styles.saveReportText}>Save Report</Text>
+        </TouchableOpacity>
       </View>
 
       {/* ── Report Title + Deadline ── */}
@@ -581,11 +623,9 @@ export default function LYDOMonitorReportScreen() {
             : 'Report on the Monitoring of Full Disclosure Policy (FDP) Board Publications'
           }
         </Text>
-        {!isAllView && (
-          <Text style={styles.deadline}>
-            Deadline : {DOC_DEADLINES[selectedDoc] ?? 'January 14, 2026'}
-          </Text>
-        )}
+        <Text style={styles.deadline}>
+          Deadline : {isAllView ? 'January 14, 2026' : (DOC_DEADLINES[selectedDoc] ?? 'January 14, 2026')}
+        </Text>
       </View>
 
       {/* ── Table ── */}
@@ -655,20 +695,7 @@ export default function LYDOMonitorReportScreen() {
         )}
       </View>
 
-      {/* ── Full Compliance Report PDF Button (bottom-right) ── */}
-      <View style={styles.bottomActions}>
-        <TouchableOpacity
-          style={styles.pdfBtn}
-          onPress={() => setPdfModalVisible(true)}
-          activeOpacity={0.85}
-        >
-          <Text style={styles.pdfBtnText}>Full Compliance Report [PDF]</Text>
-          <View style={styles.pdfBtnIconWrap}>
-            <View style={styles.pdfBtnArrow} />
-            <View style={styles.pdfBtnArrowBase} />
-          </View>
-        </TouchableOpacity>
-      </View>
+
 
     </ScrollView>
   );
@@ -786,9 +813,9 @@ const styles = StyleSheet.create({
   allBtnTextActive: { color: COLORS.white },
 
   // ── Report title + deadline ───────────────────────────────────────────────────
-  reportTitleRow: { flexDirection: isMobile ? 'column' : 'row', justifyContent: 'space-between', alignItems: isMobile ? 'flex-start' : 'flex-end', marginBottom: 12, gap: 4 },
+  reportTitleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 12, gap: 4 },
   reportTitle:    { fontSize: isMobile ? 11 : 13, fontWeight: '700', color: COLORS.darkText, flex: 1, lineHeight: 18 },
-  deadline:       { fontSize: isMobile ? 10 : 12, fontWeight: '700', color: COLORS.navy },
+  deadline:       { fontSize: isMobile ? 10 : 12, fontWeight: '700', color: '#CC0000' },
 
   // ── Table ────────────────────────────────────────────────────────────────────
   tableContainer:  { backgroundColor: COLORS.white, borderRadius: 12, overflow: 'hidden', borderWidth: 1, borderColor: COLORS.lightGray, elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 6 },
@@ -819,6 +846,23 @@ const styles = StyleSheet.create({
 
   emptyState: { alignItems: 'center', paddingVertical: 40 },
   emptyText:  { fontSize: 14, color: COLORS.midGray },
+
+  // ── Report Sub-Tabs ───────────────────────────────────────────────────────────
+  subTabBar:         { flexDirection: 'row', gap: 8, marginBottom: 10, marginTop: 4 },
+  subTab:            { paddingHorizontal: 16, paddingVertical: 7, borderRadius: 20, backgroundColor: COLORS.navy },
+  subTabActive:      { backgroundColor: COLORS.gold },
+  subTabText:        { fontSize: 12, fontWeight: '700', color: COLORS.white },
+  subTabTextActive:  { color: COLORS.darkText },
+
+  // ── Report sub-title ─────────────────────────────────────────────────────────
+  reportSubTitle:    { fontSize: isMobile ? 12 : 14, fontWeight: '700', color: COLORS.navy, marginBottom: 12 },
+
+  // ── Save Report button ───────────────────────────────────────────────────────
+  saveReportBtn:     { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: COLORS.white, borderRadius: 8, borderWidth: 1.5, borderColor: COLORS.lightGray, paddingHorizontal: 12, paddingVertical: 8, elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 4 },
+  saveReportText:    { fontSize: 12, fontWeight: '700', color: COLORS.darkText },
+  saveReportIconWrap:{ alignItems: 'center', justifyContent: 'center', width: 14, height: 14 },
+  saveReportArrow:   { width: 0, height: 0, borderLeftWidth: 4, borderRightWidth: 4, borderTopWidth: 6, borderLeftColor: 'transparent', borderRightColor: 'transparent', borderTopColor: COLORS.navy },
+  saveReportArrowBase: { width: 7, height: 2, backgroundColor: COLORS.navy, marginTop: 1 },
 
   // ── Bottom PDF button ─────────────────────────────────────────────────────────
   bottomActions: { flexDirection: 'row', justifyContent: 'flex-end', marginTop: 16 },
