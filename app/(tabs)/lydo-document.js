@@ -1,9 +1,13 @@
+import * as FileSystem from 'expo-file-system';
 import { useRouter } from 'expo-router';
+import * as Sharing from 'expo-sharing';
+import * as WebBrowser from 'expo-web-browser';
 import { useEffect, useState } from 'react';
 import {
   Dimensions,
   Image,
   Linking,
+  Modal,
   SafeAreaView,
   ScrollView,
   StatusBar,
@@ -12,13 +16,19 @@ import {
   TextInput,
   TouchableOpacity,
   View,
+  ActivityIndicator,
+  Platform,
 } from 'react-native';
-import * as WebBrowser from 'expo-web-browser';
-import * as FileSystem from 'expo-file-system';
-import * as Sharing from 'expo-sharing';
+import { Feather } from '@expo/vector-icons';
 import { supabase } from '../../utils/supabase';
 import { useAuth } from './authContext';
 import { useNav } from './navContext';
+
+// WebView: use react-native-webview on native, iframe on web
+let WebView = null;
+if (Platform.OS !== 'web') {
+  WebView = require('react-native-webview').WebView;
+}
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const isMobile = SCREEN_WIDTH < 768;
@@ -274,11 +284,24 @@ export default function LYDODocumentsScreen({ navigation }) {
   const [searchText, setSearchText]               = useState('');
   const [notifCount]                              = useState(2);
   const [sidebarVisible, setSidebarVisible]       = useState(false);
-  const [activeDocumentTab, setActiveDocumentTab] = useState('Barangay Document');
+  const [activeDocumentTab, setActiveDocumentTab] = useState('Barangay Folders');
   const [barangays, setBarangays]                 = useState([]);
   const [documentYears, setDocumentYears]         = useState([]);
   const [docTypesForYear, setDocTypesForYear]     = useState([]); // {document_type, count}
   const [docsForType, setDocsForType]             = useState([]); // documents by barangay for selected type
+
+  // Viewer state
+  const [viewerModal, setViewerModal] = useState({ visible: false, fileUrl: null, title: '' });
+  const [webViewLoading, setWebViewLoading] = useState(false);
+
+  // Handle view press - open document viewer
+  const handleViewPress = (doc) => {
+    if (!doc.file_url) {
+      return;
+    }
+    setViewerModal({ visible: true, fileUrl: doc.file_url, title: doc.title });
+    setWebViewLoading(true);
+  };
 
   useEffect(() => { setActiveTab('Documents'); }, []);
 
@@ -410,7 +433,7 @@ export default function LYDODocumentsScreen({ navigation }) {
   };
 
   const handleDocumentTabPress = (tab) => {
-    if (tab === 'Barangay Folders') { router.push('/(tabs)/lydo-monitor'); return; }
+    if (tab === 'Barangay Folders') { return; /* already here */ }
     if (tab === 'Templates') { router.push('/(tabs)/lydo-document-templates'); return; }
     if (tab === 'Reports') { router.push('/(tabs)/lydo-document-reports'); return; }
     setActiveDocumentTab(tab);
@@ -803,18 +826,7 @@ export default function LYDODocumentsScreen({ navigation }) {
                       <TouchableOpacity
                         style={styles.actionIconBtn}
                         activeOpacity={0.7}
-                        onPress={() => {
-                          if (doc.file_url) {
-                            // Encode the URL for Google Docs Viewer
-                            const encodedUrl = encodeURIComponent(doc.file_url);
-                            // Use Google Docs Viewer to view the document
-                            const viewUrl = `https://docs.google.com/gview?embedded=1&url=${encodedUrl}`;
-
-                            WebBrowser.openBrowserAsync(viewUrl).catch(err =>
-                              console.error('Error opening browser:', err)
-                            );
-                          }
-                        }}
+                        onPress={() => handleViewPress(doc)}
                       >
                         {/* Eye icon */}
                         <View style={{ alignItems: 'center', justifyContent: 'center', width: 20, height: 20 }}>
@@ -871,6 +883,93 @@ export default function LYDODocumentsScreen({ navigation }) {
         )}
 
         {renderContent()}
+
+        {/* ── Document Viewer Modal ── */}
+        <Modal
+          visible={viewerModal.visible}
+          animationType="slide"
+          transparent={false}
+          onRequestClose={() => setViewerModal({ visible: false, fileUrl: null, title: '' })}
+        >
+          <SafeAreaView style={{ flex: 1, backgroundColor: COLORS.navy }}>
+            {/* Viewer Header */}
+            <View style={styles.viewerHeader}>
+              <TouchableOpacity
+                style={styles.viewerBackBtn}
+                onPress={() => setViewerModal({ visible: false, fileUrl: null, title: '' })}
+                activeOpacity={0.8}
+              >
+                <Feather name="arrow-left" size={20} color={COLORS.white} />
+              </TouchableOpacity>
+              <Text style={styles.viewerTitle} numberOfLines={1}>
+                {viewerModal.title}
+              </Text>
+              {viewerModal.fileUrl && (
+                <TouchableOpacity
+                  style={styles.viewerOpenBtn}
+                  onPress={async () => {
+                    if (viewerModal.fileUrl) {
+                      try {
+                        const filename = viewerModal.fileUrl.split('/').pop() || 'document.pdf';
+                        const fileUri = FileSystem.cacheDirectory + filename;
+                        const downloadResult = await FileSystem.downloadAsync(viewerModal.fileUrl, fileUri);
+                        if (downloadResult.status === 200) {
+                          await Sharing.shareAsync(downloadResult.uri, {
+                            mimeType: 'application/pdf',
+                            dialogTitle: 'Save Document',
+                            UTI: 'com.adobe.pdf'
+                          });
+                        }
+                      } catch (err) {
+                        console.error('Error downloading file:', err);
+                        Linking.openURL(viewerModal.fileUrl).catch(e =>
+                          console.error('Error opening URL:', e)
+                        );
+                      }
+                    }
+                    setViewerModal({ visible: false, fileUrl: null, title: '' });
+                  }}
+                  activeOpacity={0.8}
+                >
+                  <Feather name="download" size={18} color={COLORS.gold} />
+                </TouchableOpacity>
+              )}
+            </View>
+
+            {/* WebView / iframe */}
+            <View style={{ flex: 1, backgroundColor: COLORS.offWhite, overflow: 'hidden' }}>
+              {viewerModal.fileUrl && (
+                Platform.OS === 'web' ? (
+                  <iframe
+                    src={`https://docs.google.com/gview?embedded=true&url=${encodeURIComponent(viewerModal.fileUrl)}`}
+                    style={{ flex: 1, width: '100%', height: '100%', border: 'none' }}
+                    title={viewerModal.title}
+                  />
+                ) : (
+                  <WebView
+                    source={{
+                      uri: `https://docs.google.com/gview?embedded=true&url=${encodeURIComponent(viewerModal.fileUrl)}`,
+                    }}
+                    style={{ flex: 1 }}
+                    onLoadStart={() => setWebViewLoading(true)}
+                    onLoadEnd={() => setWebViewLoading(false)}
+                    onError={() => {
+                      setWebViewLoading(false);
+                      setViewerModal({ visible: false, fileUrl: null, title: '' });
+                    }}
+                    startInLoadingState={true}
+                    renderLoading={() => (
+                      <View style={styles.viewerLoading}>
+                        <ActivityIndicator size="large" color={COLORS.navy} />
+                        <Text style={styles.viewerLoadingText}>Loading document…</Text>
+                      </View>
+                    )}
+                  />
+                )
+              )}
+            </View>
+          </SafeAreaView>
+        </Modal>
       </View>
     </SafeAreaView>
   );
@@ -1195,5 +1294,42 @@ const styles = StyleSheet.create({
   },
   actionIconBtn: {
     padding: 4,
+  },
+
+  // ── Document Viewer ──
+  viewerHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.navy,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    gap: 10,
+  },
+  viewerBackBtn: {
+    padding: 6,
+    borderRadius: 8,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+  },
+  viewerTitle: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: '700',
+    color: COLORS.white,
+  },
+  viewerOpenBtn: {
+    padding: 6,
+    borderRadius: 8,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+  },
+  viewerLoading: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.offWhite,
+    gap: 12,
+  },
+  viewerLoadingText: {
+    fontSize: 13,
+    color: COLORS.subText,
   },
 });
