@@ -55,6 +55,12 @@ const BellIcon = ({ hasNotif }) => (
   </View>
 );
 
+const EyeIcon = ({ visible, onPress }) => (
+  <TouchableOpacity onPress={onPress} style={styles.eyeBtn} activeOpacity={0.7}>
+    <Text style={styles.eyeIconText}>{visible ? '👁' : '⌣'}</Text>
+  </TouchableOpacity>
+);
+
 // ─── MAIN COMPONENT ───────────────────────────────────────────────────────────
 export default function AccountScreen() {
   const router = useRouter();
@@ -79,6 +85,12 @@ export default function AccountScreen() {
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [newPasswordError, setNewPasswordError] = useState('');
+  const [currentPasswordError, setCurrentPasswordError] = useState('');
+  const [confirmPasswordError, setConfirmPasswordError] = useState('');
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [savingPassword, setSavingPassword] = useState(false);
 
   // Save Profile
@@ -87,6 +99,8 @@ export default function AccountScreen() {
 
   // Change Password
   const [passwordSuccess, setPasswordSuccess] = useState(false);
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [showProfileModal, setShowProfileModal] = useState(false);
 
   // Track original values for change detection
   const [originalFirstName, setOriginalFirstName] = useState('');
@@ -96,8 +110,67 @@ export default function AccountScreen() {
   // Check if profile has changes
   const hasProfileChanges = firstName !== originalFirstName || lastName !== originalLastName || middleInitial !== originalMiddleInitial;
 
-  // Check if password fields are filled
-  const hasPasswordFields = currentPassword && newPassword && confirmPassword;
+  // Check if password fields are filled and valid
+  const hasPasswordFields = currentPassword && newPassword && confirmPassword && !newPasswordError;
+
+  // Validate new password in real-time
+  const validateNewPassword = (password) => {
+    if (!password) {
+      setNewPasswordError('');
+      return;
+    }
+    if (password.length < 8) {
+      setNewPasswordError('Password must be at least 8 characters');
+      return;
+    }
+    const error = validatePassword(password);
+    setNewPasswordError(error || '');
+  };
+
+  const handleNewPasswordChange = (text) => {
+    setNewPassword(text);
+    validateNewPassword(text);
+  };
+
+  const handleCurrentPasswordBlur = async () => {
+    if (!currentPassword) {
+      setCurrentPasswordError('');
+      return;
+    }
+    try {
+      const currentEncryptedPassword = encryptPassword(currentPassword);
+      const { data: userData, error: fetchError } = await supabase
+        .from('users')
+        .select('password')
+        .eq('user_id', user.userId)
+        .single();
+
+      if (fetchError) {
+        setCurrentPasswordError('');
+        return;
+      }
+
+      const decryptedStored = decryptPassword(userData.password);
+      if (userData.password !== currentEncryptedPassword && userData.password !== currentPassword && decryptedStored !== currentPassword) {
+        setCurrentPasswordError('Current password is incorrect');
+      } else {
+        setCurrentPasswordError('');
+      }
+    } catch (err) {
+      setCurrentPasswordError('');
+    }
+  };
+
+  const handleConfirmPasswordChange = (text) => {
+    setConfirmPassword(text);
+    if (!text) {
+      setConfirmPasswordError('');
+    } else if (text !== newPassword) {
+      setConfirmPasswordError('Passwords do not match');
+    } else {
+      setConfirmPasswordError('');
+    }
+  };
 
   useEffect(() => {
     if (user && user.role !== 'sk') router.replace('/');
@@ -152,11 +225,7 @@ export default function AccountScreen() {
   const handleLogout = () => { logout(); router.replace('/'); };
 
   const handleSaveProfile = async () => {
-    if (!firstName.trim() || !lastName.trim()) {
-      Alert.alert('Error', 'First name and last name are required.');
-      return;
-    }
-
+    setShowProfileModal(false);
     setSavingProfile(true);
     try {
       const { error } = await supabase
@@ -196,48 +265,9 @@ export default function AccountScreen() {
   };
 
   const handleChangePassword = async () => {
-    if (!currentPassword || !newPassword || !confirmPassword) {
-      Alert.alert('Error', 'Please fill in all password fields.');
-      return;
-    }
-    if (newPassword !== confirmPassword) {
-      Alert.alert('Error', 'New password and confirmation do not match.');
-      return;
-    }
-    if (newPassword.length < 8) {
-      Alert.alert('Error', 'New password must be at least 8 characters.');
-      return;
-    }
-    const passwordError = validatePassword(newPassword);
-    if (passwordError) {
-      Alert.alert('Error', passwordError);
-      return;
-    }
-
     setSavingPassword(true);
+    setShowPasswordModal(false);
     try {
-      // First, verify the current password
-      const currentEncryptedPassword = encryptPassword(currentPassword);
-      const { data: userData, error: fetchError } = await supabase
-        .from('users')
-        .select('password')
-        .eq('user_id', user.userId)
-        .single();
-
-      if (fetchError) {
-        Alert.alert('Error', 'Could not verify current password.');
-        setSavingPassword(false);
-        return;
-      }
-
-      // Check if current password matches (accept encrypted and plain text for backward compatibility)
-      const decryptedStored = decryptPassword(userData.password);
-      if (userData.password !== currentEncryptedPassword && userData.password !== currentPassword && decryptedStored !== currentPassword) {
-        Alert.alert('Error', 'Current password is incorrect.');
-        setSavingPassword(false);
-        return;
-      }
-
       // Encrypt new password and update
       const newEncryptedPassword = encryptPassword(newPassword);
       const { error: updateError } = await supabase
@@ -253,6 +283,9 @@ export default function AccountScreen() {
         setCurrentPassword('');
         setNewPassword('');
         setConfirmPassword('');
+        setNewPasswordError('');
+        setCurrentPasswordError('');
+        setConfirmPasswordError('');
       }
     } catch (err) {
       Alert.alert('Error', 'Something went wrong. Please try again.');
@@ -464,7 +497,13 @@ export default function AccountScreen() {
                         styles.saveChangesBtn,
                         (savingProfile || !hasProfileChanges) && styles.saveChangesBtnDisabled
                       ]}
-                      onPress={handleSaveProfile}
+                      onPress={() => {
+                        if (!firstName.trim() || !lastName.trim()) {
+                          Alert.alert('Error', 'First name and last name are required.');
+                          return;
+                        }
+                        setShowProfileModal(true);
+                      }}
                       activeOpacity={0.8}
                       disabled={savingProfile || !hasProfileChanges}
                     >
@@ -515,13 +554,23 @@ export default function AccountScreen() {
                   <View style={[styles.fieldRow, { marginBottom: isMobile ? 10 : 12 }]}>
                     <View style={styles.fieldCol}>
                       <Text style={styles.fieldLabel}>Current password:</Text>
-                      <TextInput
-                        style={styles.fieldInput}
-                        value={currentPassword}
-                        onChangeText={setCurrentPassword}
-                        secureTextEntry
-                        placeholderTextColor={COLORS.midGray}
-                      />
+                      <View style={styles.passwordInputContainer}>
+                        <TextInput
+                          style={[styles.fieldInput, styles.passwordInput, currentPasswordError && styles.fieldInputError]}
+                          value={currentPassword}
+                          onChangeText={(text) => {
+                            setCurrentPassword(text);
+                            if (currentPasswordError) setCurrentPasswordError('');
+                          }}
+                          onBlur={handleCurrentPasswordBlur}
+                          secureTextEntry={!showCurrentPassword}
+                          placeholderTextColor={COLORS.midGray}
+                        />
+                        <EyeIcon visible={showCurrentPassword} onPress={() => setShowCurrentPassword(!showCurrentPassword)} />
+                      </View>
+                      {currentPasswordError ? (
+                        <Text style={styles.errorText}>{currentPasswordError}</Text>
+                      ) : null}
                     </View>
                     {/* spacer so current-password matches single-col width */}
                     <View style={styles.fieldCol} />
@@ -531,23 +580,37 @@ export default function AccountScreen() {
                   <View style={styles.fieldRow}>
                     <View style={styles.fieldCol}>
                       <Text style={styles.fieldLabel}>New password:</Text>
-                      <TextInput
-                        style={styles.fieldInput}
-                        value={newPassword}
-                        onChangeText={setNewPassword}
-                        secureTextEntry
-                        placeholderTextColor={COLORS.midGray}
-                      />
+                      <View style={styles.passwordInputContainer}>
+                        <TextInput
+                          style={[styles.fieldInput, styles.passwordInput, newPasswordError && styles.fieldInputError]}
+                          value={newPassword}
+                          onChangeText={handleNewPasswordChange}
+                          secureTextEntry={!showNewPassword}
+                          placeholderTextColor={COLORS.midGray}
+                        />
+                        <EyeIcon visible={showNewPassword} onPress={() => setShowNewPassword(!showNewPassword)} />
+                      </View>
+                      {newPasswordError ? (
+                        <Text style={styles.errorText}>{newPasswordError}</Text>
+                      ) : (
+                        <Text style={styles.passwordNote}>Min. 8 characters, with uppercase, lowercase, number, and special character</Text>
+                      )}
                     </View>
                     <View style={styles.fieldCol}>
                       <Text style={styles.fieldLabel}>Confirm new password:</Text>
-                      <TextInput
-                        style={styles.fieldInput}
-                        value={confirmPassword}
-                        onChangeText={setConfirmPassword}
-                        secureTextEntry
-                        placeholderTextColor={COLORS.midGray}
-                      />
+                      <View style={styles.passwordInputContainer}>
+                        <TextInput
+                          style={[styles.fieldInput, styles.passwordInput, confirmPasswordError && styles.fieldInputError]}
+                          value={confirmPassword}
+                          onChangeText={handleConfirmPasswordChange}
+                          secureTextEntry={!showConfirmPassword}
+                          placeholderTextColor={COLORS.midGray}
+                        />
+                        <EyeIcon visible={showConfirmPassword} onPress={() => setShowConfirmPassword(!showConfirmPassword)} />
+                      </View>
+                      {confirmPasswordError ? (
+                        <Text style={styles.errorText}>{confirmPasswordError}</Text>
+                      ) : null}
                     </View>
                     {!isMobile && <View style={[styles.fieldCol, styles.fieldColSmall]} />}
                   </View>
@@ -558,7 +621,51 @@ export default function AccountScreen() {
                         styles.changePwBtn,
                         (savingPassword || !hasPasswordFields) && styles.changePwBtnDisabled
                       ]}
-                      onPress={handleChangePassword}
+                      onPress={async () => {
+                        // Validate current password against database before showing modal
+                        if (!currentPassword || !newPassword || !confirmPassword) {
+                          Alert.alert('Error', 'Please fill in all password fields.');
+                          return;
+                        }
+                        if (newPassword !== confirmPassword) {
+                          Alert.alert('Error', 'New password and confirmation do not match.');
+                          return;
+                        }
+                        if (newPassword.length < 8) {
+                          Alert.alert('Error', 'New password must be at least 8 characters.');
+                          return;
+                        }
+                        const pwError = validatePassword(newPassword);
+                        if (pwError) {
+                          Alert.alert('Error', pwError);
+                          return;
+                        }
+
+                        // Verify current password against database
+                        try {
+                          const currentEncryptedPassword = encryptPassword(currentPassword);
+                          const { data: userData, error: fetchError } = await supabase
+                            .from('users')
+                            .select('password')
+                            .eq('user_id', user.userId)
+                            .single();
+
+                          if (fetchError) {
+                            Alert.alert('Error', 'Could not verify current password.');
+                            return;
+                          }
+
+                          const decryptedStored = decryptPassword(userData.password);
+                          if (userData.password !== currentEncryptedPassword && userData.password !== currentPassword && decryptedStored !== currentPassword) {
+                            Alert.alert('Error', 'Current password is incorrect.');
+                            return;
+                          }
+
+                          setShowPasswordModal(true);
+                        } catch (err) {
+                          Alert.alert('Error', 'Something went wrong. Please try again.');
+                        }
+                      }}
                       activeOpacity={0.8}
                       disabled={savingPassword || !hasPasswordFields}
                     >
@@ -582,6 +689,116 @@ export default function AccountScreen() {
 
         </ScrollView>
       </View>
+
+      {/* Password Change Confirmation Modal */}
+      {showPasswordModal && (
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Confirm Password Change</Text>
+
+            <View style={styles.modalDivider} />
+
+            <View style={styles.passwordFlowContainer}>
+              <View style={styles.passwordBox}>
+                <Text style={styles.passwordBoxLabel}>Current Password</Text>
+                <Text style={styles.passwordBoxValue}>{currentPassword}</Text>
+              </View>
+
+              <View style={styles.arrowContainer}>
+                <Text style={styles.arrowText}>→</Text>
+              </View>
+
+              <View style={styles.passwordBox}>
+                <Text style={styles.passwordBoxLabel}>New Password</Text>
+                <Text style={styles.passwordBoxValue}>{newPassword}</Text>
+              </View>
+            </View>
+
+            <View style={styles.modalDivider} />
+
+            <Text style={styles.modalNote}>
+              Please ensure you remember your new password. You will need it to log in.
+            </Text>
+
+            <View style={styles.modalButtons}>
+              <TouchableOpacity
+                style={styles.modalCancelBtn}
+                onPress={() => setShowPasswordModal(false)}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.modalCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalConfirmBtn, savingPassword && styles.modalBtnDisabled]}
+                onPress={handleChangePassword}
+                activeOpacity={0.8}
+                disabled={savingPassword}
+              >
+                <Text style={styles.modalConfirmText}>
+                  {savingPassword ? 'Changing...' : 'Confirm Change'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      )}
+
+      {/* Profile Save Confirmation Modal */}
+      {showProfileModal && (
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Confirm Profile Update</Text>
+
+            <View style={styles.modalDivider} />
+
+            <View style={styles.profileFlowContainer}>
+              <View style={styles.profileBox}>
+                <Text style={styles.profileBoxLabel}>Current Details</Text>
+                <Text style={styles.profileBoxValue}>
+                  {originalFirstName} {originalMiddleInitial ? originalMiddleInitial + '. ' : ''}{originalLastName}
+                </Text>
+              </View>
+
+              <View style={styles.arrowContainer}>
+                <Text style={styles.arrowText}>→</Text>
+              </View>
+
+              <View style={styles.profileBox}>
+                <Text style={styles.profileBoxLabel}>New Details</Text>
+                <Text style={styles.profileBoxValue}>
+                  {firstName} {middleInitial ? middleInitial + '. ' : ''}{lastName}
+                </Text>
+              </View>
+            </View>
+
+            <View style={styles.modalDivider} />
+
+            <Text style={styles.modalNote}>
+              Please review your details before confirming.
+            </Text>
+
+            <View style={styles.modalButtons}>
+              <TouchableOpacity
+                style={styles.modalCancelBtn}
+                onPress={() => setShowProfileModal(false)}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.modalCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalConfirmBtn, savingProfile && styles.modalBtnDisabled]}
+                onPress={handleSaveProfile}
+                activeOpacity={0.8}
+                disabled={savingProfile}
+              >
+                <Text style={styles.modalConfirmText}>
+                  {savingProfile ? 'Saving...' : 'Confirm Update'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      )}
     </SafeAreaView>
   );
 }
@@ -734,6 +951,47 @@ const styles = StyleSheet.create({
   fieldInputDisabled: {
     backgroundColor: COLORS.offWhite, color: COLORS.subText,
   },
+  fieldInputError: {
+    borderColor: '#DC2626',
+  },
+  errorText: {
+    fontSize: 11,
+    color: '#DC2626',
+    marginTop: 4,
+    fontWeight: '500',
+  },
+  passwordNote: {
+    fontSize: 10,
+    color: COLORS.subText,
+    marginTop: 4,
+    fontStyle: 'italic',
+  },
+  passwordInputContainer: {
+    position: 'relative',
+  },
+  passwordInput: {
+    paddingRight: 40,
+  },
+  eyeIcon: {
+    position: 'absolute',
+    right: 12,
+    top: '50%',
+    marginTop: -10,
+    width: 20,
+    height: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  eyeBtn: {
+    position: 'absolute',
+    right: 10,
+    top: '50%',
+    marginTop: -10,
+    paddingLeft: 8,
+  },
+  eyeIconText: {
+    fontSize: 16,
+  },
 
   // ── Change Password button ──
   changePwBtn: {
@@ -793,5 +1051,163 @@ const styles = StyleSheet.create({
     color: COLORS.white,
     fontSize: 14,
     fontWeight: '900',
+  },
+
+  // Modal styles
+  modalOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 100,
+  },
+  modalContent: {
+    backgroundColor: COLORS.white,
+    borderRadius: 12,
+    padding: 20,
+    width: '85%',
+    maxWidth: 400,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 5,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: COLORS.navy,
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  modalDivider: {
+    height: 1,
+    backgroundColor: COLORS.lightGray,
+    marginVertical: 14,
+  },
+  modalInfoRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  modalLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: COLORS.darkText,
+  },
+  modalValue: {
+    fontSize: 13,
+    color: COLORS.subText,
+    letterSpacing: 2,
+  },
+  passwordFlowContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+  },
+  passwordBox: {
+    flex: 1,
+    backgroundColor: COLORS.offWhite,
+    borderRadius: 8,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: COLORS.lightGray,
+  },
+  passwordBoxLabel: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: COLORS.subText,
+    marginBottom: 4,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  passwordBoxValue: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: COLORS.darkText,
+  },
+  arrowContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  arrowText: {
+    fontSize: 24,
+    color: COLORS.navy,
+    fontWeight: '800',
+  },
+  modalNote: {
+    fontSize: 11,
+    color: COLORS.subText,
+    fontStyle: 'italic',
+    textAlign: 'center',
+    marginBottom: 16,
+    lineHeight: 16,
+  },
+  modalButtons: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  modalCancelBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 8,
+    borderWidth: 1.5,
+    borderColor: COLORS.navy,
+    alignItems: 'center',
+  },
+  modalCancelText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: COLORS.navy,
+  },
+  modalConfirmBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 8,
+    backgroundColor: COLORS.navy,
+    alignItems: 'center',
+  },
+  modalBtnDisabled: {
+    opacity: 0.6,
+  },
+  modalConfirmText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: COLORS.white,
+  },
+
+  // Profile modal styles
+  profileFlowContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+  },
+  profileBox: {
+    flex: 1,
+    backgroundColor: COLORS.offWhite,
+    borderRadius: 8,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: COLORS.lightGray,
+  },
+  profileBoxLabel: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: COLORS.subText,
+    marginBottom: 4,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  profileBoxValue: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: COLORS.darkText,
   },
 });

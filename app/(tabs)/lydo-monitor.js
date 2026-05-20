@@ -1,13 +1,32 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { Feather } from '@expo/vector-icons';
+import { useFocusEffect, useRouter } from 'expo-router';
+import { useCallback, useEffect, useState } from 'react';
 import {
-  View, Text, TextInput, ScrollView, TouchableOpacity,
-  StyleSheet, SafeAreaView, StatusBar, Dimensions,
-  Modal, Alert, KeyboardAvoidingView, Platform, Image,
+  ActivityIndicator,
+  Alert,
+  Dimensions,
+  Image,
+  KeyboardAvoidingView,
+  Linking,
+  Modal,
+  Platform,
+  SafeAreaView,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text, TextInput,
+  TouchableOpacity,
+  View,
 } from 'react-native';
-import { useRouter, useFocusEffect } from 'expo-router';
-import { useNav } from './navContext';
-import { useAuth } from './authContext';
 import { supabase } from '../../utils/supabase';
+import { useAuth } from './authContext';
+import { useNav } from './navContext';
+
+// WebView: use react-native-webview on native, iframe on web
+let WebView = null;
+if (Platform.OS !== 'web') {
+  WebView = require('react-native-webview').WebView;
+}
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const isMobile = SCREEN_WIDTH < 768;
@@ -163,67 +182,228 @@ const CBYDPTable = () => (
   </View>
 );
 
-// ─── DOCUMENT VIEWER (view-only) ──────────────────────────────────────────────
-const DocumentViewer = ({ item, onClose, onCommentMode }) => {
-  const [menuSaved, setMenuSaved] = useState(false);
+// ─── DOCUMENT VIEWER (WebView/iframe with Approve & Comment) ─────────────────
+const DocumentViewer = ({ item, onClose, onCommentMode, onApproved }) => {
+  const { user } = useAuth();
+  const [fileUrl, setFileUrl]           = useState(null);
+  const [loading, setLoading]           = useState(true);
+  const [webLoading, setWebLoading]     = useState(true);
+  const [approving, setApproving]       = useState(false);
+  const [approveModalVisible, setApproveModalVisible] = useState(false);
+
+  // Fetch the actual file_url from Supabase for this document
+  useEffect(() => {
+    const fetchFileUrl = async () => {
+      setLoading(true);
+      try {
+        // Try latest document_version first
+        const { data: versions } = await supabase
+          .from('document_versions')
+          .select('file_url')
+          .eq('document_id', item.id)
+          .order('version_number', { ascending: false })
+          .limit(1);
+
+        const versionUrl = versions?.[0]?.file_url;
+
+        if (versionUrl) {
+          setFileUrl(versionUrl);
+        } else {
+          // Fall back to documents table
+          const { data: doc } = await supabase
+            .from('documents')
+            .select('file_url')
+            .eq('document_id', item.id)
+            .single();
+          setFileUrl(doc?.file_url || null);
+        }
+      } catch (e) {
+        console.error('Error fetching file URL:', e);
+        setFileUrl(null);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    if (item?.id) {
+      fetchFileUrl();
+    } else {
+      setLoading(false);
+    }
+  }, [item?.id]);
+
+  const handleApprove = async () => {
+    setApproving(true);
+    try {
+      // 1. Get the current max version number for this document
+      const { data: versions } = await supabase
+        .from('document_versions')
+        .select('version_number')
+        .eq('document_id', item.id)
+        .order('version_number', { ascending: false })
+        .limit(1);
+
+      const newVersionNumber = (versions?.[0]?.version_number || 0) + 1;
+
+      // 2. Insert a new document_version row with action 'approved'
+      const { error: versionError } = await supabase
+        .from('document_versions')
+        .insert({
+          document_id:    item.id,
+          version_number: newVersionNumber,
+          file_url:       fileUrl || '',
+          action:         'approved',
+          actioned_by:    user?.userId || null,
+        });
+
+      if (versionError) {
+        setApproveModalVisible(false);
+        Alert.alert('Error', 'Failed to record approval version. Please try again.');
+        setApproving(false);
+        return;
+      }
+
+      // 3. Update the document status, reviewed_at, and reviewed_by
+      const { error: docError } = await supabase
+        .from('documents')
+        .update({
+          status:      'approved',
+          reviewed_at: new Date().toISOString(),
+          reviewed_by: user?.userId || null,
+        })
+        .eq('document_id', item.id);
+
+      if (docError) {
+        setApproveModalVisible(false);
+        Alert.alert('Error', 'Failed to approve the document. Please try again.');
+        setApproving(false);
+        return;
+      }
+
+      setApproveModalVisible(false);
+      onApproved?.();
+      onClose();
+    } catch (e) {
+      setApproveModalVisible(false);
+      Alert.alert('Error', 'An unexpected error occurred.');
+    } finally {
+      setApproving(false);
+    }
+  };
+
+  const googleViewerUrl = fileUrl
+    ? `https://docs.google.com/gview?embedded=true&url=${encodeURIComponent(fileUrl)}`
+    : null;
 
   return (
     <Modal visible animationType="slide" statusBarTranslucent>
       <SafeAreaView style={dvStyles.safe}>
-        {/* Top bar */}
+
+        {/* Top bar — navy, matching sk-document-management viewer */}
         <View style={dvStyles.topBar}>
-          <TouchableOpacity style={dvStyles.closeBtn} onPress={onClose} activeOpacity={0.8}>
-            <Text style={dvStyles.closeTxt}>✕</Text>
+          <TouchableOpacity style={dvStyles.backBtn} onPress={onClose} activeOpacity={0.8}>
+            <Feather name="arrow-left" size={20} color={COLORS.white} />
           </TouchableOpacity>
           <View style={dvStyles.topMid}>
             <Text style={dvStyles.topTitle} numberOfLines={1}>{item.document}</Text>
             <Text style={dvStyles.topSub}>{item.barangay}</Text>
           </View>
-          <ThreeDotMenu
-            onSave={() => { setMenuSaved(true); Alert.alert('Saved', 'Document saved successfully.'); }}
-            onEdit={() => Alert.alert('Edit', 'Edit mode coming soon.')}
-            onReturn={onClose}
-          />
+          {fileUrl && (
+            <TouchableOpacity
+              style={dvStyles.downloadBtn}
+              onPress={() => Linking.openURL(fileUrl).catch(() => Alert.alert('Error', 'Could not open file.'))}
+              activeOpacity={0.8}
+            >
+              <Feather name="download" size={18} color={COLORS.gold} />
+            </TouchableOpacity>
+          )}
         </View>
 
-        {/* Document */}
-        <ScrollView contentContainerStyle={dvStyles.docWrap} showsVerticalScrollIndicator={false}>
-          <View style={dvStyles.docPage}>
-            <Text style={dvStyles.docCenter}>Barangay ___________________</Text>
-            <Text style={dvStyles.docCenter}>Sangguniang Kabataan</Text>
-            <Text style={[dvStyles.docCenter, dvStyles.docBold, { marginTop: 10 }]}>
-              COMPREHENSIVE BARANGAY YOUTH DEVELOPMENT PLAN (CBYDP)
-            </Text>
-            <Text style={dvStyles.docLine}>Region: ___    Province: ___________    Municipality: ___________</Text>
-            <Text style={[dvStyles.docCenter, dvStyles.docBold, { marginTop: 6 }]}>
-              COMPREHENSIVE BARANGAY YOUTH DEVELOPMENT PLAN (CBYDP)
-            </Text>
-            <Text style={[dvStyles.docLine, { marginTop: 10 }]}>CENTER OF PARTICIPATION _______________</Text>
-            <Text style={dvStyles.docLine}>Agenda Statement:</Text>
-            <View style={dvStyles.divider} />
-            <View style={dvStyles.divider} />
-            <CBYDPTable />
-            <View style={{ marginTop: 16 }}>
-              <Text style={[dvStyles.docLine, dvStyles.docCenter]}>Prepared by:</Text>
-              <View style={dvStyles.sigRow}>
-                <View style={dvStyles.sigBlock}>
-                  <View style={dvStyles.sigLine} />
-                  <Text style={dvStyles.sigLabel}>SK Secretary</Text>
+        {/* Document area — WebView on native, iframe on web */}
+        <View style={{ flex: 1, backgroundColor: COLORS.offWhite }}>
+          {loading ? (
+            <View style={dvStyles.centerState}>
+              <ActivityIndicator size="large" color={COLORS.navy} />
+              <Text style={dvStyles.loadingTxt}>Loading document…</Text>
+            </View>
+          ) : !fileUrl ? (
+            /* No file attached — fall back to the static CBYDP preview */
+            <ScrollView contentContainerStyle={dvStyles.docWrap} showsVerticalScrollIndicator={false}>
+              <View style={dvStyles.docPage}>
+                <Text style={dvStyles.docCenter}>Barangay ___________________</Text>
+                <Text style={dvStyles.docCenter}>Sangguniang Kabataan</Text>
+                <Text style={[dvStyles.docCenter, dvStyles.docBold, { marginTop: 10 }]}>
+                  COMPREHENSIVE BARANGAY YOUTH DEVELOPMENT PLAN (CBYDP)
+                </Text>
+                <Text style={dvStyles.docLine}>Region: ___    Province: ___________    Municipality: ___________</Text>
+                <Text style={[dvStyles.docCenter, dvStyles.docBold, { marginTop: 6 }]}>
+                  COMPREHENSIVE BARANGAY YOUTH DEVELOPMENT PLAN (CBYDP)
+                </Text>
+                <Text style={[dvStyles.docLine, { marginTop: 10 }]}>CENTER OF PARTICIPATION _______________</Text>
+                <Text style={dvStyles.docLine}>Agenda Statement:</Text>
+                <View style={dvStyles.divider} />
+                <View style={dvStyles.divider} />
+                <CBYDPTable />
+                <View style={{ marginTop: 16 }}>
+                  <Text style={[dvStyles.docLine, dvStyles.docCenter]}>Prepared by:</Text>
+                  <View style={dvStyles.sigRow}>
+                    <View style={dvStyles.sigBlock}>
+                      <View style={dvStyles.sigLine} />
+                      <Text style={dvStyles.sigLabel}>SK Secretary</Text>
+                    </View>
+                    <View style={dvStyles.sigBlock}>
+                      <View style={dvStyles.sigLine} />
+                      <Text style={dvStyles.sigLabel}>SK Chairperson</Text>
+                    </View>
+                  </View>
                 </View>
-                <View style={dvStyles.sigBlock}>
-                  <View style={dvStyles.sigLine} />
-                  <Text style={dvStyles.sigLabel}>SK Chairperson</Text>
+                <View style={dvStyles.noFileBanner}>
+                  <Text style={dvStyles.noFileTxt}>⚠ No file attached — showing template preview</Text>
                 </View>
               </View>
+            </ScrollView>
+          ) : Platform.OS === 'web' ? (
+            /* Web — use an iframe with Google Docs viewer */
+            <iframe
+              src={googleViewerUrl}
+              style={{ flex: 1, width: '100%', height: '100%', border: 'none' }}
+              title={item.document}
+            />
+          ) : (
+            /* Native — use react-native-webview */
+            <View style={{ flex: 1 }}>
+              <WebView
+                source={{ uri: googleViewerUrl }}
+                style={{ flex: 1 }}
+                onLoadStart={() => setWebLoading(true)}
+                onLoadEnd={() => setWebLoading(false)}
+                onError={() => {
+                  setWebLoading(false);
+                  Alert.alert('Load Failed', 'Could not load the document. Try opening it externally.');
+                }}
+                startInLoadingState={true}
+                renderLoading={() => (
+                  <View style={dvStyles.centerState}>
+                    <ActivityIndicator size="large" color={COLORS.navy} />
+                    <Text style={dvStyles.loadingTxt}>Loading document…</Text>
+                  </View>
+                )}
+              />
+              {webLoading && (
+                <View style={dvStyles.webLoadingOverlay}>
+                  <ActivityIndicator size="large" color={COLORS.navy} />
+                  <Text style={dvStyles.loadingTxt}>Loading document…</Text>
+                </View>
+              )}
             </View>
-          </View>
-        </ScrollView>
+          )}
+        </View>
 
         {/* Bottom action buttons */}
         <View style={dvStyles.bottomBar}>
           <TouchableOpacity
             style={dvStyles.approveBtn}
-            onPress={() => Alert.alert('Approved', 'Document has been approved.')}
+            onPress={() => setApproveModalVisible(true)}
             activeOpacity={0.85}
           >
             <Text style={dvStyles.approveTxt}>Approve</Text>
@@ -236,28 +416,111 @@ const DocumentViewer = ({ item, onClose, onCommentMode }) => {
             <Text style={dvStyles.commentTxt}>Comment</Text>
           </TouchableOpacity>
         </View>
+
+        {/* ── Approve Confirmation Modal ── */}
+        <Modal
+          visible={approveModalVisible}
+          animationType="fade"
+          transparent={true}
+          onRequestClose={() => !approving && setApproveModalVisible(false)}
+        >
+          <View style={dvStyles.modalOverlay}>
+            <View style={dvStyles.modalContent}>
+              <View style={dvStyles.modalIconStrip}>
+                <View style={[dvStyles.modalIconCircle, { backgroundColor: '#D1FAE5' }]}>
+                  <Feather name="check-circle" size={26} color="#16A34A" />
+                </View>
+              </View>
+              <View style={dvStyles.modalBody}>
+                <Text style={dvStyles.modalTitle}>Approve Document</Text>
+                <Text style={dvStyles.modalBodyText}>
+                  You are about to approve{' '}
+                  <Text style={dvStyles.modalHighlight}>"{item.document}"</Text>
+                  {' '}from{' '}
+                  <Text style={dvStyles.modalHighlight}>{item.barangay}</Text>.
+                  {'\n\n'}The document status will change to{' '}
+                  <Text style={[dvStyles.modalHighlight, { color: '#16A34A' }]}>Approved</Text>.
+                </Text>
+              </View>
+              <View style={dvStyles.modalDivider} />
+              <View style={dvStyles.modalFooter}>
+                <TouchableOpacity
+                  style={dvStyles.modalCancelBtn}
+                  onPress={() => setApproveModalVisible(false)}
+                  disabled={approving}
+                  activeOpacity={0.8}
+                >
+                  <Text style={dvStyles.modalCancelBtnText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[dvStyles.modalActionBtn, dvStyles.modalApproveBtn, approving && dvStyles.modalBtnDisabled]}
+                  onPress={handleApprove}
+                  disabled={approving}
+                  activeOpacity={0.8}
+                >
+                  {approving ? (
+                    <Text style={dvStyles.modalActionBtnText}>Approving…</Text>
+                  ) : (
+                    <>
+                      <Feather name="check-circle" size={14} color={COLORS.white} style={{ marginRight: 6 }} />
+                      <Text style={dvStyles.modalActionBtnText}>Approve</Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
+
       </SafeAreaView>
     </Modal>
   );
 };
 
 const dvStyles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: COLORS.offWhite },
+  safe: { flex: 1, backgroundColor: COLORS.navy },
   topBar: {
-    flexDirection: 'row', alignItems: 'center',
-    paddingHorizontal: 14, paddingVertical: 12,
-    backgroundColor: COLORS.white,
-    borderBottomWidth: 1, borderBottomColor: COLORS.lightGray,
-    gap: 10, zIndex: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.navy,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    gap: 10,
   },
+  backBtn: {
+    padding: 6,
+    borderRadius: 8,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+  },
+  // kept for any legacy refs
   closeBtn: {
-    width: 34, height: 34, borderRadius: 17,
-    backgroundColor: COLORS.lightGray, alignItems: 'center', justifyContent: 'center',
+    padding: 6,
+    borderRadius: 8,
+    backgroundColor: 'rgba(255,255,255,0.12)',
   },
-  closeTxt: { fontSize: 14, fontWeight: '700', color: COLORS.darkText },
-  topMid:   { flex: 1 },
-  topTitle: { fontSize: 13, fontWeight: '800', color: COLORS.darkText },
-  topSub:   { fontSize: 11, color: COLORS.subText },
+  closeTxt: { fontSize: 14, fontWeight: '700', color: COLORS.white },
+  topMid: { flex: 1 },
+  topTitle: { fontSize: 14, fontWeight: '700', color: COLORS.white },
+  topSub:   { fontSize: 11, color: 'rgba(255,255,255,0.65)' },
+  downloadBtn: {
+    padding: 6,
+    borderRadius: 8,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+  },
+  downloadTxt: { fontSize: 16, fontWeight: '700', color: COLORS.white },
+  // Loading / empty states
+  centerState: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center', justifyContent: 'center',
+    backgroundColor: COLORS.offWhite, gap: 12,
+  },
+  loadingTxt: { fontSize: 13, color: COLORS.subText },
+  webLoadingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center', justifyContent: 'center',
+    backgroundColor: COLORS.offWhite, gap: 12,
+  },
+  // Static CBYDP preview (fallback when no file_url)
   docWrap:  { padding: 16, alignItems: 'center' },
   docPage: {
     backgroundColor: COLORS.white, width: '100%', maxWidth: 480,
@@ -273,6 +536,12 @@ const dvStyles = StyleSheet.create({
   sigBlock:  { alignItems: 'center', width: 140 },
   sigLine:   { width: '100%', height: 1, backgroundColor: COLORS.darkText, marginBottom: 4 },
   sigLabel:  { fontSize: 11, fontWeight: '600', color: COLORS.darkText },
+  noFileBanner: {
+    marginTop: 18, backgroundColor: '#FFF8E1', borderRadius: 8,
+    padding: 10, borderLeftWidth: 3, borderLeftColor: COLORS.gold,
+  },
+  noFileTxt: { fontSize: 11, color: '#7A6000', fontWeight: '600' },
+  // Bottom bar
   bottomBar: {
     flexDirection: 'row', justifyContent: 'center', gap: 12,
     padding: 16, backgroundColor: COLORS.white,
@@ -289,6 +558,64 @@ const dvStyles = StyleSheet.create({
     borderWidth: 1.5, borderColor: COLORS.midGray,
   },
   commentTxt: { fontSize: 14, fontWeight: '700', color: COLORS.darkText },
+  // ── Approve Confirmation Modal ──
+  modalOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(10,20,40,0.55)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContent: {
+    width: '88%', maxWidth: 380,
+    backgroundColor: COLORS.white,
+    borderRadius: 20,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.25,
+    shadowRadius: 20,
+    elevation: 20,
+  },
+  modalIconStrip: {
+    alignItems: 'center',
+    paddingTop: 28,
+    paddingBottom: 4,
+    backgroundColor: COLORS.white,
+  },
+  modalIconCircle: {
+    width: 64, height: 64, borderRadius: 32,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  modalBody: {
+    paddingHorizontal: 24, paddingTop: 14, paddingBottom: 20, alignItems: 'center',
+  },
+  modalTitle: {
+    fontSize: 17, fontWeight: '800', color: COLORS.darkText,
+    textAlign: 'center', marginBottom: 10, letterSpacing: 0.2,
+  },
+  modalBodyText: {
+    fontSize: 13.5, color: COLORS.subText, lineHeight: 20, textAlign: 'center',
+  },
+  modalHighlight: { fontWeight: '700', color: COLORS.darkText },
+  modalDivider:   { height: 1, backgroundColor: COLORS.lightGray },
+  modalFooter: {
+    flexDirection: 'row', gap: 10,
+    paddingHorizontal: 20, paddingVertical: 16,
+    backgroundColor: COLORS.offWhite,
+  },
+  modalCancelBtn: {
+    flex: 1, paddingVertical: 13, borderRadius: 10,
+    borderWidth: 1.5, borderColor: COLORS.lightGray,
+    alignItems: 'center', backgroundColor: COLORS.white,
+  },
+  modalCancelBtnText: { fontSize: 14, fontWeight: '700', color: COLORS.subText },
+  modalActionBtn: {
+    flex: 1, flexDirection: 'row', paddingVertical: 13, borderRadius: 10,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  modalActionBtnText: { fontSize: 14, fontWeight: '700', color: COLORS.white },
+  modalApproveBtn:    { backgroundColor: '#16A34A' },
+  modalBtnDisabled:   { opacity: 0.55 },
 });
 
 // ─── COMMENT MODE ─────────────────────────────────────────────────────────────
@@ -691,12 +1018,13 @@ export default function LYDOMonitorScreen() {
   const [notifCount]                            = useState(2);
   const [sidebarVisible, setSidebarVisible]     = useState(false);
   const [consultationDocs, setConsultationDocs] = useState([]);
+  const [approvedDocs, setApprovedDocs]         = useState([]);
 
   // Document modal states
   const [viewingItem, setViewingItem]   = useState(null); // open view modal
   const [commentItem, setCommentItem]   = useState(null); // open comment modal
 
-  // Fetch consultation documents (submitted documents)
+  // Fetch consultation documents (status = submitted)
   const fetchConsultationDocs = useCallback(async () => {
     try {
       const { data: docs, error } = await supabase
@@ -711,30 +1039,29 @@ export default function LYDOMonitorScreen() {
           created_at,
           saved_at,
           submitted_at,
+          file_url,
           barangay:barangays(barangay_id, barangay_name),
           submitted_by_user:users!documents_submitted_by_fkey(user_id, first_name, last_name)
         `)
         .eq('status', 'submitted')
         .order('submitted_at', { ascending: false });
 
-      if (error) {
-        console.error('Error fetching consultation docs:', error);
-        return;
-      }
+      if (error) { console.error('Error fetching consultation docs:', error); return; }
 
       const formattedDocs = (docs || []).map(doc => {
-        const date = doc.submitted_at || doc.created_at;
+        const date    = doc.submitted_at || doc.created_at;
         const dateObj = date ? new Date(date) : new Date();
         return {
-          id: doc.document_id.toString(),
-          barangay: doc.barangay?.barangay_name || 'Unknown Barangay',
-          document: doc.title || 'Untitled Document',
-          time: dateObj.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
+          id:            doc.document_id.toString(),
+          barangay:      doc.barangay?.barangay_name || 'Unknown Barangay',
+          document:      doc.title || 'Untitled Document',
+          time:          dateObj.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
           submittedDate: doc.submitted_at ? new Date(doc.submitted_at).toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: '2-digit' }) : null,
-          feedbackDate: doc.submitted_at ? new Date(doc.submitted_at).toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: '2-digit' }) : null,
-          approvedDate: null,
-          status: 'submitted',
-          commentCount: 0,
+          feedbackDate:  doc.submitted_at ? new Date(doc.submitted_at).toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: '2-digit' }) : null,
+          approvedDate:  null,
+          status:        'submitted',
+          commentCount:  0,
+          fileUrl:       doc.file_url || null,
         };
       });
 
@@ -744,13 +1071,67 @@ export default function LYDOMonitorScreen() {
     }
   }, []);
 
-  // Fetch on screen focus
+  // Fetch approved documents (status = approved), with latest version file_url
+  const fetchApprovedDocs = useCallback(async () => {
+    try {
+      const { data: docs, error } = await supabase
+        .from('documents')
+        .select(`
+          document_id,
+          title,
+          status,
+          reviewed_at,
+          created_at,
+          file_url,
+          barangay:barangays(barangay_id, barangay_name)
+        `)
+        .eq('status', 'approved')
+        .order('reviewed_at', { ascending: false });
+
+      if (error) { console.error('Error fetching approved docs:', error); return; }
+
+      // For each doc, get the latest version's file_url (action = 'approved')
+      const formattedDocs = await Promise.all((docs || []).map(async doc => {
+        const { data: versions } = await supabase
+          .from('document_versions')
+          .select('file_url, version_number')
+          .eq('document_id', doc.document_id)
+          .order('version_number', { ascending: false })
+          .limit(1);
+
+        const latestFileUrl = versions?.[0]?.file_url || doc.file_url || null;
+        const latestVersion = versions?.[0]?.version_number || 1;
+
+        const dateObj = doc.reviewed_at ? new Date(doc.reviewed_at) : new Date(doc.created_at);
+        return {
+          id:           doc.document_id.toString(),
+          barangay:     doc.barangay?.barangay_name || 'Unknown Barangay',
+          document:     doc.title || 'Untitled Document',
+          time:         dateObj.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
+          approvedDate: doc.reviewed_at
+            ? new Date(doc.reviewed_at).toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: '2-digit' })
+            : null,
+          status:        'approved',
+          commentCount:  0,
+          fileUrl:       latestFileUrl,
+          version:       latestVersion,
+        };
+      }));
+
+      setApprovedDocs(formattedDocs);
+    } catch (error) {
+      console.error('Error fetching approved docs:', error);
+    }
+  }, []);
+
+  // Fetch both on screen focus
   useFocusEffect(
     useCallback(() => {
       if (activeMonitorTab === 'Consultation') {
         fetchConsultationDocs();
+        fetchApprovedDocs();
       }
-    }, [activeMonitorTab, fetchConsultationDocs])
+    }, [activeMonitorTab, fetchConsultationDocs, fetchApprovedDocs])
   );
 
   const handleNavPress = (tab) => {
@@ -769,6 +1150,17 @@ export default function LYDOMonitorScreen() {
 
   // Use fetched consultation docs or fallback to TABLE_DATA
   const getRows = () => {
+    // Approved view: always use the live approvedDocs feed
+    if (viewFilter === 'approved') {
+      return approvedDocs
+        .filter(r =>
+          r.barangay?.toLowerCase().includes(searchText.toLowerCase()) ||
+          r.document?.toLowerCase().includes(searchText.toLowerCase())
+        )
+        .filter(r => barangayFilter === '' || r.barangay?.toLowerCase().includes(barangayFilter.toLowerCase()))
+        .filter(r => documentFilter === '' || r.document?.toLowerCase().includes(documentFilter.toLowerCase()));
+    }
+
     let data;
     if (activeMonitorTab === 'Consultation') {
       data = consultationDocs;
@@ -778,9 +1170,8 @@ export default function LYDOMonitorScreen() {
 
     return data
       .filter(r => {
-        if (viewFilter === 'approved') return r.approvedDate !== null;
         if (viewFilter === 'revision') return r.status === 'returned' || r.status === 'awaiting';
-        return true;
+        return true; // 'submitted' — all consultationDocs are already status=submitted
       })
       .filter(r =>
         r.barangay?.toLowerCase().includes(searchText.toLowerCase()) ||
@@ -989,6 +1380,7 @@ export default function LYDOMonitorScreen() {
           item={viewingItem}
           onClose={() => setViewingItem(null)}
           onCommentMode={() => { setCommentItem(viewingItem); setViewingItem(null); }}
+          onApproved={() => { setViewingItem(null); fetchConsultationDocs(); fetchApprovedDocs(); setViewFilter('approved'); }}
         />
       )}
 
@@ -1098,7 +1490,7 @@ const styles = StyleSheet.create({
   cellBarangay: { fontSize: isMobile ? 10 : 12, fontWeight: '600', color: COLORS.darkText },
   cellDocument: { fontSize: isMobile ? 10 : 11, color: COLORS.subText, lineHeight: 16 },
   cellStatus:   { fontSize: isMobile ? 9 : 11, color: COLORS.darkText, lineHeight: 14, flexShrink: 1 },
-  cellTime:     { fontSize: 9, color: COLORS.subText, textAlign: 'right' },
+  cellVersion: { fontSize: 9, color: COLORS.navy, fontWeight: '700', marginTop: 2 },
   cellDate:     { fontSize: 9, color: COLORS.subText, textAlign: 'right' },
   viewCommentsLink: { fontSize: isMobile ? 9 : 11, color: COLORS.navyLight, fontWeight: '600', textDecorationLine: 'underline' },
   viewBtn: { backgroundColor: COLORS.navy, borderRadius: 6, paddingHorizontal: isMobile ? 6 : 10, paddingVertical: 5 },
