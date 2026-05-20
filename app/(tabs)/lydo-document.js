@@ -598,6 +598,16 @@ export default function LYDODocumentsScreen({ navigation }) {
       {/* ── VIEW: DOCUMENT TYPE FOLDERS inside a year (table layout) ── */}
       {view === 'years' && (
         <>
+          {/* Back Button */}
+          <TouchableOpacity
+            style={styles.backBtn}
+            onPress={goToFolders}
+            activeOpacity={0.75}
+          >
+            <Feather name="arrow-left" size={16} color={COLORS.navy} />
+            <Text style={styles.backBtnText}>Back</Text>
+          </TouchableOpacity>
+
           {/* Breadcrumb: Folders > 2026 Documents */}
           <View style={styles.breadcrumb}>
             <TouchableOpacity onPress={goToFolders}>
@@ -702,6 +712,16 @@ export default function LYDODocumentsScreen({ navigation }) {
       {/* ── VIEW: DOCUMENTS BY BARANGAY for a selected document type ── */}
       {view === 'doctypes' && (
         <>
+          {/* Back Button */}
+          <TouchableOpacity
+            style={styles.backBtn}
+            onPress={() => goToYears(selectedYear)}
+            activeOpacity={0.75}
+          >
+            <Feather name="arrow-left" size={16} color={COLORS.navy} />
+            <Text style={styles.backBtnText}>Back</Text>
+          </TouchableOpacity>
+
           {/* Breadcrumb: Folders > 2026 Documents > Annual Budget... */}
           <View style={styles.breadcrumb}>
             <TouchableOpacity onPress={goToFolders}>
@@ -810,16 +830,7 @@ export default function LYDODocumentsScreen({ navigation }) {
                         }}
                       >
                         {/* Download icon */}
-                        <View style={{ alignItems: 'center', justifyContent: 'center', width: 20, height: 20 }}>
-                          <View style={{ width: 2, height: 9, backgroundColor: '#1A8CFF', borderRadius: 1 }} />
-                          <View style={{
-                            width: 10, height: 0,
-                            borderLeftWidth: 5, borderRightWidth: 5, borderTopWidth: 6,
-                            borderLeftColor: 'transparent', borderRightColor: 'transparent',
-                            borderTopColor: '#1A8CFF', marginTop: -1,
-                          }} />
-                          <View style={{ width: 12, height: 2, backgroundColor: '#1A8CFF', borderRadius: 1, marginTop: 2 }} />
-                        </View>
+                        <Feather name="download" size={isMobile ? 13 : 15} color={COLORS.navy} />
                       </TouchableOpacity>
                     ) : null}
                     {doc.file_url && (
@@ -829,15 +840,7 @@ export default function LYDODocumentsScreen({ navigation }) {
                         onPress={() => handleViewPress(doc)}
                       >
                         {/* Eye icon */}
-                        <View style={{ alignItems: 'center', justifyContent: 'center', width: 20, height: 20 }}>
-                          <View style={{
-                            width: 16, height: 10, borderRadius: 8,
-                            borderWidth: 1.8, borderColor: '#1A8CFF',
-                            alignItems: 'center', justifyContent: 'center',
-                          }}>
-                            <View style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: '#1A8CFF' }} />
-                          </View>
-                        </View>
+                        <Feather name="eye" size={isMobile ? 13 : 15} color="#00796B" />
                       </TouchableOpacity>
                     )}
                   </View>
@@ -1294,6 +1297,31 @@ const styles = StyleSheet.create({
   },
   actionIconBtn: {
     padding: 4,
+  },
+
+  // ── Back Button ──
+  backBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    gap: 6,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    backgroundColor: COLORS.white,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: COLORS.lightGray,
+    marginBottom: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 3,
+    elevation: 1,
+  },
+  backBtnText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: COLORS.navy,
   },
 
   // ── Document Viewer ──

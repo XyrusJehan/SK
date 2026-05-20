@@ -577,15 +577,17 @@ const DocumentViewer = ({ item, onClose, onApproved, onRefreshDocs }) => {
 
         {/* ── Bottom Bar ── */}
         <View style={dvStyles.bottomBar}>
-          {item.status !== 'returned' && (
+          {item.status !== 'returned' && item.status !== 'approved' && (
             <TouchableOpacity style={dvStyles.approveBtn} onPress={() => setApproveModalVisible(true)} activeOpacity={0.85}>
               <Text style={dvStyles.approveTxt}>Approve</Text>
             </TouchableOpacity>
           )}
-          <TouchableOpacity style={dvStyles.commentBtn} onPress={openCommentPanel} activeOpacity={0.85}>
-            <Feather name="message-square" size={15} color={COLORS.darkText} style={{ marginRight: 6 }} />
-            <Text style={dvStyles.commentTxt}>View Comments</Text>
-          </TouchableOpacity>
+          {item.status !== 'approved' && (
+            <TouchableOpacity style={dvStyles.commentBtn} onPress={openCommentPanel} activeOpacity={0.85}>
+              <Feather name="message-square" size={15} color={COLORS.darkText} style={{ marginRight: 6 }} />
+              <Text style={dvStyles.commentTxt}>View Comments</Text>
+            </TouchableOpacity>
+          )}
         </View>
 
         {/* ── Approve Modal ── */}
@@ -876,6 +878,25 @@ const TableRow = ({ item, isEven, viewFilter, onView }) => {
         <View style={styles.colDateTimeApproved}>
           <Text style={styles.cellTime}>{item.time}</Text>
           <Text style={styles.cellDate}>{item.approvedDate ?? '—'}</Text>
+        </View>
+        <View style={styles.colActionApproved}>
+          <View style={styles.approvedActionRow}>
+            <TouchableOpacity
+              style={[styles.actionIconWrap, { opacity: item.fileUrl ? 1 : 0.35 }]}
+              onPress={() => item.fileUrl && Linking.openURL(item.fileUrl).catch(() => Alert.alert('Error', 'Could not open file.'))}
+              activeOpacity={item.fileUrl ? 0.75 : 1}
+              disabled={!item.fileUrl}
+            >
+              <Feather name="download" size={isMobile ? 13 : 15} color={COLORS.navy} />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.actionIconWrap}
+              onPress={() => onView(item)}
+              activeOpacity={0.75}
+            >
+              <Feather name="eye" size={isMobile ? 13 : 15} color="#00796B" />
+            </TouchableOpacity>
+          </View>
         </View>
       </View>
     );
@@ -1230,6 +1251,7 @@ export default function LYDOMonitorScreen() {
             <View style={styles.colBarangayApproved}><Text style={styles.tableHeaderText}>Barangay</Text></View>
             <View style={styles.colDocumentApproved}><Text style={styles.tableHeaderText}>Document</Text></View>
             <View style={styles.colDateTimeApproved}><Text style={[styles.tableHeaderText, { textAlign: 'right' }]}>Approved Date</Text></View>
+            <View style={styles.colActionApproved}><Text style={[styles.tableHeaderText, { textAlign: 'center' }]}>Action</Text></View>
           </View>
         )}
         {viewFilter === 'revision' && (
@@ -1336,7 +1358,10 @@ const styles = StyleSheet.create({
   colAction:   { width: isMobile ? 80 : 120, alignItems: 'flex-start' },
   colBarangayApproved:  { width: isMobile ? 90 : 180, paddingRight: 8 },
   colDocumentApproved:  { flex: 1, paddingRight: 8 },
-  colDateTimeApproved:  { width: isMobile ? 80 : 130, alignItems: 'flex-end' },
+  colDateTimeApproved:  { width: isMobile ? 70 : 110, alignItems: 'flex-end', paddingRight: 8 },
+  colActionApproved:    { width: isMobile ? 60 : 80, alignItems: 'center' },
+  approvedActionRow:    { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: isMobile ? 2 : 4 },
+  actionIconWrap:       { padding: 4 },
   colBarangaySubmitted: { width: isMobile ? 90 : 160, paddingRight: 8 },
   colDocumentSubmitted: { flex: 1, paddingRight: 8 },
   colDateTimeSubmitted: { width: isMobile ? 70 : 120, alignItems: 'flex-end', paddingRight: 8 },
