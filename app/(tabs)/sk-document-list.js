@@ -1,9 +1,9 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import {
   View, Text, TextInput, ScrollView, TouchableOpacity,
   StyleSheet, SafeAreaView, StatusBar, Dimensions, Image, Modal,
 } from 'react-native';
-import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { useNav } from './navContext';
 import { useAuth } from './authContext';
 import { supabase } from '../../utils/supabase';
@@ -139,21 +139,47 @@ export default function SKDocumentListScreen() {
   const [uploading, setUploading] = useState(false);
   const [selectedFile, setSelectedFile] = useState(null);
 
-  // Get document types for selected category
-  const currentDocTypes = DOCUMENT_TYPES[uploadCategory] || [];
+  // Track document types already uploaded for the selected category
+  const [existingDocTypes, setExistingDocTypes] = useState([]);
 
-  // Fetch documents for this barangay filtered by category
+  // Fetch existing document types whenever the upload modal opens or category changes
   useEffect(() => {
-    const fetchDocuments = async () => {
-      if (!barangayId) return;
-
+    const fetchExistingDocTypes = async () => {
+      if (!barangayId || !uploadModalVisible) return;
       try {
-        // Map tab categories to folder_category values
-        const categoryMap = {
-          'Financial': 'financial',
-          'Planning': 'planning',
-          'Governance': 'governance',
-          'Activities': 'performance'
+        const { data, error } = await supabase
+          .from('documents')
+          .select('document_type')
+          .eq('barangay_id', barangayId)
+          .eq('folder_category', uploadCategory);
+
+        if (!error && data) {
+          setExistingDocTypes(data.map(d => d.document_type).filter(Boolean));
+        }
+      } catch (err) {
+        console.error('Error fetching existing doc types:', err);
+      }
+    };
+
+    fetchExistingDocTypes();
+  }, [barangayId, uploadCategory, uploadModalVisible]);
+
+  // Get document types for selected category, excluding already-uploaded ones
+  const currentDocTypes = (DOCUMENT_TYPES[uploadCategory] || []).filter(
+    type => !existingDocTypes.includes(type)
+  );
+
+  // Fetch documents for this barangay filtered by category — re-fetch every time screen is focused
+  const fetchDocuments = useCallback(async () => {
+    if (!barangayId) return;
+
+    try {
+      // Map tab categories to folder_category values
+      const categoryMap = {
+        'Financial': 'financial',
+        'Planning': 'planning',
+        'Governance': 'governance',
+        'Activities': 'performance'
         };
         const folderCategory = categoryMap[activeDocTab];
 
@@ -183,10 +209,19 @@ export default function SKDocumentListScreen() {
       } catch (error) {
         console.error('Error:', error);
       }
-    };
-
-    fetchDocuments();
   }, [barangayId, activeDocTab]);
+
+  // Re-fetch whenever the screen comes into focus
+  useFocusEffect(
+    useCallback(() => {
+      fetchDocuments();
+    }, [fetchDocuments])
+  );
+
+  // Also re-fetch immediately when the active tab changes
+  useEffect(() => {
+    fetchDocuments();
+  }, [activeDocTab]);
 
   // Accent color based on active tab
   const tabColor = COLORS[activeDocTab.toLowerCase()] || COLORS.planning;
@@ -359,8 +394,8 @@ export default function SKDocumentListScreen() {
       setUploadModalVisible(false);
       setUploading(false);
 
-      // Navigate to document management to see the new draft
-      router.push('/(tabs)/sk-document-management');
+      // Navigate to document management - Saved tab to see the new document
+      router.push({ pathname: '/(tabs)/sk-document-management', params: { initialTab: 'Saved' } });
     } catch (error) {
       console.error('Error:', error);
       alert('An error occurred while uploading');
@@ -376,11 +411,12 @@ export default function SKDocumentListScreen() {
     setCategoryDropdownOpen(false);
     setDocTypeDropdownOpen(false);
     setSelectedFile(null);
+    setExistingDocTypes([]);
   };
 
   // ── Sidebar ──
   const renderSidebar = () => (
-    <View style={styles.sidebar}>
+    <View style={[styles.sidebar, isMobile && !sidebarVisible && styles.sidebarHidden]}>
       <View style={styles.logoPill}>
         <Image
           source={require('./../../assets/images/sk-logo.png')}
@@ -616,7 +652,7 @@ export default function SKDocumentListScreen() {
             onPress={() => setSidebarVisible(false)}
           />
         )}
-        {isMobile ? sidebarVisible && renderSidebar() : renderSidebar()}
+        {renderSidebar()}
         {renderContent()}
 
       {/* Upload Modal */}
@@ -693,7 +729,7 @@ export default function SKDocumentListScreen() {
                 </TouchableOpacity>
                 {docTypeDropdownOpen && (
                   <ScrollView style={styles.modalDropdownMenu} showsVerticalScrollIndicator={false}>
-                    {currentDocTypes.map(type => (
+                    {currentDocTypes.length > 0 ? currentDocTypes.map(type => (
                       <TouchableOpacity
                         key={type}
                         style={[styles.modalDropdownItem, uploadDocType === type && styles.modalDropdownItemActive]}
@@ -705,7 +741,13 @@ export default function SKDocumentListScreen() {
                         </Text>
                         {uploadDocType === type && <Text style={styles.modalDropdownCheck}>✓</Text>}
                       </TouchableOpacity>
-                    ))}
+                    )) : (
+                      <View style={{ paddingVertical: 16, paddingHorizontal: 14 }}>
+                        <Text style={{ fontSize: 13, color: COLORS.subText, textAlign: 'center' }}>
+                          All document types for this category have already been uploaded.
+                        </Text>
+                      </View>
+                    )}
                   </ScrollView>
                 )}
               </View>
@@ -779,11 +821,17 @@ const styles = StyleSheet.create({
   sidebar: {
     width: 250, backgroundColor: COLORS.navy,
     alignItems: 'center', paddingTop: 20, paddingBottom: 24,
-    paddingHorizontal: 10, zIndex: 10,
+    paddingHorizontal: 10, zIndex: 20,
+    ...(isMobile ? {
+      position: 'absolute', top: 0, left: 0, bottom: 0, zIndex: 20,
+    } : {}),
+  },
+  sidebarHidden: {
+    display: 'none',
   },
   sidebarOverlay: {
     position: 'absolute', left: 0, top: 0, bottom: 0, right: 0,
-    backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 5,
+    backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 15,
   },
   logoPill: {
     marginTop: 20, width: 70, height: 70, borderRadius: 35,
