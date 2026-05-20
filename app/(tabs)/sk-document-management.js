@@ -1,8 +1,8 @@
-import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useMemo, useEffect, useCallback } from 'react';
 import {
   View, Text, TextInput, ScrollView, TouchableOpacity,
   StyleSheet, SafeAreaView, StatusBar, Dimensions, Image, Modal,
-  Linking, ActivityIndicator,
+  Linking, ActivityIndicator, Alert, KeyboardAvoidingView, Animated,
 } from 'react-native';
 import { Platform } from 'react-native';
 // WebView: use react-native-webview on native, iframe on web
@@ -113,6 +113,277 @@ const TypeBadge = ({ type }) => {
   );
 };
 
+// ─── RETURNED DOCUMENT VIEWER ─────────────────────────────────────────────────
+const COMMENT_PANEL_WIDTH = isMobile ? SCREEN_WIDTH : 320;
+
+const ReturnedDocumentViewer = ({ doc, onClose }) => {
+  const { user } = useAuth();
+  const [fileUrl, setFileUrl]       = useState(doc.fileUrl || null);
+  const [loading, setLoading]       = useState(!doc.fileUrl);
+  const [webLoading, setWebLoading] = useState(true);
+
+  // Comment panel
+  const [commentPanelOpen, setCommentPanelOpen] = useState(false);
+  const slideAnim = useRef(new Animated.Value(COMMENT_PANEL_WIDTH)).current;
+
+  const openCommentPanel = () => {
+    setCommentPanelOpen(true);
+    Animated.spring(slideAnim, { toValue: 0, useNativeDriver: true, tension: 65, friction: 11 }).start();
+    fetchComments();
+  };
+  const closeCommentPanel = () => {
+    Animated.timing(slideAnim, { toValue: COMMENT_PANEL_WIDTH, useNativeDriver: true, duration: 220 }).start(() => setCommentPanelOpen(false));
+  };
+
+  // Comments
+  const [comments, setComments]           = useState([]);
+  const [commentsLoading, setCommentsLoading] = useState(false);
+
+  const fetchComments = useCallback(async () => {
+    setCommentsLoading(true);
+    try {
+      const { data: lydo, error } = await supabase
+        .from('lydo_comments')
+        .select(`comment_id, content, is_resolved, created_at,
+          commenter:users!lydo_comments_commented_by_fkey (user_id, first_name, last_name)`)
+        .eq('document_id', doc.id)
+        .order('created_at', { ascending: true });
+      if (error) { setComments([]); return; }
+      setComments(lydo || []);
+    } catch (e) { setComments([]); }
+    finally { setCommentsLoading(false); }
+  }, [doc.id]);
+
+  const formatTime = (iso) => {
+    if (!iso) return '';
+    return new Date(iso).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+  };
+  const getInitials = (u) => u ? `${u.first_name?.[0] || ''}${u.last_name?.[0] || ''}`.toUpperCase() : '??';
+  const getFullName = (u) => u ? `${u.first_name || ''} ${u.last_name || ''}`.trim() || 'LYDO Officer' : 'LYDO Officer';
+
+  const resolvedCount   = comments.filter(c => c.is_resolved).length;
+  const unresolvedCount = comments.length - resolvedCount;
+
+  useEffect(() => {
+    if (doc.fileUrl) { setFileUrl(doc.fileUrl); setLoading(false); return; }
+    const fetchFile = async () => {
+      setLoading(true);
+      try {
+        const { data: versions } = await supabase
+          .from('document_versions').select('file_url')
+          .eq('document_id', doc.id).order('version_number', { ascending: false }).limit(1);
+        const versionUrl = versions?.[0]?.file_url;
+        if (versionUrl) { setFileUrl(versionUrl); } else {
+          const { data: d } = await supabase.from('documents').select('file_url').eq('document_id', doc.id).single();
+          setFileUrl(d?.file_url || null);
+        }
+      } catch (e) { setFileUrl(null); }
+      finally { setLoading(false); }
+    };
+    fetchFile();
+  }, [doc.id]);
+
+  const googleViewerUrl = fileUrl
+    ? `https://docs.google.com/gview?embedded=true&url=${encodeURIComponent(fileUrl)}`
+    : null;
+
+  return (
+    <Modal visible animationType="slide" statusBarTranslucent>
+      <SafeAreaView style={rvStyles.safe}>
+        {/* Top Bar */}
+        <View style={rvStyles.topBar}>
+          <TouchableOpacity style={rvStyles.backBtn} onPress={onClose} activeOpacity={0.8}>
+            <Feather name="arrow-left" size={20} color={COLORS.white} />
+          </TouchableOpacity>
+          <View style={rvStyles.topMid}>
+            <Text style={rvStyles.topTitle} numberOfLines={1}>{doc.title}</Text>
+            <View style={rvStyles.returnedBadge}>
+              <Feather name="corner-up-left" size={10} color="#E87A30" />
+              <Text style={rvStyles.returnedBadgeText}>Returned for revision</Text>
+            </View>
+          </View>
+          {fileUrl && (
+            <TouchableOpacity style={rvStyles.downloadBtn}
+              onPress={() => Linking.openURL(fileUrl).catch(() => Alert.alert('Error', 'Could not open file.'))}
+              activeOpacity={0.8}>
+              <Feather name="download" size={18} color={COLORS.gold} />
+            </TouchableOpacity>
+          )}
+        </View>
+
+        {/* Document area */}
+        <View style={{ flex: 1, backgroundColor: COLORS.offWhite }}>
+          {loading ? (
+            <View style={rvStyles.centerState}>
+              <ActivityIndicator size="large" color={COLORS.navy} />
+              <Text style={rvStyles.loadingTxt}>Loading document…</Text>
+            </View>
+          ) : !fileUrl ? (
+            <View style={rvStyles.centerState}>
+              <Feather name="file-text" size={40} color={COLORS.midGray} />
+              <Text style={rvStyles.loadingTxt}>No file attached</Text>
+            </View>
+          ) : Platform.OS === 'web' ? (
+            <iframe src={googleViewerUrl} style={{ flex: 1, width: '100%', height: '100%', border: 'none' }} title={doc.title} />
+          ) : (
+            <View style={{ flex: 1 }}>
+              <WebView source={{ uri: googleViewerUrl }} style={{ flex: 1 }}
+                onLoadStart={() => setWebLoading(true)} onLoadEnd={() => setWebLoading(false)}
+                startInLoadingState={true}
+                renderLoading={() => (
+                  <View style={rvStyles.centerState}>
+                    <ActivityIndicator size="large" color={COLORS.navy} />
+                    <Text style={rvStyles.loadingTxt}>Loading document…</Text>
+                  </View>
+                )}
+              />
+              {webLoading && (
+                <View style={rvStyles.webLoadingOverlay}>
+                  <ActivityIndicator size="large" color={COLORS.navy} />
+                  <Text style={rvStyles.loadingTxt}>Loading document…</Text>
+                </View>
+              )}
+            </View>
+          )}
+
+          {/* Scrim */}
+          {commentPanelOpen && (
+            <TouchableOpacity style={rvStyles.panelScrim} activeOpacity={1} onPress={closeCommentPanel} />
+          )}
+
+          {/* Slide-in Comment Panel */}
+          <Animated.View
+            style={[rvStyles.commentPanel, { width: COMMENT_PANEL_WIDTH, transform: [{ translateX: slideAnim }] }]}
+            pointerEvents={commentPanelOpen ? 'auto' : 'none'}
+          >
+            {/* Panel top bar */}
+            <View style={rvStyles.panelTopBar}>
+              <View>
+                <Text style={rvStyles.panelTitle}>LYDO Comments</Text>
+                <Text style={rvStyles.panelSub} numberOfLines={1}>{doc.title}</Text>
+              </View>
+              <TouchableOpacity style={rvStyles.panelCloseBtn} onPress={closeCommentPanel} activeOpacity={0.8}>
+                <Feather name="x" size={18} color={COLORS.darkText} />
+              </TouchableOpacity>
+            </View>
+
+            {/* Badge row */}
+            {comments.length > 0 && (
+              <View style={rvStyles.panelBadgeRow}>
+                {unresolvedCount > 0 && (
+                  <View style={[rvStyles.badge, rvStyles.badgeOpen]}>
+                    <Text style={rvStyles.badgeTxt}>{unresolvedCount} open</Text>
+                  </View>
+                )}
+                {resolvedCount > 0 && (
+                  <View style={[rvStyles.badge, rvStyles.badgeResolved]}>
+                    <Text style={[rvStyles.badgeTxt, { color: '#166534' }]}>{resolvedCount} resolved</Text>
+                  </View>
+                )}
+              </View>
+            )}
+
+            {/* Comment list */}
+            <ScrollView style={rvStyles.commentList} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+              {commentsLoading ? (
+                <ActivityIndicator color={COLORS.navy} style={{ marginTop: 30 }} />
+              ) : comments.length === 0 ? (
+                <View style={rvStyles.emptyState}>
+                  <Feather name="message-circle" size={32} color={COLORS.midGray} />
+                  <Text style={rvStyles.emptyTxt}>No comments yet</Text>
+                  <Text style={rvStyles.emptySub}>LYDO has not added any comments.</Text>
+                </View>
+              ) : (
+                comments.map((c) => (
+                  <View key={c.comment_id} style={[rvStyles.commentCard, c.is_resolved && rvStyles.commentCardResolved]}>
+                    <View style={rvStyles.commentHeader}>
+                      <View style={[rvStyles.avatar, c.is_resolved && rvStyles.avatarResolved]}>
+                        <Text style={rvStyles.avatarTxt}>{getInitials(c.commenter)}</Text>
+                      </View>
+                      <View style={rvStyles.commentMeta}>
+                        <Text style={rvStyles.commentAuthor}>{getFullName(c.commenter)}</Text>
+                        <Text style={rvStyles.commentTime}>{formatTime(c.created_at)}</Text>
+                      </View>
+                      {c.is_resolved && (
+                        <View style={rvStyles.resolvedTag}>
+                          <Feather name="check-circle" size={11} color="#166534" />
+                          <Text style={rvStyles.resolvedTagTxt}>Resolved</Text>
+                        </View>
+                      )}
+                    </View>
+                    <Text style={[rvStyles.commentBody, c.is_resolved && rvStyles.commentBodyResolved]}>{c.content}</Text>
+                  </View>
+                ))
+              )}
+              <View style={{ height: 16 }} />
+            </ScrollView>
+          </Animated.View>
+        </View>
+
+        {/* Bottom Bar */}
+        <View style={rvStyles.bottomBar}>
+          <TouchableOpacity style={rvStyles.commentBtn} onPress={openCommentPanel} activeOpacity={0.85}>
+            <Feather name="message-square" size={15} color={COLORS.darkText} style={{ marginRight: 6 }} />
+            <Text style={rvStyles.commentTxt}>View Comments</Text>
+            {unresolvedCount > 0 && (
+              <View style={rvStyles.commentBadge}>
+                <Text style={rvStyles.commentBadgeTxt}>{unresolvedCount}</Text>
+              </View>
+            )}
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    </Modal>
+  );
+};
+
+const rvStyles = StyleSheet.create({
+  safe:            { flex: 1, backgroundColor: COLORS.navy },
+  topBar:          { flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.navy, paddingHorizontal: 12, paddingVertical: 12, gap: 10 },
+  backBtn:         { padding: 6, borderRadius: 8, backgroundColor: 'rgba(255,255,255,0.12)' },
+  topMid:          { flex: 1 },
+  topTitle:        { fontSize: 14, fontWeight: '700', color: COLORS.white },
+  returnedBadge:   { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 },
+  returnedBadgeText: { fontSize: 10, color: '#E87A30', fontWeight: '600' },
+  downloadBtn:     { padding: 6, borderRadius: 8, backgroundColor: 'rgba(255,255,255,0.12)' },
+  centerState:     { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', backgroundColor: COLORS.offWhite, gap: 12 },
+  loadingTxt:      { fontSize: 13, color: COLORS.subText },
+  webLoadingOverlay: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', backgroundColor: COLORS.offWhite, gap: 12 },
+  bottomBar:       { flexDirection: 'row', justifyContent: 'center', gap: 12, padding: 16, backgroundColor: COLORS.white, borderTopWidth: 1, borderTopColor: COLORS.lightGray },
+  commentBtn:      { flexDirection: 'row', alignItems: 'center', backgroundColor: '#E0E0E0', borderRadius: 24, paddingHorizontal: 28, paddingVertical: 12, borderWidth: 1.5, borderColor: COLORS.midGray },
+  commentTxt:      { fontSize: 14, fontWeight: '700', color: COLORS.darkText },
+  commentBadge:    { marginLeft: 8, backgroundColor: '#E87A30', borderRadius: 10, paddingHorizontal: 6, paddingVertical: 1 },
+  commentBadgeTxt: { fontSize: 10, fontWeight: '800', color: COLORS.white },
+  panelScrim:      { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.25)', zIndex: 10 },
+  commentPanel:    { position: 'absolute', top: 0, bottom: 0, right: 0, zIndex: 20, backgroundColor: COLORS.white, borderLeftWidth: 1, borderLeftColor: COLORS.lightGray, shadowColor: '#000', shadowOffset: { width: -4, height: 0 }, shadowOpacity: 0.15, shadowRadius: 12, elevation: 16, flexDirection: 'column' },
+  panelTopBar:     { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 14, paddingTop: 14, paddingBottom: 10, borderBottomWidth: 1, borderBottomColor: COLORS.lightGray, backgroundColor: COLORS.white },
+  panelTitle:      { fontSize: 15, fontWeight: '800', color: COLORS.darkText },
+  panelSub:        { fontSize: 10, color: COLORS.subText, marginTop: 1 },
+  panelCloseBtn:   { width: 32, height: 32, borderRadius: 16, backgroundColor: COLORS.lightGray, alignItems: 'center', justifyContent: 'center' },
+  panelBadgeRow:   { flexDirection: 'row', gap: 6, paddingHorizontal: 14, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: COLORS.lightGray },
+  badge:           { borderRadius: 10, paddingHorizontal: 8, paddingVertical: 2 },
+  badgeOpen:       { backgroundColor: '#FEF3C7' },
+  badgeResolved:   { backgroundColor: '#DCFCE7' },
+  badgeTxt:        { fontSize: 10, fontWeight: '700', color: '#92400E' },
+  commentList:     { flex: 1, paddingHorizontal: 10, paddingTop: 10 },
+  emptyState:      { alignItems: 'center', paddingTop: 32, gap: 8, paddingHorizontal: 16 },
+  emptyTxt:        { fontSize: 13, fontWeight: '700', color: COLORS.midGray },
+  emptySub:        { fontSize: 11, color: COLORS.midGray, textAlign: 'center', lineHeight: 16 },
+  commentCard:         { backgroundColor: COLORS.white, borderRadius: 10, padding: 12, marginBottom: 10, borderWidth: 1, borderColor: COLORS.lightGray, elevation: 1, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 3 },
+  commentCardResolved: { backgroundColor: '#F9FAFB', borderColor: '#E5E7EB', opacity: 0.8 },
+  commentHeader:   { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 8, gap: 8 },
+  avatar:          { width: 32, height: 32, borderRadius: 16, backgroundColor: COLORS.navy, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+  avatarResolved:  { backgroundColor: COLORS.midGray },
+  avatarTxt:       { fontSize: 11, fontWeight: '800', color: COLORS.white },
+  commentMeta:     { flex: 1 },
+  commentAuthor:   { fontSize: 12, fontWeight: '700', color: COLORS.darkText },
+  commentTime:     { fontSize: 10, color: COLORS.midGray, marginTop: 1 },
+  resolvedTag:     { flexDirection: 'row', alignItems: 'center', gap: 3 },
+  resolvedTagTxt:  { fontSize: 10, fontWeight: '700', color: '#166534' },
+  commentBody:         { fontSize: 12, color: COLORS.darkText, lineHeight: 18 },
+  commentBodyResolved: { color: COLORS.subText },
+});
+
 // ─── MAIN SCREEN ──────────────────────────────────────────────────────────────
 export default function SKDocumentManagementScreen() {
   const router = useRouter();
@@ -149,6 +420,7 @@ export default function SKDocumentManagementScreen() {
   const [alertModal, setAlertModal] = useState({ visible: false, type: 'success', title: '', message: '' });
   const [viewerModal, setViewerModal] = useState({ visible: false, fileUrl: null, title: '' });
   const [webViewLoading, setWebViewLoading] = useState(false);
+  const [returnedViewerDoc, setReturnedViewerDoc] = useState(null);
 
   const showAlert = (type, title, message) => {
     setAlertModal({ visible: true, type, title, message });
@@ -755,7 +1027,7 @@ export default function SKDocumentManagementScreen() {
                     <TouchableOpacity activeOpacity={0.7} onPress={() => {}}>
                       <EditIcon />
                     </TouchableOpacity>
-                    <TouchableOpacity activeOpacity={0.7} onPress={() => handleViewPress(doc)}>
+                    <TouchableOpacity activeOpacity={0.7} onPress={() => setReturnedViewerDoc(doc)}>
                       <ViewIcon />
                     </TouchableOpacity>
                   </>
@@ -1085,6 +1357,14 @@ export default function SKDocumentManagementScreen() {
           </View>
         </Modal>
       </View>
+
+      {/* ── Returned Document Viewer (with LYDO comment panel) ── */}
+      {returnedViewerDoc && (
+        <ReturnedDocumentViewer
+          doc={returnedViewerDoc}
+          onClose={() => setReturnedViewerDoc(null)}
+        />
+      )}
 
     </SafeAreaView>
     
