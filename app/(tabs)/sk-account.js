@@ -262,7 +262,7 @@ export default function AccountScreen() {
   };
 
   const renderSidebar = () => (
-    <View style={styles.sidebar}>
+    <View style={[styles.sidebar, isMobile && !sidebarVisible && styles.sidebarHidden]}>
       <View style={styles.logoPill}>
         <Image
           source={require('./../../assets/images/sk-logo.png')}
@@ -270,7 +270,7 @@ export default function AccountScreen() {
           resizeMode="contain"
         />
       </View>
-      <View style={styles.sidebarSpacer} />
+      <View style={{ height: 28 }} />
       {['Dashboard', 'Documents', 'Planning', 'Portal', 'Account'].map((tab) => {
         const active = activeTab === tab;
         return (
@@ -307,7 +307,7 @@ export default function AccountScreen() {
             onPress={() => setSidebarVisible(false)}
           />
         )}
-        {isMobile ? (sidebarVisible && renderSidebar()) : renderSidebar()}
+        {renderSidebar()}
 
         <ScrollView
           style={[styles.main, isMobile && styles.mainMobile]}
@@ -594,11 +594,17 @@ const styles = StyleSheet.create({
   // ── Sidebar ──
   sidebar: {
     width: 250, backgroundColor: COLORS.navy,
-    alignItems: 'center', paddingTop: 20, paddingBottom: 24, paddingHorizontal: 10, zIndex: 10,
+    alignItems: 'center', paddingTop: 20, paddingBottom: 24, paddingHorizontal: 10, zIndex: 20,
+    ...(isMobile ? {
+      position: 'absolute', top: 0, left: 0, bottom: 0, zIndex: 20,
+    } : {}),
+  },
+  sidebarHidden: {
+    display: 'none',
   },
   sidebarOverlay: {
     position: 'absolute', left: 0, top: 0, bottom: 0, right: 0,
-    backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 5,
+    backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 15,
   },
   logoPill: {
     marginTop: 20, width: 70, height: 70, borderRadius: 35,
