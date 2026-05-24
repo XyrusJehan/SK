@@ -1,13 +1,12 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { Feather } from '@expo/vector-icons';
+import { useFocusEffect, useRouter } from 'expo-router';
+import { useCallback, useEffect, useState } from 'react';
 import {
   View, Text, TextInput, ScrollView, TouchableOpacity,
   StyleSheet, SafeAreaView, StatusBar, Dimensions,
   Modal, Alert, KeyboardAvoidingView, Platform, Image,
   ActivityIndicator, Linking, Animated,
 } from 'react-native';
-import { useRouter, useFocusEffect } from 'expo-router';
-import { useNav } from './navContext';
-import { useAuth } from './authContext';
 import { supabase } from '../../utils/supabase';
 import { Feather } from '@expo/vector-icons';
 
