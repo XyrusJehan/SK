@@ -497,30 +497,6 @@ export default function SKDocumentListScreen() {
         </View>
       )}
 
-      {/* Search Bar */}
-      <View style={styles.searchRow}>
-        <View style={styles.searchBox}>
-          <Text style={styles.searchIcon}>🔍</Text>
-          <TextInput
-            style={styles.searchInput}
-            placeholder="Search"
-            placeholderTextColor={COLORS.midGray}
-            value={searchText}
-            onChangeText={setSearchText}
-          />
-          {searchText.length > 0 && (
-            <TouchableOpacity onPress={() => setSearchText('')}>
-              <Text style={{ color: COLORS.midGray, fontSize: 12 }}>✕</Text>
-            </TouchableOpacity>
-          )}
-        </View>
-        {isMobile && (
-          <TouchableOpacity style={styles.uploadBtnMobile} onPress={() => setUploadModalVisible(true)} activeOpacity={0.8}>
-            <Text style={styles.uploadBtnText}>Upload ↑</Text>
-          </TouchableOpacity>
-        )}
-      </View>
-
       {/* Category label + All dropdown + Tab bar */}
       <View style={styles.categoryRow}>
         <Text style={styles.categoryLabel}>Category:</Text>
@@ -577,6 +553,38 @@ export default function SKDocumentListScreen() {
             );
           })}
         </View>
+      </View>
+
+      {/* Search Bar + Scan Button */}
+      <View style={styles.searchRow}>
+        <View style={styles.searchBox}>
+          <Text style={styles.searchIcon}>🔍</Text>
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Search"
+            placeholderTextColor={COLORS.midGray}
+            value={searchText}
+            onChangeText={setSearchText}
+          />
+          {searchText.length > 0 && (
+            <TouchableOpacity onPress={() => setSearchText('')}>
+              <Text style={{ color: COLORS.midGray, fontSize: 12 }}>✕</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+        <TouchableOpacity
+          style={styles.scanBtn}
+          onPress={() => router.push('/(tabs)/sk-scan')}
+          activeOpacity={0.8}
+        >
+          <Text style={styles.scanIcon}>⊟</Text>
+          <Text style={styles.scanText}>Scan</Text>
+        </TouchableOpacity>
+        {isMobile && (
+          <TouchableOpacity style={styles.uploadBtnMobile} onPress={() => setUploadModalVisible(true)} activeOpacity={0.8}>
+            <Text style={styles.uploadBtnText}>Upload ↑</Text>
+          </TouchableOpacity>
+        )}
       </View>
 
       {/* SubType filter pills */}
@@ -928,13 +936,24 @@ const styles = StyleSheet.create({
   uploadIcon:    { fontSize: 14, color: COLORS.white },
 
   // Search
-  searchRow: { marginBottom: 10, flexDirection: 'row', alignItems: 'center' },
+  searchRow: {
+    flexDirection: 'row', alignItems: 'center',
+    justifyContent: 'space-between', marginBottom: 16,
+  },
+  scanBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    paddingHorizontal: 14, paddingVertical: 8,
+    borderRadius: 20, borderWidth: 1.5, borderColor: COLORS.navy,
+    backgroundColor: COLORS.white,
+  },
+  scanIcon: { fontSize: 13, color: COLORS.navy },
+  scanText: { fontSize: 13, fontWeight: '700', color: COLORS.navy },
   searchBox: {
-    flex: 1, flexDirection: 'row', alignItems: 'center',
+    flexDirection: 'row', alignItems: 'center',
     backgroundColor: COLORS.white, borderRadius: 20,
     borderWidth: 1, borderColor: COLORS.lightGray,
     paddingHorizontal: 12, paddingVertical: 7,
-    maxWidth: isMobile ? '100%' : 280,
+    width: isMobile ? '55%' : 280,
   },
   searchIcon:  { fontSize: 12, color: COLORS.midGray, marginRight: 4 },
   searchInput: { flex: 1, fontSize: 12, color: COLORS.darkText },
