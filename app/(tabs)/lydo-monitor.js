@@ -39,7 +39,7 @@ const COLORS = {
   comment:   '#E0E0E0',
 };
 
-const NAV_TABS     = ['Dashboard', 'Documents', 'Monitor', 'Barangay'];
+const NAV_TABS     = ['Dashboard', 'Documents', 'Monitor', 'Barangay', 'Logs'];
 const MONITOR_TABS = ['Consultation', 'Budget', 'Report'];
 
 const TABLE_DATA = {
@@ -271,6 +271,8 @@ const DocumentViewer = ({ item, onClose, onApproved, onRefreshDocs }) => {
         .update({ status: 'returned', reviewed_at: new Date().toISOString(), reviewed_by: user?.userId })
         .eq('document_id', parseInt(item.id));
       if (docError) { Alert.alert('Error', 'Failed to return document.'); setReturning(false); return; }
+      // Log the return activity
+      await logActivity('Return proposal', `Returned "${item.document}" from ${item.barangay} with ${comments.length} comment(s)`);
       setReturnModalVisible(false);
       Alert.alert('Document Returned', `"${item.document}" has been returned to ${item.barangay} with ${comments.length} comment(s).`);
       onRefreshDocs?.();
@@ -308,6 +310,19 @@ const DocumentViewer = ({ item, onClose, onApproved, onRefreshDocs }) => {
     if (item?.id) fetchFileUrl(); else setLoading(false);
   }, [item?.id]);
 
+  // Helper function to log LYDO activity
+  const logActivity = async (action, description) => {
+    try {
+      await supabase.from('lydo_activity_logs').insert({
+        action,
+        description,
+        user_id: user?.userId || null,
+      });
+    } catch (err) {
+      console.error('Failed to log activity:', err);
+    }
+  };
+
   const handleApprove = async () => {
     setApproving(true);
     try {
@@ -324,6 +339,8 @@ const DocumentViewer = ({ item, onClose, onApproved, onRefreshDocs }) => {
         status: 'approved', reviewed_at: new Date().toISOString(), reviewed_by: user?.userId || null,
       }).eq('document_id', item.id);
       if (docError) { setApproveModalVisible(false); Alert.alert('Error', 'Failed to approve document.'); setApproving(false); return; }
+      // Log the approval activity
+      await logActivity('Approve proposal', `Approved "${item.document}" from ${item.barangay}`);
       setApproveModalVisible(false);
       onApproved?.();
       onClose();
@@ -1092,6 +1109,7 @@ export default function LYDOMonitorScreen() {
     if (tab === 'Documents') router.push('/(tabs)/lydo-document');
     if (tab === 'Monitor')   router.push('/(tabs)/lydo-monitor');
     if (tab === 'Barangay')  router.push('/(tabs)/lydo-accounts');
+    if (tab === 'Logs')      router.push('/(tabs)/lydo-logs');
   };
 
   const handleLogout = () => { logout(); router.replace('/'); };

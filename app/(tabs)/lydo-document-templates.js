@@ -41,7 +41,7 @@ const COLORS = {
 };
 
 // ─── NAV TABS ─────────────────────────────────────────────────────────────────
-const NAV_TABS = ['Dashboard', 'Documents', 'Monitor', 'Barangay'];
+const NAV_TABS = ['Dashboard', 'Documents', 'Monitor', 'Barangay', 'Logs'];
 const DOCUMENT_TABS = ['Barangay Folders', 'Reports', 'Templates'];
 
 // ─── TEMPLATE STATUS ──────────────────────────────────────────────────────────
@@ -217,6 +217,19 @@ export default function LYDODocumentTemplatesScreen() {
   const [showArchiveView, setShowArchiveView] = useState(false);
   const [expandedArchiveId, setExpandedArchiveId] = useState(null);
 
+  // Helper function to log LYDO activity
+  const logActivity = async (action, description) => {
+    try {
+      await supabase.from('lydo_activity_logs').insert({
+        action,
+        description,
+        user_id: authUser?.userId || null,
+      });
+    } catch (err) {
+      console.error('Failed to log activity:', err);
+    }
+  };
+
   useEffect(() => { setActiveTab('Documents'); }, []);
 
   // Fetch templates and distributions from database
@@ -346,6 +359,7 @@ export default function LYDODocumentTemplatesScreen() {
     else if (tab === 'Documents') router.push('/(tabs)/lydo-document');
     else if (tab === 'Monitor') router.push('/(tabs)/lydo-monitor');
         if (tab === 'Barangay') router.push('/(tabs)/lydo-accounts');
+          if (tab === 'Logs') router.push('/(tabs)/lydo-logs');
   };
 
   const handleLogout = () => {
@@ -754,6 +768,9 @@ export default function LYDODocumentTemplatesScreen() {
                   }
 
                   isSuccess = true;
+                  // Log the add template activity
+                  const templateNames = insertRows.map(r => r.title).join(', ');
+                  await logActivity('Add template', `Added template(s): ${templateNames}`);
                   resultMsg = `${insertRows.length} template${insertRows.length > 1 ? 's' : ''} created successfully!`;
                 } catch (err) {
                   console.error('Error creating template:', err);
@@ -1074,6 +1091,9 @@ export default function LYDODocumentTemplatesScreen() {
 
                     const count = Object.values(checkedTemplates).filter(Boolean).length;
                     isSuccess = true;
+                    // Log the replace template activity
+                    const replacedNames = checkedItems.map(t => t.name).join(', ');
+                    await logActivity('Replace template', `Replaced template(s): ${replacedNames}`);
                     resultMsg = `${count} template${count > 1 ? 's' : ''} replaced successfully!`;
                   } catch (err) {
                     console.error('Error replacing templates:', err);
@@ -1203,6 +1223,9 @@ export default function LYDODocumentTemplatesScreen() {
 
                   const count = Object.values(forwardChecked).filter(Boolean).length;
                   isSuccess = true;
+                  // Log the forward template activity
+                  const forwardedNames = templates.filter(t => forwardChecked[t.id]).map(t => t.name).join(', ');
+                  await logActivity('Forward template', `Forwarded template(s) to all barangays: ${forwardedNames}`);
                   resultMsg = `${count} template${count > 1 ? 's' : ''} forwarded to all barangays successfully!`;
                 } catch (err) {
                   console.error('Error forwarding templates:', err);
