@@ -217,6 +217,7 @@ export default function AccountScreen() {
     else if (tab === 'Documents') router.push('/(tabs)/sk-document');
     else if (tab === 'Planning') router.push('/(tabs)/sk-planning');
     else if (tab === 'Portal') router.push('/(tabs)/sk-portal');
+    else if (tab === 'Logs') router.push('/(tabs)/sk-logs');
     else if (tab === 'Account') router.push('/(tabs)/sk-account');
     setActiveTab(tab);
     setSidebarVisible(false);
@@ -304,7 +305,7 @@ export default function AccountScreen() {
         />
       </View>
       <View style={{ height: 28 }} />
-      {['Dashboard', 'Documents', 'Planning', 'Portal', 'Account'].map((tab) => {
+      {['Dashboard', 'Documents', 'Planning', 'Portal', 'Logs', 'Account'].map((tab) => {
         const active = activeTab === tab;
         return (
           <TouchableOpacity

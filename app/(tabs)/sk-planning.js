@@ -27,7 +27,7 @@ const COLORS = {
 };
 
 // ─── NAV & PLANNING TABS ─────────────────────────────────────────────────────
-const NAV_TABS      = ['Dashboard', 'Documents', 'Planning', 'Portal', 'Account'];
+const NAV_TABS      = ['Dashboard', 'Documents', 'Planning', 'Portal', 'Logs', 'Account'];
 const PLANNING_TABS = ['Templates', 'Budget'];
 
 // ─── TEMPLATE CATEGORY CONFIG ─────────────────────────────────────────────────
@@ -212,6 +212,7 @@ export default function SKPlanningScreen() {
     if (tab === 'Dashboard') router.push('/(tabs)/sk-dashboard');
     if (tab === 'Documents') router.push('/(tabs)/sk-document');
     if (tab === 'Portal')    router.push('/(tabs)/sk-portal');
+      if (tab === 'Logs')      router.push('/(tabs)/sk-logs');
     if (tab === 'Account')   router.push('/(tabs)/sk-account');
   };
 

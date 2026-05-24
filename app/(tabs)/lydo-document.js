@@ -18,6 +18,8 @@ import {
   TextInput,
   TouchableOpacity,
   View,
+  ActivityIndicator,
+  Platform,
 } from 'react-native';
 import { supabase } from '../../utils/supabase';
 import { useAuth } from './authContext';

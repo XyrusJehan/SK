@@ -31,7 +31,7 @@ const COLORS = {
   noPubBg:   '#FFEBEE',
 };
 
-const NAV_TABS     = ['Dashboard', 'Documents', 'Monitor', 'Barangay'];
+const NAV_TABS     = ['Dashboard', 'Documents', 'Monitor', 'Barangay', 'Logs'];
 const MONITOR_TABS = ['Consultation', 'Budget', 'Report'];
 
 // ─── DROPDOWN OPTIONS ─────────────────────────────────────────────────────────
@@ -410,6 +410,7 @@ export default function LYDOMonitorReportScreen() {
     if (tab === 'Dashboard')      router.push('/(tabs)/lydo-dashboard');
     if (tab === 'Documents') router.push('/(tabs)/lydo-document');
     if (tab === 'Monitor')   router.push('/(tabs)/lydo-monitor');
+    if (tab === 'Logs')       router.push('/(tabs)/lydo-logs');
         if (tab === 'Barangay') router.push('/(tabs)/lydo-accounts');
   };
 
