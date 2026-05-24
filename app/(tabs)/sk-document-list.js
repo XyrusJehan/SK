@@ -30,7 +30,7 @@ const COLORS = {
 };
 
 // ─── TABS ─────────────────────────────────────────────────────────────────────
-const NAV_TABS      = ['Dashboard', 'Documents', 'Planning', 'Portal', 'Account'];
+const NAV_TABS      = ['Dashboard', 'Documents', 'Planning', 'Portal', 'Logs','Account'];
 const DOCUMENT_TABS = ['Financial', 'Planning', 'Governance', 'Activities'];
 
 // Document types per folder category (from database schema)
@@ -270,6 +270,7 @@ export default function SKDocumentListScreen() {
     if (tab === 'Documents') router.push('/(tabs)/sk-document');
     if (tab === 'Planning')  router.push('/(tabs)/sk-planning');
     if (tab === 'Portal')    router.push('/(tabs)/sk-portal');
+    if (tab === 'Logs')      router.push('/(tabs)/sk-logs');
     if (tab === 'Account')   router.push('/(tabs)/sk-account');
   };
 

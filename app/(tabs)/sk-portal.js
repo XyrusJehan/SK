@@ -27,7 +27,7 @@ const COLORS = {
 };
 
 // ─── NAV & PORTAL TABS ───────────────────────────────────────────────────────
-const NAV_TABS    = ['Dashboard', 'Documents', 'Planning', 'Portal', 'Account'];
+const NAV_TABS    = ['Dashboard', 'Documents', 'Planning', 'Portal', 'Logs', 'Account'];
 const PORTAL_TABS = ['Published', 'Feedback'];
 
 // ─── FILTER OPTIONS ──────────────────────────────────────────────────────────
@@ -226,6 +226,8 @@ export default function SKPortalScreen() {
     if (tab === 'Dashboard') router.push('/(tabs)/sk-dashboard');
     if (tab === 'Documents') router.push('/(tabs)/sk-document');
     if (tab === 'Planning')  router.push('/(tabs)/sk-planning');
+      if (tab === 'Portal')    router.push('/(tabs)/sk-portal');
+      if (tab === 'Logs')      router.push('/(tabs)/sk-logs');
     if (tab === 'Account')   router.push('/(tabs)/sk-account');
   };
 
