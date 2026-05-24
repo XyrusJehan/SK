@@ -110,6 +110,19 @@ export default function SKPortalScreen() {
   const barangayName = user?.barangay?.barangay_name || 'Unknown Barangay';
   const barangayId = user?.barangayId;
 
+  // Helper function to log SK activity
+  const logActivity = async (action, description) => {
+    try {
+      await supabase.from('sk_activity_logs').insert({
+        action,
+        description,
+        user_id: user?.userId || null,
+      });
+    } catch (err) {
+      console.error('Failed to log activity:', err);
+    }
+  };
+
   const [activePortalTab, setActivePortalTab] = useState('Published');
   const [docFilter, setDocFilter]             = useState('All Documents');
   const [yearFilter, setYearFilter]           = useState('All Years');
@@ -483,13 +496,75 @@ export default function SKPortalScreen() {
               <TouchableOpacity
                 style={styles.publishBtn}
                 activeOpacity={0.85}
-                onPress={() => {
+                onPress={async () => {
                   if (!uploadFile || !uploadTitle || !uploadCategory || !uploadYear) {
                     Alert.alert('Missing Info', 'Please complete all fields before publishing.');
                     return;
                   }
-                  Alert.alert('Published!', `"${uploadTitle}" has been published to the portal.`);
-                  setShowUploadModal(false);
+                  if (!barangayId || !user?.userId) {
+                    Alert.alert('Error', 'User information missing');
+                    return;
+                  }
+
+                  try {
+                    let fileUrl = null;
+
+                    // Upload file to Supabase storage if selected
+                    if (uploadFile) {
+                      const sanitizedName = uploadFile.name
+                        .replace(/[^\w\s.-]/g, '')
+                        .replace(/\s+/g, '_');
+                      const fileName = `${barangayId}_portal_${Date.now()}_${sanitizedName}`;
+
+                      const response = await fetch(uploadFile.uri);
+                      const blob = await response.blob();
+
+                      const { data: uploadData, error: uploadError } = await supabase.storage
+                        .from('documents')
+                        .upload(fileName, blob, {
+                          contentType: uploadFile.type || 'application/octet-stream',
+                        });
+
+                      if (uploadError) {
+                        Alert.alert('Error', 'Failed to upload file: ' + uploadError.message);
+                        return;
+                      }
+
+                      const { data: urlData } = supabase.storage
+                        .from('documents')
+                        .getPublicUrl(fileName);
+
+                      fileUrl = urlData.publicUrl;
+                    }
+
+                    // Insert into website_posts
+                    const { error: insertError } = await supabase
+                      .from('website_posts')
+                      .insert({
+                        barangay_id: barangayId,
+                        published_by: user.userId,
+                        title: uploadTitle,
+                        document_category: uploadCategory,
+                        year: parseInt(uploadYear) || new Date().getFullYear(),
+                        file_url: fileUrl,
+                        portal_status: 'published',
+                        published_at: new Date().toISOString(),
+                      });
+
+                    if (insertError) {
+                      Alert.alert('Error', 'Failed to publish: ' + insertError.message);
+                      return;
+                    }
+
+                    // Log the activity
+                    await logActivity('Upload to website', `Published "${uploadTitle}" to the transparency portal`);
+
+                    Alert.alert('Published!', `"${uploadTitle}" has been published to the portal.`);
+                    setShowUploadModal(false);
+                  } catch (error) {
+                    console.error('Publish error:', error);
+                    Alert.alert('Error', 'An error occurred while publishing');
+                  }
                 }}
               >
                 <Text style={styles.publishBtnText}>Publish to Transparency Portal</Text>

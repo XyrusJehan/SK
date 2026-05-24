@@ -395,6 +395,19 @@ export default function SKDocumentManagementScreen() {
   const barangayName = user?.barangay?.barangay_name || 'Unknown Barangay';
   const barangayId = user?.barangayId;
 
+  // Helper function to log SK activity
+  const logActivity = async (action, description) => {
+    try {
+      await supabase.from('sk_activity_logs').insert({
+        action,
+        description,
+        user_id: user?.userId || null,
+      });
+    } catch (err) {
+      console.error('Failed to log activity:', err);
+    }
+  };
+
   const [activeDocTab, setActiveDocTab] = useState('Document Management');
   const [activeStatusTab, setActiveStatusTab] = useState(
     STATUS_TABS.includes(params?.initialTab) ? params.initialTab : 'All'
@@ -661,6 +674,9 @@ export default function SKDocumentManagementScreen() {
 
       // Refresh all documents to reflect the latest status
       await fetchDocuments();
+
+      // Log the activity
+      await logActivity('Submit to LYDO', `Submitted "${documentToForward?.title}" to LYDO for consultation`);
 
       showAlert('success', 'Document Forwarded', 'The document has been successfully forwarded to LYDO for consultation.');
     } catch (error) {

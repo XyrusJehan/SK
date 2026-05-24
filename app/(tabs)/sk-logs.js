@@ -1,9 +1,9 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import {
   View, Text, TextInput, ScrollView, TouchableOpacity,
   StyleSheet, SafeAreaView, StatusBar, Dimensions, Image,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { useNav } from './navContext';
 import { useAuth } from './authContext';
 import { supabase } from '../../utils/supabase';
@@ -124,70 +124,93 @@ export default function LogsScreen() {
 
   const barangayName = user?.barangay?.barangay_name || 'Unknown Barangay';
   const barangayId = user?.barangayId;
-  const currentUserId = user?.id;
 
   useEffect(() => {
     if (user && user.role !== 'sk') router.replace('/');
   }, [user]);
 
-  // ── Fetch logs from Supabase ───────────────────────────────────────────────
-  useEffect(() => {
-    const fetchLogs = async () => {
-      if (!barangayId || !currentUserId) return;
-      setLoading(true);
+  // ── Fetch logs from Supabase — runs every time the screen comes into focus ─
+  useFocusEffect(
+    useCallback(() => {
+      const fetchLogs = async () => {
+        if (!barangayId) return;
+        setLoading(true);
 
-      try {
-        const { data, error } = await supabase
-          .from('activity_logs')
-          .select(`
-            id,
-            action,
-            description,
-            created_at,
-            user_id,
-            officer:profiles (
-              full_name,
-              position,
-              avatar_url
-            )
-          `)
-          .eq('barangay_id', barangayId)
-          .neq('user_id', currentUserId)
-          .order('created_at', { ascending: false })
-          .limit(50);
+        try {
+          // Step 1: get all user_ids that belong to this barangay
+          const { data: barangayUsers, error: usersError } = await supabase
+            .from('users')
+            .select('user_id, first_name, last_name, middle_initial, position')
+            .eq('barangay_id', barangayId);
 
-        if (error) {
-          console.error('Error fetching logs:', error);
+          if (usersError) {
+            console.error('Error fetching barangay users:', usersError);
+            setLogs([]);
+            return;
+          }
+
+          if (!barangayUsers || barangayUsers.length === 0) {
+            setLogs([]);
+            return;
+          }
+
+          // Build a lookup map: user_id → user info
+          const userMap = {};
+          barangayUsers.forEach((u) => {
+            const nameParts = [u.first_name, u.middle_initial, u.last_name].filter(Boolean);
+            userMap[u.user_id] = {
+              fullName: nameParts.join(' '),
+              position: u.position || 'Officer',
+            };
+          });
+
+          const barangayUserIds = barangayUsers.map((u) => u.user_id);
+
+          // Step 2: fetch sk_activity_logs for those users only
+          const { data, error } = await supabase
+            .from('sk_activity_logs')
+            .select('id, action, description, created_at, user_id')
+            .in('user_id', barangayUserIds)
+            .order('created_at', { ascending: false })
+            .limit(100);
+
+          if (error) {
+            console.error('Error fetching logs:', error);
+            setLogs([]);
+            return;
+          }
+
+          if (!data || data.length === 0) {
+            setLogs([]);
+            return;
+          }
+
+          const mapped = data.map((row) => {
+            const officer = userMap[row.user_id] || { fullName: 'Unknown', position: 'Officer' };
+            return {
+              id: row.id,
+              officerName: officer.fullName,
+              position: officer.position
+                ? officer.position.charAt(0).toUpperCase() + officer.position.slice(1)
+                : 'Officer',
+              action: row.action || 'Create document',
+              description: row.description || '',
+              createdAt: new Date(row.created_at),
+            };
+          });
+
+          setLogs(mapped);
+        } catch (err) {
+          console.error('Fetch error:', err);
           setLogs([]);
-          return;
+        } finally {
+          setLoading(false);
         }
+      };
 
-        if (!data || data.length === 0) {
-          setLogs([]);
-          return;
-        }
-
-        const mapped = data.map((row) => ({
-          id: row.id,
-          officerName: row.officer?.full_name || 'Unknown',
-          position: row.officer?.position || 'Officer',
-          avatarUrl: row.officer?.avatar_url || null,
-          action: row.action || 'Create document',
-          description: row.description || '',
-          createdAt: new Date(row.created_at),
-        }));
-
-        setLogs(mapped);
-      } catch (err) {
-        console.error('Fetch error:', err);
-        setLogs([]);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchLogs();
-  }, [barangayId, currentUserId]);
+      fetchLogs();
+    }, [barangayId])
+  );
 
   // ── Date filter helper ─────────────────────────────────────────────────────
   const isInDateRange = (date) => {

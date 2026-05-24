@@ -116,6 +116,19 @@ export default function SKDocumentListScreen() {
   const barangayName = user?.barangay?.barangay_name || 'Unknown Barangay';
   const barangayId = user?.barangayId;
 
+  // Helper function to log SK activity
+  const logActivity = async (action, description) => {
+    try {
+      await supabase.from('sk_activity_logs').insert({
+        action,
+        description,
+        user_id: user?.userId || null,
+      });
+    } catch (err) {
+      console.error('Failed to log activity:', err);
+    }
+  };
+
   // Determine initial tab from params (category passed from sk-document)
   const initTab = DOCUMENT_TABS.includes(params?.category) ? params.category : 'Financial';
   const initSubType = params?.subType || null;
@@ -386,6 +399,9 @@ export default function SKDocumentListScreen() {
             actioned_by: user.userId,
           });
       }
+
+      // Log the activity
+      await logActivity('Create document', `Created document "${uploadTitle.trim()}" in ${uploadCategory}`);
 
       // Reset form and close modal
       setUploadTitle('');
