@@ -1,15 +1,27 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
-import {
-  View, Text, TextInput, ScrollView, TouchableOpacity,
-  StyleSheet, SafeAreaView, StatusBar, Dimensions,
-  Modal, Alert, KeyboardAvoidingView, Platform, Image,
-  ActivityIndicator, Linking, Animated,
-} from 'react-native';
-import { useRouter, useFocusEffect } from 'expo-router';
-import { useNav } from './navContext';
-import { useAuth } from './authContext';
-import { supabase } from '../../utils/supabase';
 import { Feather } from '@expo/vector-icons';
+import { useFocusEffect, useRouter } from 'expo-router';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import {
+  ActivityIndicator,
+  Alert,
+  Animated,
+  Dimensions,
+  Image,
+  KeyboardAvoidingView,
+  Linking,
+  Modal,
+  Platform,
+  SafeAreaView,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text, TextInput,
+  TouchableOpacity,
+  View,
+} from 'react-native';
+import { supabase } from '../../utils/supabase';
+import { useAuth } from './authContext';
+import { useNav } from './navContext';
 
 // WebView: use react-native-webview on native, iframe on web
 let WebView = null;
