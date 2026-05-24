@@ -30,7 +30,7 @@ const COLORS = {
 };
 
 // ─── TABS ─────────────────────────────────────────────────────────────────────
-const NAV_TABS      = ['Dashboard', 'Documents', 'Planning', 'Portal', 'Account'];
+const NAV_TABS      = ['Dashboard', 'Documents', 'Planning', 'Portal', 'Logs','Account'];
 const DOCUMENT_TABS = ['Financial', 'Planning', 'Governance', 'Activities'];
 
 // Document types per folder category (from database schema)
@@ -115,6 +115,19 @@ export default function SKDocumentListScreen() {
   // Get user's barangay from auth context
   const barangayName = user?.barangay?.barangay_name || 'Unknown Barangay';
   const barangayId = user?.barangayId;
+
+  // Helper function to log SK activity
+  const logActivity = async (action, description) => {
+    try {
+      await supabase.from('sk_activity_logs').insert({
+        action,
+        description,
+        user_id: user?.userId || null,
+      });
+    } catch (err) {
+      console.error('Failed to log activity:', err);
+    }
+  };
 
   // Determine initial tab from params (category passed from sk-document)
   const initTab = DOCUMENT_TABS.includes(params?.category) ? params.category : 'Financial';
@@ -270,6 +283,7 @@ export default function SKDocumentListScreen() {
     if (tab === 'Documents') router.push('/(tabs)/sk-document');
     if (tab === 'Planning')  router.push('/(tabs)/sk-planning');
     if (tab === 'Portal')    router.push('/(tabs)/sk-portal');
+    if (tab === 'Logs')      router.push('/(tabs)/sk-logs');
     if (tab === 'Account')   router.push('/(tabs)/sk-account');
   };
 
@@ -385,6 +399,9 @@ export default function SKDocumentListScreen() {
             actioned_by: user.userId,
           });
       }
+
+      // Log the activity
+      await logActivity('Create document', `Created document "${uploadTitle.trim()}" in ${uploadCategory}`);
 
       // Reset form and close modal
       setUploadTitle('');

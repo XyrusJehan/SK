@@ -36,7 +36,7 @@ const COLORS = {
 };
 
 // ─── CONSTANTS ────────────────────────────────────────────────────────────────
-const NAV_TABS       = ['Dashboard', 'Documents', 'Planning', 'Portal', 'Account'];
+const NAV_TABS       = ['Dashboard', 'Documents', 'Planning', 'Portal', 'Logs', 'Account'];
 const DOCUMENT_TABS  = ['Folder', 'Document Management'];
 const STATUS_TABS    = ['All', 'Drafts', 'Saved', 'Submitted', 'Approved', 'Returned'];
 const DRAFT_TYPES    = ['All Types', 'Planning', 'Financial', 'Governance', 'Performance'];
@@ -395,6 +395,19 @@ export default function SKDocumentManagementScreen() {
   const barangayName = user?.barangay?.barangay_name || 'Unknown Barangay';
   const barangayId = user?.barangayId;
 
+  // Helper function to log SK activity
+  const logActivity = async (action, description) => {
+    try {
+      await supabase.from('sk_activity_logs').insert({
+        action,
+        description,
+        user_id: user?.userId || null,
+      });
+    } catch (err) {
+      console.error('Failed to log activity:', err);
+    }
+  };
+
   const [activeDocTab, setActiveDocTab] = useState('Document Management');
   const [activeStatusTab, setActiveStatusTab] = useState(
     STATUS_TABS.includes(params?.initialTab) ? params.initialTab : 'All'
@@ -519,6 +532,7 @@ export default function SKDocumentManagementScreen() {
     if (tab === 'Documents') router.push('/(tabs)/sk-document');
     if (tab === 'Planning')  router.push('/(tabs)/sk-planning');
     if (tab === 'Portal')    router.push('/(tabs)/sk-portal');
+    if (tab === 'Logs')      router.push('/(tabs)/sk-logs');
     if (tab === 'Account')   router.push('/(tabs)/sk-account');
   };
 
@@ -660,6 +674,9 @@ export default function SKDocumentManagementScreen() {
 
       // Refresh all documents to reflect the latest status
       await fetchDocuments();
+
+      // Log the activity
+      await logActivity('Submit to LYDO', `Submitted "${documentToForward?.title}" to LYDO for consultation`);
 
       showAlert('success', 'Document Forwarded', 'The document has been successfully forwarded to LYDO for consultation.');
     } catch (error) {

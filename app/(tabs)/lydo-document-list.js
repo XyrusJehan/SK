@@ -155,7 +155,7 @@ const CATEGORIES = ['All', 'Planning', 'Financial', 'Governance', 'Performance']
 const SORT_OPTIONS = ['Newest', 'Oldest', 'A–Z'];
 const DOCUMENT_TABS = ['Barangay Document', 'Reports', 'Templates'];
 
-const NAV_TABS = ['Dashboard', 'Documents', 'Monitor','Barangay'];
+const NAV_TABS = ['Dashboard', 'Documents', 'Monitor','Barangay', 'Logs'];
 
 // ─── ICONS ────────────────────────────────────────────────────────────────────
 const BellIcon = ({ hasNotif }) => (
@@ -370,6 +370,7 @@ export default function LYDODocumentListScreen({ navigation }) {
     if (tab === 'Documents') router.push('/(tabs)/lydo-document');
     if (tab === 'Monitor')   router.push('/(tabs)/lydo-monitor');
         if (tab === 'Barangay') router.push('/(tabs)/lydo-accounts');
+      if (tab === 'Logs')       router.push('/(tabs)/lydo-logs');
   };
 
   const goBackToFolders = () => {
