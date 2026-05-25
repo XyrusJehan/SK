@@ -1,14 +1,15 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import {
   View, Text, TextInput, ScrollView, TouchableOpacity,
   StyleSheet, SafeAreaView, StatusBar, Dimensions, Image, Modal,
+  Platform, Alert, ActivityIndicator,
 } from 'react-native';
-import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { useNav } from './navContext';
 import { useAuth } from './authContext';
 import { supabase } from '../../utils/supabase';
 import * as DocumentPicker from 'expo-document-picker';
-
+import { DocumentScannerButton } from './scanner/DocumentScannerButton';
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const isMobile = SCREEN_WIDTH < 768;
 
@@ -30,7 +31,7 @@ const COLORS = {
 };
 
 // ─── TABS ─────────────────────────────────────────────────────────────────────
-const NAV_TABS      = ['Dashboard', 'Documents', 'Planning', 'Portal', 'Account'];
+const NAV_TABS      = ['Dashboard', 'Documents', 'Planning', 'Portal', 'Logs','Account'];
 const DOCUMENT_TABS = ['Financial', 'Planning', 'Governance', 'Activities'];
 
 // Document types per folder category (from database schema)
@@ -105,6 +106,7 @@ const FileIcon = ({ name }) => {
   );
 };
 
+
 // ─── MAIN SCREEN ──────────────────────────────────────────────────────────────
 export default function SKDocumentListScreen() {
   const router = useRouter();
@@ -115,6 +117,19 @@ export default function SKDocumentListScreen() {
   // Get user's barangay from auth context
   const barangayName = user?.barangay?.barangay_name || 'Unknown Barangay';
   const barangayId = user?.barangayId;
+
+  // Helper function to log SK activity
+  const logActivity = async (action, description) => {
+    try {
+      await supabase.from('sk_activity_logs').insert({
+        action,
+        description,
+        user_id: user?.userId || null,
+      });
+    } catch (err) {
+      console.error('Failed to log activity:', err);
+    }
+  };
 
   // Determine initial tab from params (category passed from sk-document)
   const initTab = DOCUMENT_TABS.includes(params?.category) ? params.category : 'Financial';
@@ -139,21 +154,47 @@ export default function SKDocumentListScreen() {
   const [uploading, setUploading] = useState(false);
   const [selectedFile, setSelectedFile] = useState(null);
 
-  // Get document types for selected category
-  const currentDocTypes = DOCUMENT_TYPES[uploadCategory] || [];
+  // Track document types already uploaded for the selected category
+  const [existingDocTypes, setExistingDocTypes] = useState([]);
 
-  // Fetch documents for this barangay filtered by category
+  // Fetch existing document types whenever the upload modal opens or category changes
   useEffect(() => {
-    const fetchDocuments = async () => {
-      if (!barangayId) return;
-
+    const fetchExistingDocTypes = async () => {
+      if (!barangayId || !uploadModalVisible) return;
       try {
-        // Map tab categories to folder_category values
-        const categoryMap = {
-          'Financial': 'financial',
-          'Planning': 'planning',
-          'Governance': 'governance',
-          'Activities': 'performance'
+        const { data, error } = await supabase
+          .from('documents')
+          .select('document_type')
+          .eq('barangay_id', barangayId)
+          .eq('folder_category', uploadCategory);
+
+        if (!error && data) {
+          setExistingDocTypes(data.map(d => d.document_type).filter(Boolean));
+        }
+      } catch (err) {
+        console.error('Error fetching existing doc types:', err);
+      }
+    };
+
+    fetchExistingDocTypes();
+  }, [barangayId, uploadCategory, uploadModalVisible]);
+
+  // Get document types for selected category, excluding already-uploaded ones
+  const currentDocTypes = (DOCUMENT_TYPES[uploadCategory] || []).filter(
+    type => !existingDocTypes.includes(type)
+  );
+
+  // Fetch documents for this barangay filtered by category — re-fetch every time screen is focused
+  const fetchDocuments = useCallback(async () => {
+    if (!barangayId) return;
+
+    try {
+      // Map tab categories to folder_category values
+      const categoryMap = {
+        'Financial': 'financial',
+        'Planning': 'planning',
+        'Governance': 'governance',
+        'Activities': 'performance'
         };
         const folderCategory = categoryMap[activeDocTab];
 
@@ -183,10 +224,19 @@ export default function SKDocumentListScreen() {
       } catch (error) {
         console.error('Error:', error);
       }
-    };
-
-    fetchDocuments();
   }, [barangayId, activeDocTab]);
+
+  // Re-fetch whenever the screen comes into focus
+  useFocusEffect(
+    useCallback(() => {
+      fetchDocuments();
+    }, [fetchDocuments])
+  );
+
+  // Also re-fetch immediately when the active tab changes
+  useEffect(() => {
+    fetchDocuments();
+  }, [activeDocTab]);
 
   // Accent color based on active tab
   const tabColor = COLORS[activeDocTab.toLowerCase()] || COLORS.planning;
@@ -235,6 +285,7 @@ export default function SKDocumentListScreen() {
     if (tab === 'Documents') router.push('/(tabs)/sk-document');
     if (tab === 'Planning')  router.push('/(tabs)/sk-planning');
     if (tab === 'Portal')    router.push('/(tabs)/sk-portal');
+    if (tab === 'Logs')      router.push('/(tabs)/sk-logs');
     if (tab === 'Account')   router.push('/(tabs)/sk-account');
   };
 
@@ -351,6 +402,9 @@ export default function SKDocumentListScreen() {
           });
       }
 
+      // Log the activity
+      await logActivity('Create document', `Created document "${uploadTitle.trim()}" in ${uploadCategory}`);
+
       // Reset form and close modal
       setUploadTitle('');
       setUploadCategory('planning');
@@ -359,8 +413,8 @@ export default function SKDocumentListScreen() {
       setUploadModalVisible(false);
       setUploading(false);
 
-      // Navigate to document management to see the new draft
-      router.push('/(tabs)/sk-document-management');
+      // Navigate to document management - Saved tab to see the new document
+      router.push({ pathname: '/(tabs)/sk-document-management', params: { initialTab: 'Saved' } });
     } catch (error) {
       console.error('Error:', error);
       alert('An error occurred while uploading');
@@ -376,11 +430,12 @@ export default function SKDocumentListScreen() {
     setCategoryDropdownOpen(false);
     setDocTypeDropdownOpen(false);
     setSelectedFile(null);
+    setExistingDocTypes([]);
   };
 
   // ── Sidebar ──
   const renderSidebar = () => (
-    <View style={styles.sidebar}>
+    <View style={[styles.sidebar, isMobile && !sidebarVisible && styles.sidebarHidden]}>
       <View style={styles.logoPill}>
         <Image
           source={require('./../../assets/images/sk-logo.png')}
@@ -436,37 +491,11 @@ export default function SKDocumentListScreen() {
             <Text style={styles.headerSub}>SANGGUNIANG KABATAAN</Text>
             <Text style={styles.headerTitle}>{barangayName.toUpperCase()}</Text>
           </View>
-          {/* Upload Button */}
-          <TouchableOpacity style={styles.uploadBtn} onPress={() => setUploadModalVisible(true)} activeOpacity={0.8}>
-            <Text style={styles.uploadBtnText}>Upload</Text>
-            <Text style={styles.uploadIcon}>↑</Text>
+          <TouchableOpacity style={styles.bellBtn}>
+            <BellIcon hasNotif={notifCount > 0} />
           </TouchableOpacity>
         </View>
       )}
-
-      {/* Search Bar */}
-      <View style={styles.searchRow}>
-        <View style={styles.searchBox}>
-          <Text style={styles.searchIcon}>🔍</Text>
-          <TextInput
-            style={styles.searchInput}
-            placeholder="Search"
-            placeholderTextColor={COLORS.midGray}
-            value={searchText}
-            onChangeText={setSearchText}
-          />
-          {searchText.length > 0 && (
-            <TouchableOpacity onPress={() => setSearchText('')}>
-              <Text style={{ color: COLORS.midGray, fontSize: 12 }}>✕</Text>
-            </TouchableOpacity>
-          )}
-        </View>
-        {isMobile && (
-          <TouchableOpacity style={styles.uploadBtnMobile} onPress={() => setUploadModalVisible(true)} activeOpacity={0.8}>
-            <Text style={styles.uploadBtnText}>Upload ↑</Text>
-          </TouchableOpacity>
-        )}
-      </View>
 
       {/* Category label + All dropdown + Tab bar */}
       <View style={styles.categoryRow}>
@@ -523,6 +552,37 @@ export default function SKDocumentListScreen() {
               </TouchableOpacity>
             );
           })}
+        </View>
+      </View>
+
+      {/* Search Bar + Scan Button */}
+      <View style={styles.searchRow}>
+        <View style={styles.searchBox}>
+          <Text style={styles.searchIcon}>🔍</Text>
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Search"
+            placeholderTextColor={COLORS.midGray}
+            value={searchText}
+            onChangeText={setSearchText}
+          />
+          {searchText.length > 0 && (
+            <TouchableOpacity onPress={() => setSearchText('')}>
+              <Text style={{ color: COLORS.midGray, fontSize: 12 }}>✕</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+<DocumentScannerButton
+  style={styles.scanBtn}
+  onPdfReady={(file) => {
+    setSelectedFile(file);
+    setUploadModalVisible(true);
+  }}/>
+          <TouchableOpacity style={styles.scanBtn} onPress={() => setUploadModalVisible(true)} activeOpacity={0.8}>
+            <Text style={styles.scanIcon}>↑</Text>
+            <Text style={styles.scanText}>Upload</Text>
+          </TouchableOpacity>
         </View>
       </View>
 
@@ -616,10 +676,8 @@ export default function SKDocumentListScreen() {
             onPress={() => setSidebarVisible(false)}
           />
         )}
-        {isMobile ? sidebarVisible && renderSidebar() : renderSidebar()}
+        {renderSidebar()}
         {renderContent()}
-
-      {/* Upload Modal */}
       <Modal
         visible={uploadModalVisible}
         animationType="fade"
@@ -693,7 +751,7 @@ export default function SKDocumentListScreen() {
                 </TouchableOpacity>
                 {docTypeDropdownOpen && (
                   <ScrollView style={styles.modalDropdownMenu} showsVerticalScrollIndicator={false}>
-                    {currentDocTypes.map(type => (
+                    {currentDocTypes.length > 0 ? currentDocTypes.map(type => (
                       <TouchableOpacity
                         key={type}
                         style={[styles.modalDropdownItem, uploadDocType === type && styles.modalDropdownItemActive]}
@@ -705,7 +763,13 @@ export default function SKDocumentListScreen() {
                         </Text>
                         {uploadDocType === type && <Text style={styles.modalDropdownCheck}>✓</Text>}
                       </TouchableOpacity>
-                    ))}
+                    )) : (
+                      <View style={{ paddingVertical: 16, paddingHorizontal: 14 }}>
+                        <Text style={{ fontSize: 13, color: COLORS.subText, textAlign: 'center' }}>
+                          All document types for this category have already been uploaded.
+                        </Text>
+                      </View>
+                    )}
                   </ScrollView>
                 )}
               </View>
@@ -779,11 +843,17 @@ const styles = StyleSheet.create({
   sidebar: {
     width: 250, backgroundColor: COLORS.navy,
     alignItems: 'center', paddingTop: 20, paddingBottom: 24,
-    paddingHorizontal: 10, zIndex: 10,
+    paddingHorizontal: 10, zIndex: 20,
+    ...(isMobile ? {
+      position: 'absolute', top: 0, left: 0, bottom: 0, zIndex: 20,
+    } : {}),
+  },
+  sidebarHidden: {
+    display: 'none',
   },
   sidebarOverlay: {
     position: 'absolute', left: 0, top: 0, bottom: 0, right: 0,
-    backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 5,
+    backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 15,
   },
   logoPill: {
     marginTop: 20, width: 70, height: 70, borderRadius: 35,
@@ -863,13 +933,23 @@ const styles = StyleSheet.create({
   uploadIcon:    { fontSize: 14, color: COLORS.white },
 
   // Search
-  searchRow: { marginBottom: 10, flexDirection: 'row', alignItems: 'center' },
+  searchRow: {
+    flexDirection: 'row', alignItems: 'center',
+    justifyContent: 'space-between', marginBottom: 16,
+  },
+  scanBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 5,
+    backgroundColor: '#133E75', borderRadius: 8,
+    paddingHorizontal: 12, paddingVertical: 9,
+  },
+  scanIcon: { fontSize: 16, color: '#FFFFFF' },
+  scanText: { fontSize: 13, fontWeight: '700', color: '#FFFFFF' },
   searchBox: {
-    flex: 1, flexDirection: 'row', alignItems: 'center',
+    flexDirection: 'row', alignItems: 'center',
     backgroundColor: COLORS.white, borderRadius: 20,
     borderWidth: 1, borderColor: COLORS.lightGray,
     paddingHorizontal: 12, paddingVertical: 7,
-    maxWidth: isMobile ? '100%' : 280,
+    width: isMobile ? '55%' : 280,
   },
   searchIcon:  { fontSize: 12, color: COLORS.midGray, marginRight: 4 },
   searchInput: { flex: 1, fontSize: 12, color: COLORS.darkText },

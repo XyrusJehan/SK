@@ -34,7 +34,7 @@ const COLORS = {
   checkBlue:  '#1565C0',
 };
 
-const NAV_TABS     = ['Dashboard', 'Documents', 'Monitor', 'Barangay'];
+const NAV_TABS     = ['Dashboard', 'Documents', 'Monitor', 'Barangay', 'Logs'];
 const BARANGAY_TABS = ['List of Accounts', 'Barangay'];
 // Tabs that show a red notification badge
 const NOTIF_TABS   = new Set(['List of Accounts', 'Barangay']);
@@ -693,7 +693,7 @@ const AccountListRow = ({ account, isEven, isPasswordVisible, onTogglePassword }
 export default function LYDOMonitorAccountScreen() {
   const router = useRouter();
   const { activeTab, setActiveTab } = useNav();
-  const { logout } = useAuth();
+  const { logout, user: authUser } = useAuth();
 
   const [activeBarangayTab, setActiveBarangayTab] = useState('List of Accounts');
   const [accounts, setAccounts]         = useState([]);
@@ -820,6 +820,16 @@ export default function LYDOMonitorAccountScreen() {
         Alert.alert('Error', 'Failed to create account');
         console.error(error);
       } else {
+        // Log the add account activity
+        try {
+          await supabase.from('lydo_activity_logs').insert({
+            action: 'Add account',
+            description: `Created account for ${form.firstName} ${form.lastName} (${form.position}) - ${form.barangay}`,
+            user_id: authUser?.userId || null,
+          });
+        } catch (logErr) {
+          console.error('Failed to log activity:', logErr);
+        }
         fetchData();
       }
     } catch (err) {
@@ -847,6 +857,7 @@ export default function LYDOMonitorAccountScreen() {
     if (tab === 'Documents') router.push('/(tabs)/lydo-document');
     if (tab === 'Monitor')   router.push('/(tabs)/lydo-monitor');
         if (tab === 'Barangay') router.push('/(tabs)/lydo-accounts');
+        if (tab === 'Logs')      router.push('/(tabs)/lydo-logs');
   };
 
   const handleLogout = () => { logout(); router.replace('/'); };

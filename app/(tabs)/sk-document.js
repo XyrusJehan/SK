@@ -1,10 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, TextInput, ScrollView, TouchableOpacity,
   StyleSheet, SafeAreaView, StatusBar, Dimensions,
   Image,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { useNav } from './navContext';
 import { useAuth } from './authContext';
 import { supabase } from '../../utils/supabase';
@@ -51,7 +51,7 @@ const COLORS = {
 };
 
 // ─── TABS ─────────────────────────────────────────────────────────────────────
-const NAV_TABS      = ['Dashboard', 'Documents', 'Planning', 'Portal', 'Account'];
+const NAV_TABS      = ['Dashboard', 'Documents', 'Planning', 'Portal', 'Logs', 'Account'];
 const DOCUMENT_TABS = ['Folder', 'Document Management'];
 
 // ─── DOCUMENT CATEGORIES ─────────────────────────────────────────────────────
@@ -121,7 +121,7 @@ const MenuIcon = () => (
 );
 
 // ─── DOCUMENT CARD (lydo-style) ───────────────────────────────────────────────
-const DocumentCard = ({ group, onItemPress }) => {
+const DocumentCard = ({ group, onItemPress, submittedSet, labelToDocType }) => {
   const { colors, title, icon, items } = group;
   return (
     <View style={[styles.card, { backgroundColor: colors.bg }]}>
@@ -130,17 +130,22 @@ const DocumentCard = ({ group, onItemPress }) => {
         <Text style={styles.cardHeaderTitle}>{title}</Text>
       </View>
       <View style={styles.cardBody}>
-        {items.map((item, idx) => (
-          <TouchableOpacity
-            key={idx}
-            style={styles.docItem}
-            onPress={() => onItemPress && onItemPress(item, group)}
-            activeOpacity={0.7}
-          >
-            <View style={[styles.docBullet, { backgroundColor: colors.header }]} />
-            <Text style={[styles.docItemText, { color: colors.subText }]}>{item}</Text>
-          </TouchableOpacity>
-        ))}
+        {items.map((item, idx) => {
+          const docType = (labelToDocType && labelToDocType[item]) || item;
+          const hasSubmission = submittedSet && submittedSet.has(docType);
+          return (
+            <TouchableOpacity
+              key={idx}
+              style={styles.docItem}
+              onPress={() => onItemPress && onItemPress(item, group)}
+              activeOpacity={0.7}
+            >
+              <View style={[styles.docBullet, { backgroundColor: colors.header }]} />
+              <Text style={[styles.docItemText, { color: hasSubmission ? colors.subText : '#E53935' }]}>{item}</Text>
+              {!hasSubmission && <View style={styles.redDot} />}
+            </TouchableOpacity>
+          );
+        })}
       </View>
     </View>
   );
@@ -162,31 +167,33 @@ export default function SKDocumentScreen() {
   const [sidebarVisible, setSidebarVisible] = useState(false);
   const [documents, setDocuments]           = useState([]);
 
-  // Fetch documents for this barangay
-  useEffect(() => {
-    const fetchDocuments = async () => {
+  // Fetch documents for this barangay - refresh every time the screen is focused
+  useFocusEffect(
+    useCallback(() => {
       if (!barangayId) return;
 
-      try {
-        const { data: docs, error } = await supabase
-          .from('documents')
-          .select('document_id, title, folder_category, document_type, status, year, created_at')
-          .eq('barangay_id', barangayId)
-          .order('created_at', { ascending: false });
+      const fetchDocuments = async () => {
+        try {
+          const { data: docs, error } = await supabase
+            .from('documents')
+            .select('document_id, title, folder_category, document_type, status, year, created_at')
+            .eq('barangay_id', barangayId)
+            .order('created_at', { ascending: false });
 
-        if (error) {
-          console.error('Error fetching documents:', error);
-          return;
+          if (error) {
+            console.error('Error fetching documents:', error);
+            return;
+          }
+
+          setDocuments(docs || []);
+        } catch (error) {
+          console.error('Error:', error);
         }
+      };
 
-        setDocuments(docs || []);
-      } catch (error) {
-        console.error('Error:', error);
-      }
-    };
-
-    fetchDocuments();
-  }, [barangayId]);
+      fetchDocuments();
+    }, [barangayId])
+  );
 
   const handleNavPress = (tab) => {
     setActiveTab(tab);
@@ -195,6 +202,7 @@ export default function SKDocumentScreen() {
     if (tab === 'Documents') router.push('/(tabs)/sk-document');
     if (tab === 'Planning')  router.push('/(tabs)/sk-planning');
     if (tab === 'Portal')    router.push('/(tabs)/sk-portal');
+      if (tab === 'Logs')      router.push('/(tabs)/sk-logs');
     if (tab === 'Account')   router.push('/(tabs)/sk-account');
   };
 
@@ -208,6 +216,33 @@ export default function SKDocumentScreen() {
     });
   };
 
+  // Map short card labels → full document_type values stored in the DB
+  const LABEL_TO_DOC_TYPE = {
+    'ABYIP':                    'Annual Barangay Youth Investment Program (ABYIP)',
+    'CBYDP':                    'Comprehensive Barangay Youth Development Plan (CBYDP)',
+    'Work Plans':               'Work Plans',
+    'Project Proposals':        'Project Proposals',
+    'Monthly Itemized List':    'Monthly Itemized List',
+    'Quarterly Register of Bank': 'Quarterly Financial Reports',
+    'Annual Budget':            'Approved Annual Budget',
+    'Disbursement Vouchers':    'Disbursement Vouchers',
+    'Liquidation Reports':      'Liquidation Reports',
+    'Resolutions':              'Resolutions',
+    'Ordinances':               'Ordinances',
+    'Accomplishment Reports':   'Accomplishment Reports',
+    'Activity Documentation':   'Documentation',
+    'Event Reports':            'Event Reports',
+    'Minutes of the meetings':  'Minutes of Meetings',
+  };
+
+  // Build a set of document_type values that have been submitted/approved/returned
+  const submittedSet = new Set(
+    documents
+      .filter(d => ['submitted', 'approved', 'returned'].includes(d.status))
+      .map(d => d.document_type)
+      .filter(Boolean)
+  );
+
   // Filter by search only (Folder tab shows all categories)
   const visibleCategories = DOC_CATEGORIES.filter(cat => {
     const matchesSearch = searchText === '' ||
@@ -218,7 +253,7 @@ export default function SKDocumentScreen() {
 
   // ── Sidebar ──
   const renderSidebar = () => (
-    <View style={styles.sidebar}>
+    <View style={[styles.sidebar, isMobile && !sidebarVisible && styles.sidebarHidden]}>
       <View style={styles.logoPill}>
         <Image
           source={require('./../../assets/images/sk-logo.png')}
@@ -285,7 +320,38 @@ export default function SKDocumentScreen() {
         </View>
       )}
 
-      {/* Search Bar */}
+      {/* Category label + Tab bar */}
+      <View style={styles.categoryRow}>
+        <Text style={styles.categoryLabel}>Category:</Text>
+      </View>
+
+      <View style={styles.filterRow}>
+        {/* Folder / Document Management tab bar */}
+        <View style={styles.docTabBar}>
+          {DOCUMENT_TABS.map(tab => {
+            const active = activeDocTab === tab;
+            return (
+              <TouchableOpacity
+                key={tab}
+                style={[styles.docTab, active && styles.docTabActive]}
+                onPress={() => {
+                  setActiveDocTab(tab);
+                  if (tab === 'Document Management') {
+                    router.push({ pathname: '/(tabs)/sk-document-management' });
+                  }
+                }}
+                activeOpacity={0.8}
+              >
+                <Text style={[styles.docTabText, active && styles.docTabTextActive]}>
+                  {tab}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      </View>
+
+      {/* Search Bar + Scan Button */}
       <View style={styles.searchRow}>
         <View style={styles.searchBox}>
           <Text style={styles.searchIcon}>🔍</Text>
@@ -302,37 +368,14 @@ export default function SKDocumentScreen() {
             </TouchableOpacity>
           )}
         </View>
-      </View>
-
-      {/* Category label + All dropdown + Tab bar */}
-      {/* Category label + Tab bar */}
-      <View style={styles.categoryRow}>
-        <Text style={styles.categoryLabel}>Category:</Text>
-      </View>
-
-      <View style={styles.filterRow}>
-        {/* Folder / Document Management tab bar */}
-        <View style={styles.docTabBar}>
-          {DOCUMENT_TABS.map(tab => {
-            const active = activeDocTab === tab;
-            return (
-              <TouchableOpacity
-                key={tab}
-                style={[styles.docTab, active && styles.docTabActive]}
-                onPress={() => {
-                  if (tab === 'Document Management') {
-                    router.push({ pathname: '/(tabs)/sk-document-management' });
-                  }
-                }}
-                activeOpacity={0.8}
-              >
-                <Text style={[styles.docTabText, active && styles.docTabTextActive]}>
-                  {tab}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </View>
+        <TouchableOpacity
+          style={styles.scanBtn}
+          onPress={() => router.push('/(tabs)/sk-scan')}
+          activeOpacity={0.8}
+        >
+          <Text style={styles.scanIcon}>⊟</Text>
+          <Text style={styles.scanText}>Scan</Text>
+        </TouchableOpacity>
       </View>
 
       {/* Document Cards Grid */}
@@ -340,7 +383,7 @@ export default function SKDocumentScreen() {
         {visibleCategories.length > 0 ? (
           visibleCategories.map(cat => (
             <View key={cat.id} style={isMobile ? styles.cardWrapperMobile : styles.cardWrapper}>
-              <DocumentCard group={cat} onItemPress={handleItemPress} />
+              <DocumentCard group={cat} onItemPress={handleItemPress} submittedSet={submittedSet} labelToDocType={LABEL_TO_DOC_TYPE} />
             </View>
           ))
         ) : (
@@ -364,7 +407,7 @@ export default function SKDocumentScreen() {
             onPress={() => setSidebarVisible(false)}
           />
         )}
-        {isMobile ? sidebarVisible && renderSidebar() : renderSidebar()}
+        {renderSidebar()}
         {renderContent()}
       </View>
     </SafeAreaView>
@@ -380,11 +423,17 @@ const styles = StyleSheet.create({
   sidebar: {
     width: 250, backgroundColor: COLORS.navy,
     alignItems: 'center', paddingTop: 20, paddingBottom: 24,
-    paddingHorizontal: 10, zIndex: 10,
+    paddingHorizontal: 10, zIndex: 20,
+    ...(isMobile ? {
+      position: 'absolute', top: 0, left: 0, bottom: 0, zIndex: 20,
+    } : {}),
+  },
+  sidebarHidden: {
+    display: 'none',
   },
   sidebarOverlay: {
     position: 'absolute', left: 0, top: 0, bottom: 0, right: 0,
-    backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 5,
+    backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 15,
   },
   logoPill: {
     marginTop: 20, width: 70, height: 70, borderRadius: 35,
@@ -453,17 +502,28 @@ const styles = StyleSheet.create({
   notifBadge:  { position: 'absolute', top: -2, right: -2, width: 16, height: 16, borderRadius: 8, backgroundColor: COLORS.gold, alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: COLORS.white },
   notifBadgeText: { fontSize: 8, fontWeight: '900', color: COLORS.navy },
 
-  // Search
-  searchRow: { marginBottom: 10 },
+  // Search + Scan
+  searchRow: {
+    flexDirection: 'row', alignItems: 'center',
+    justifyContent: 'space-between', marginBottom: 16,
+  },
   searchBox: {
     flexDirection: 'row', alignItems: 'center',
     backgroundColor: COLORS.white, borderRadius: 20,
     borderWidth: 1, borderColor: COLORS.lightGray,
     paddingHorizontal: 12, paddingVertical: 7,
-    maxWidth: isMobile ? '100%' : 280,
+    width: isMobile ? '60%' : 280,
   },
   searchIcon:  { fontSize: 12, color: COLORS.midGray, marginRight: 4 },
   searchInput: { flex: 1, fontSize: 12, color: COLORS.darkText },
+  scanBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    paddingHorizontal: 14, paddingVertical: 8,
+    borderRadius: 20, borderWidth: 1.5, borderColor: COLORS.navy,
+    backgroundColor: COLORS.white,
+  },
+  scanIcon: { fontSize: 13, color: COLORS.navy },
+  scanText: { fontSize: 13, fontWeight: '700', color: COLORS.navy },
 
   // Category label
   categoryRow:   { flexDirection: 'row', alignItems: 'center', marginBottom: 4 },
@@ -523,6 +583,10 @@ const styles = StyleSheet.create({
   docItem:     { flexDirection: 'row', alignItems: 'flex-start', gap: 8, marginBottom: 6 },
   docBullet:   { width: 5, height: 5, borderRadius: 3, marginTop: 5, flexShrink: 0 },
   docItemText: { fontSize: isMobile ? 11 : 12, lineHeight: 18, flex: 1 },
+  redDot: {
+    width: 8, height: 8, borderRadius: 4,
+    backgroundColor: '#E53935', flexShrink: 0, alignSelf: 'center',
+  },
 
   // Empty state
   emptyState: { flex: 1, alignItems: 'center', marginTop: 60 },

@@ -35,7 +35,7 @@ const COLORS = {
 };
 
 // ─── NAV / TAB CONSTANTS ──────────────────────────────────────────────────────
-const NAV_TABS       = ['Dashboard', 'Documents', 'Monitor','Barangay'];
+const NAV_TABS       = ['Dashboard', 'Documents', 'Monitor','Barangay', 'Logs'];
 const DOCUMENT_TABS  = ['Barangay Folders', 'Reports', 'Templates'];
 
 // ─── SAMPLE REPORT DATA ───────────────────────────────────────────────────────
@@ -110,6 +110,7 @@ export default function LYDODocumentReportsScreen() {
     else if (tab === 'Documents') router.push('/(tabs)/lydo-document');
     else if (tab === 'Monitor')   router.push('/(tabs)/lydo-monitor');
         if (tab === 'Barangay') router.push('/(tabs)/lydo-accounts');
+        if (tab === 'Logs') router.push('/(tabs)/lydo-logs');
   };
 
   const handleLogout = () => {

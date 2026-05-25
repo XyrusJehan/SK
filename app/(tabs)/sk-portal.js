@@ -27,7 +27,7 @@ const COLORS = {
 };
 
 // ─── NAV & PORTAL TABS ───────────────────────────────────────────────────────
-const NAV_TABS    = ['Dashboard', 'Documents', 'Planning', 'Portal', 'Account'];
+const NAV_TABS    = ['Dashboard', 'Documents', 'Planning', 'Portal', 'Logs', 'Account'];
 const PORTAL_TABS = ['Published', 'Feedback'];
 
 // ─── FILTER OPTIONS ──────────────────────────────────────────────────────────
@@ -109,6 +109,19 @@ export default function SKPortalScreen() {
   // Get user's barangay from auth context
   const barangayName = user?.barangay?.barangay_name || 'Unknown Barangay';
   const barangayId = user?.barangayId;
+
+  // Helper function to log SK activity
+  const logActivity = async (action, description) => {
+    try {
+      await supabase.from('sk_activity_logs').insert({
+        action,
+        description,
+        user_id: user?.userId || null,
+      });
+    } catch (err) {
+      console.error('Failed to log activity:', err);
+    }
+  };
 
   const [activePortalTab, setActivePortalTab] = useState('Published');
   const [docFilter, setDocFilter]             = useState('All Documents');
@@ -226,6 +239,8 @@ export default function SKPortalScreen() {
     if (tab === 'Dashboard') router.push('/(tabs)/sk-dashboard');
     if (tab === 'Documents') router.push('/(tabs)/sk-document');
     if (tab === 'Planning')  router.push('/(tabs)/sk-planning');
+      if (tab === 'Portal')    router.push('/(tabs)/sk-portal');
+      if (tab === 'Logs')      router.push('/(tabs)/sk-logs');
     if (tab === 'Account')   router.push('/(tabs)/sk-account');
   };
 
@@ -244,7 +259,7 @@ export default function SKPortalScreen() {
 
   // ── Sidebar ──
   const renderSidebar = () => (
-    <View style={styles.sidebar}>
+    <View style={[styles.sidebar, isMobile && !sidebarVisible && styles.sidebarHidden]}>
       <View style={styles.logoPill}>
         <Image
           source={require('./../../assets/images/sk-logo.png')}
@@ -481,13 +496,75 @@ export default function SKPortalScreen() {
               <TouchableOpacity
                 style={styles.publishBtn}
                 activeOpacity={0.85}
-                onPress={() => {
+                onPress={async () => {
                   if (!uploadFile || !uploadTitle || !uploadCategory || !uploadYear) {
                     Alert.alert('Missing Info', 'Please complete all fields before publishing.');
                     return;
                   }
-                  Alert.alert('Published!', `"${uploadTitle}" has been published to the portal.`);
-                  setShowUploadModal(false);
+                  if (!barangayId || !user?.userId) {
+                    Alert.alert('Error', 'User information missing');
+                    return;
+                  }
+
+                  try {
+                    let fileUrl = null;
+
+                    // Upload file to Supabase storage if selected
+                    if (uploadFile) {
+                      const sanitizedName = uploadFile.name
+                        .replace(/[^\w\s.-]/g, '')
+                        .replace(/\s+/g, '_');
+                      const fileName = `${barangayId}_portal_${Date.now()}_${sanitizedName}`;
+
+                      const response = await fetch(uploadFile.uri);
+                      const blob = await response.blob();
+
+                      const { data: uploadData, error: uploadError } = await supabase.storage
+                        .from('documents')
+                        .upload(fileName, blob, {
+                          contentType: uploadFile.type || 'application/octet-stream',
+                        });
+
+                      if (uploadError) {
+                        Alert.alert('Error', 'Failed to upload file: ' + uploadError.message);
+                        return;
+                      }
+
+                      const { data: urlData } = supabase.storage
+                        .from('documents')
+                        .getPublicUrl(fileName);
+
+                      fileUrl = urlData.publicUrl;
+                    }
+
+                    // Insert into website_posts
+                    const { error: insertError } = await supabase
+                      .from('website_posts')
+                      .insert({
+                        barangay_id: barangayId,
+                        published_by: user.userId,
+                        title: uploadTitle,
+                        document_category: uploadCategory,
+                        year: parseInt(uploadYear) || new Date().getFullYear(),
+                        file_url: fileUrl,
+                        portal_status: 'published',
+                        published_at: new Date().toISOString(),
+                      });
+
+                    if (insertError) {
+                      Alert.alert('Error', 'Failed to publish: ' + insertError.message);
+                      return;
+                    }
+
+                    // Log the activity
+                    await logActivity('Upload to website', `Published "${uploadTitle}" to the transparency portal`);
+
+                    Alert.alert('Published!', `"${uploadTitle}" has been published to the portal.`);
+                    setShowUploadModal(false);
+                  } catch (error) {
+                    console.error('Publish error:', error);
+                    Alert.alert('Error', 'An error occurred while publishing');
+                  }
                 }}
               >
                 <Text style={styles.publishBtnText}>Publish to Transparency Portal</Text>
@@ -747,7 +824,7 @@ export default function SKPortalScreen() {
             onPress={() => setSidebarVisible(false)}
           />
         )}
-        {isMobile ? sidebarVisible && renderSidebar() : renderSidebar()}
+        {renderSidebar()}
         {renderContent()}
       </View>
     </SafeAreaView>
@@ -763,11 +840,17 @@ const styles = StyleSheet.create({
   sidebar: {
     width: 250, backgroundColor: COLORS.navy,
     alignItems: 'center', paddingTop: 20, paddingBottom: 24,
-    paddingHorizontal: 10, zIndex: 10,
+    paddingHorizontal: 10, zIndex: 20,
+    ...(isMobile ? {
+      position: 'absolute', top: 0, left: 0, bottom: 0, zIndex: 20,
+    } : {}),
+  },
+  sidebarHidden: {
+    display: 'none',
   },
   sidebarOverlay: {
     position: 'absolute', left: 0, top: 0, bottom: 0, right: 0,
-    backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 5,
+    backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 15,
   },
   logoPill: {
     marginTop: 20, width: 70, height: 70, borderRadius: 35,

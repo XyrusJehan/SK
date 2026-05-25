@@ -390,6 +390,7 @@ export default function HomeScreen({ navigation }) {
     else if (tab === 'Documents') router.push('/(tabs)/sk-document');
     else if (tab === 'Planning') router.push('/(tabs)/sk-planning');
     else if (tab === 'Portal') router.push('/(tabs)/sk-portal');
+    else if (tab === 'Logs') router.push('/(tabs)/sk-logs');
     else if (tab === 'Account') router.push('/(tabs)/sk-account');
     setActiveTab(tab);
     setSidebarVisible(false);
@@ -402,12 +403,12 @@ export default function HomeScreen({ navigation }) {
     : recentActivities;
 
   const renderSidebar = () => (
-    <View style={styles.sidebar}>
+    <View style={[styles.sidebar, isMobile && !sidebarVisible && styles.sidebarHidden]}>
       <View style={styles.logoPill}>
         <Image source={require('./../../assets/images/sk-logo.png')} style={styles.logoImage} resizeMode="contain" />
       </View>
-      <View style={styles.sidebarSpacer} />
-      {['Dashboard', 'Documents', 'Planning', 'Portal', 'Account'].map((tab) => {
+      <View style={{ height: 28 }} />
+      {['Dashboard', 'Documents', 'Planning', 'Portal', 'Logs', 'Account'].map((tab) => {
         const active = activeTab === tab;
         return (
           <TouchableOpacity key={tab} style={[styles.navItem, active && styles.navItemActive]} onPress={() => handleNavPress(tab)} activeOpacity={0.8}>
@@ -433,7 +434,7 @@ export default function HomeScreen({ navigation }) {
         {isMobile && sidebarVisible && (
           <TouchableOpacity style={styles.sidebarOverlay} activeOpacity={1} onPress={() => setSidebarVisible(false)} />
         )}
-        {isMobile ? (sidebarVisible && renderSidebar()) : renderSidebar()}
+        {renderSidebar()}
 
         <ScrollView style={[styles.main, isMobile && styles.mainMobile]} contentContainerStyle={styles.mainContent} showsVerticalScrollIndicator={false}>
 
@@ -717,11 +718,17 @@ const styles = StyleSheet.create({
   layout: { flex: 1, flexDirection: 'row' },
   sidebar: {
     width: 250, backgroundColor: '#133E75',
-    alignItems: 'center', paddingTop: 20, paddingBottom: 24, paddingHorizontal: 10, zIndex: 10,
+    alignItems: 'center', paddingTop: 20, paddingBottom: 24, paddingHorizontal: 10, zIndex: 20,
+    ...(isMobile ? {
+      position: 'absolute', top: 0, left: 0, bottom: 0, zIndex: 20,
+    } : {}),
+  },
+  sidebarHidden: {
+    display: 'none',
   },
   sidebarOverlay: {
     position: 'absolute', left: 0, top: 0, bottom: 0, right: 0,
-    backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 5,
+    backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 15,
   },
   logoPill: {
     marginTop: 20, width: 70, height: 70, borderRadius: 35,
