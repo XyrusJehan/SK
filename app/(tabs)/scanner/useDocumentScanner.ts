@@ -36,7 +36,7 @@ export interface QuadCorners {
   bl: { x: number; y: number }; // bottom-left
 }
 
-export type FilterMode = 'none' | 'grayscale' | 'bw';
+export type FilterMode = 'none' | 'grayscale' | 'bw' | 'document';
 
 export interface ScannedPage {
   id: string;
@@ -121,7 +121,10 @@ const loadJsPDF = (): Promise<any> =>
   });
 
 /**
- * Apply grayscale or B&W enhancement to a canvas context.
+ * Apply grayscale, B&W, or document-optimised enhancement to a canvas context.
+ * - 'grayscale': standard luma conversion
+ * - 'bw': adaptive Otsu threshold for clean black/white scans
+ * - 'document': grayscale + contrast stretch + mild unsharp mask
  * Modifies imageData in-place.
  */
 const applyFilter = (
@@ -133,18 +136,115 @@ const applyFilter = (
   if (filter === 'none') return;
   const imgData = ctx.getImageData(0, 0, w, h);
   const d = imgData.data;
-  for (let i = 0; i < d.length; i += 4) {
-    const luma = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
-    const v = filter === 'bw' ? (luma > 128 ? 255 : 0) : luma;
-    d[i] = d[i + 1] = d[i + 2] = v;
+  const n = d.length;
+
+  if (filter === 'grayscale') {
+    for (let i = 0; i < n; i += 4) {
+      const luma = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+      d[i] = d[i + 1] = d[i + 2] = luma;
+    }
+    ctx.putImageData(imgData, 0, 0);
+    return;
   }
-  ctx.putImageData(imgData, 0, 0);
+
+  if (filter === 'bw') {
+    // First pass: convert to luma
+    const lumas = new Float32Array(w * h);
+    for (let i = 0; i < n; i += 4) {
+      lumas[i >> 2] = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+    }
+    // Compute Otsu threshold from luma histogram
+    const hist = new Uint32Array(256);
+    for (let i = 0; i < lumas.length; i++) hist[Math.round(lumas[i])]++;
+    const total = w * h;
+    let sum = 0;
+    for (let i = 0; i < 256; i++) sum += i * hist[i];
+    let sumB = 0, wB = 0, maxVar = 0, threshold = 128;
+    for (let t = 0; t < 256; t++) {
+      wB += hist[t];
+      if (!wB) continue;
+      const wF = total - wB;
+      if (!wF) break;
+      sumB += t * hist[t];
+      const mB = sumB / wB, mF = (sum - sumB) / wF;
+      const v = wB * wF * (mB - mF) * (mB - mF);
+      if (v > maxVar) { maxVar = v; threshold = t; }
+    }
+    // Second pass: threshold
+    for (let i = 0; i < n; i += 4) {
+      const v = lumas[i >> 2] > threshold ? 255 : 0;
+      d[i] = d[i + 1] = d[i + 2] = v;
+    }
+    ctx.putImageData(imgData, 0, 0);
+    return;
+  }
+
+  if (filter === 'document') {
+    // Grayscale + conservative shadow-lift (only darkens midtones, never clips highlights)
+    // Uses a mild gamma < 1 to lift shadows without touching near-white paper.
+    // Auto-levels is intentionally avoided: it blows out light documents.
+    const GAMMA = 0.82; // < 1 lifts shadows; adjust higher (0.9) for darker originals
+    const lut = new Uint8ClampedArray(256);
+    for (let i = 0; i < 256; i++) {
+      lut[i] = Math.round(Math.pow(i / 255, GAMMA) * 255);
+    }
+    for (let i = 0; i < n; i += 4) {
+      const luma = Math.round(0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]);
+      // Apply LUT — highlights (near 255) barely change; shadows are gently lifted
+      const v = lut[luma];
+      d[i] = d[i + 1] = d[i + 2] = v;
+    }
+    ctx.putImageData(imgData, 0, 0);
+    applySharpen(ctx, w, h);
+  }
 };
 
 /**
- * Crop a data-URL using an offscreen canvas.
- * region — { x, y, w, h } in % of natural image dimensions.
+ * Lightweight unsharp mask using a 3×3 Laplacian blend.
+ * Sharpens text edges without introducing colour fringing.
+ * Amount 0.45 is conservative — good for document text, safe on photos.
  */
+const applySharpen = (
+  ctx: CanvasRenderingContext2D,
+  w: number,
+  h: number,
+  amount = 0.45,
+): void => {
+  const src = ctx.getImageData(0, 0, w, h);
+  const dst = ctx.createImageData(w, h);
+  const s = src.data, o = dst.data;
+  // Kernel: centre +1, 4-connected neighbours −amount/4 each, normalised
+  const k = amount;
+  for (let y = 1; y < h - 1; y++) {
+    for (let x = 1; x < w - 1; x++) {
+      const i = (y * w + x) * 4;
+      for (let c = 0; c < 3; c++) {
+        const lap =
+          5 * s[i + c] -
+          s[((y - 1) * w + x) * 4 + c] -
+          s[((y + 1) * w + x) * 4 + c] -
+          s[(y * w + x - 1) * 4 + c] -
+          s[(y * w + x + 1) * 4 + c];
+        o[i + c] = Math.max(0, Math.min(255, Math.round(s[i + c] + k * lap)));
+      }
+      o[i + 3] = 255;
+    }
+  }
+  // Copy border rows/cols unchanged
+  for (let x = 0; x < w; x++) {
+    const t = x * 4, b = ((h - 1) * w + x) * 4;
+    o[t] = s[t]; o[t+1] = s[t+1]; o[t+2] = s[t+2]; o[t+3] = 255;
+    o[b] = s[b]; o[b+1] = s[b+1]; o[b+2] = s[b+2]; o[b+3] = 255;
+  }
+  for (let y = 0; y < h; y++) {
+    const l = (y * w) * 4, r = (y * w + w - 1) * 4;
+    o[l] = s[l]; o[l+1] = s[l+1]; o[l+2] = s[l+2]; o[l+3] = 255;
+    o[r] = s[r]; o[r+1] = s[r+1]; o[r+2] = s[r+2]; o[r+3] = 255;
+  }
+  ctx.putImageData(dst, 0, 0);
+};
+
+
 const applyCrop = (
   src: string,
   region: CropRegion,
@@ -178,7 +278,8 @@ const applyCrop = (
         }
         ctx.drawImage(img, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
         applyFilter(ctx, canvas.width, canvas.height, filter);
-        resolve(canvas.toDataURL('image/jpeg', 0.92));
+        // Sharpening is applied only for non-none filters (perspective path handles its own)
+        resolve(canvas.toDataURL('image/jpeg', 0.95));
       } catch (err) {
         reject(new Error(`Crop processing failed: ${err}`));
       }
@@ -197,146 +298,133 @@ const applyPerspectiveCrop = (
   filter: FilterMode = 'none',
 ): Promise<string> =>
   new Promise((resolve, reject) => {
-    if (!src || !src.startsWith('data:')) {
-      reject(new Error('Invalid image source'));
-      return;
-    }
-    if (!corners || !corners.tl || !corners.tr || !corners.br || !corners.bl) {
-      reject(new Error('Invalid corners'));
-      return;
-    }
+    if (!src || !src.startsWith('data:')) { reject(new Error('Invalid image source')); return; }
+    if (!corners?.tl || !corners?.tr || !corners?.br || !corners?.bl) { reject(new Error('Invalid corners')); return; }
+
     const img = new window.Image();
     img.onload = () => {
       try {
         const { naturalWidth: nw, naturalHeight: nh } = img;
-        if (nw === 0 || nh === 0) {
-          reject(new Error('Invalid image dimensions'));
-          return;
+        if (!nw || !nh) { reject(new Error('Invalid image dimensions')); return; }
+
+        // Scale down source if too large — keeps pixel loop fast on phone photos
+        const MAX_SRC = 2400;
+        const scale = Math.min(1, MAX_SRC / Math.max(nw, nh));
+        const snw = Math.round(nw * scale), snh = Math.round(nh * scale);
+
+        const scaledCanvas = document.createElement('canvas');
+        scaledCanvas.width = snw; scaledCanvas.height = snh;
+        scaledCanvas.getContext('2d')!.drawImage(img, 0, 0, snw, snh);
+
+        // Source quad corners in scaled pixels
+        const src_pts = [
+          (corners.tl.x/100)*snw, (corners.tl.y/100)*snh,
+          (corners.tr.x/100)*snw, (corners.tr.y/100)*snh,
+          (corners.br.x/100)*snw, (corners.br.y/100)*snh,
+          (corners.bl.x/100)*snw, (corners.bl.y/100)*snh,
+        ];
+
+        // Output size based on actual edge lengths
+        const topW  = Math.hypot(src_pts[2]-src_pts[0], src_pts[3]-src_pts[1]);
+        const botW  = Math.hypot(src_pts[4]-src_pts[6], src_pts[5]-src_pts[7]);
+        const leftH = Math.hypot(src_pts[6]-src_pts[0], src_pts[7]-src_pts[1]);
+        const rightH= Math.hypot(src_pts[4]-src_pts[2], src_pts[5]-src_pts[3]);
+        const outW  = Math.max(1, Math.round(Math.max(topW, botW)));
+        const outH  = Math.max(1, Math.round(Math.max(leftH, rightH)));
+
+        // Destination quad = perfect rectangle [0,0,outW,outH]
+        const dst_pts = [0, 0, outW, 0, outW, outH, 0, outH];
+
+        // ── Compute inverse homography H: dst_pixel → src_pixel ──────────────
+        // H maps (xd,yd) → (xs,ys) via: xs = (h0*xd+h1*yd+h2)/(h6*xd+h7*yd+1)
+        //                                ys = (h3*xd+h4*yd+h5)/(h6*xd+h7*yd+1)
+        // We solve the 8×8 linear system using Gaussian elimination.
+        const buildSystem = (sp: number[], dp: number[]) => {
+          const A: number[][] = [];
+          const b: number[] = [];
+          for (let i = 0; i < 4; i++) {
+            const xs = sp[i*2], ys = sp[i*2+1];
+            const xd = dp[i*2], yd = dp[i*2+1];
+            A.push([xd, yd, 1, 0,  0,  0, -xs*xd, -xs*yd]);  b.push(xs);
+            A.push([0,  0,  0, xd, yd, 1, -ys*xd, -ys*yd]);  b.push(ys);
+          }
+          return { A, b };
+        };
+
+        const gaussSolve = (A: number[][], b: number[]): number[] | null => {
+          const n = A.length;
+          const M = A.map((row, i) => [...row, b[i]]);
+          for (let col = 0; col < n; col++) {
+            let maxRow = col;
+            for (let row = col+1; row < n; row++)
+              if (Math.abs(M[row][col]) > Math.abs(M[maxRow][col])) maxRow = row;
+            [M[col], M[maxRow]] = [M[maxRow], M[col]];
+            if (Math.abs(M[col][col]) < 1e-10) return null;
+            for (let row = 0; row < n; row++) {
+              if (row === col) continue;
+              const f = M[row][col] / M[col][col];
+              for (let k = col; k <= n; k++) M[row][k] -= f * M[col][k];
+            }
+          }
+          return M.map((row, i) => row[n] / row[i]);
+        };
+
+        const { A, b: rhs } = buildSystem(src_pts, dst_pts);
+        const h = gaussSolve(A, rhs);
+        if (!h) { reject(new Error('Homography solve failed')); return; }
+        // h = [h0..h7], h8=1
+
+        // ── Read source pixels ────────────────────────────────────────────────
+        const srcCtx = scaledCanvas.getContext('2d')!;
+        const srcPx = srcCtx.getImageData(0, 0, snw, snh).data;
+
+        // ── Write destination pixels ──────────────────────────────────────────
+        const outCanvas = document.createElement('canvas');
+        outCanvas.width = outW; outCanvas.height = outH;
+        const outCtx = outCanvas.getContext('2d')!;
+        const outImg = outCtx.createImageData(outW, outH);
+        const dst = outImg.data;
+
+        // Fill white
+        for (let i = 0; i < dst.length; i += 4) { dst[i]=255; dst[i+1]=255; dst[i+2]=255; dst[i+3]=255; }
+
+        for (let yd = 0; yd < outH; yd++) {
+          for (let xd = 0; xd < outW; xd++) {
+            const w  = h[6]*xd + h[7]*yd + 1;
+            const xs = (h[0]*xd + h[1]*yd + h[2]) / w;
+            const ys = (h[3]*xd + h[4]*yd + h[5]) / w;
+
+            if (xs < 0 || xs >= snw-1 || ys < 0 || ys >= snh-1) continue;
+
+            // Bilinear sample
+            const x0 = xs|0, y0 = ys|0;
+            const x1 = x0+1, y1 = y0+1;
+            const fx = xs-x0, fy = ys-y0;
+            const w00=(1-fx)*(1-fy), w10=fx*(1-fy), w01=(1-fx)*fy, w11=fx*fy;
+
+            const i00=(y0*snw+x0)*4, i10=(y0*snw+x1)*4;
+            const i01=(y1*snw+x0)*4, i11=(y1*snw+x1)*4;
+            const di=(yd*outW+xd)*4;
+
+            dst[di  ] = w00*srcPx[i00  ]+w10*srcPx[i10  ]+w01*srcPx[i01  ]+w11*srcPx[i11  ];
+            dst[di+1] = w00*srcPx[i00+1]+w10*srcPx[i10+1]+w01*srcPx[i01+1]+w11*srcPx[i11+1];
+            dst[di+2] = w00*srcPx[i00+2]+w10*srcPx[i10+2]+w01*srcPx[i01+2]+w11*srcPx[i11+2];
+            dst[di+3] = 255;
+          }
         }
 
-        // Convert corner % to pixels
-        const tl = { x: (corners.tl.x / 100) * nw, y: (corners.tl.y / 100) * nh };
-        const tr = { x: (corners.tr.x / 100) * nw, y: (corners.tr.y / 100) * nh };
-        const br = { x: (corners.br.x / 100) * nw, y: (corners.br.y / 100) * nh };
-        const bl = { x: (corners.bl.x / 100) * nw, y: (corners.bl.y / 100) * nh };
-
-        // Calculate output dimensions - use bounding box
-        const minX = Math.max(0, Math.min(tl.x, tr.x, br.x, bl.x));
-        const maxX = Math.min(nw, Math.max(tl.x, tr.x, br.x, bl.x));
-        const minY = Math.max(0, Math.min(tl.y, tr.y, br.y, bl.y));
-        const maxY = Math.min(nh, Math.max(tl.y, tr.y, br.y, bl.y));
-        const cropW = maxX - minX;
-        const cropH = maxY - minY;
-
-        if (cropW <= 0 || cropH <= 0) {
-          reject(new Error('Invalid crop dimensions'));
-          return;
-        }
-
-        // For now, use simple bounding box crop - perspective correction can be added later
-        // This ensures reliable results without the complex homography issues
-        const canvas = document.createElement('canvas');
-        canvas.width = Math.round(cropW);
-        canvas.height = Math.round(cropH);
-        const ctx = canvas.getContext('2d');
-        if (!ctx) {
-          reject(new Error('Failed to get canvas context'));
-          return;
-        }
-
-        // Use better quality settings
-        ctx.imageSmoothingEnabled = true;
-        ctx.imageSmoothingQuality = 'high';
-        ctx.drawImage(img, minX, minY, cropW, cropH, 0, 0, canvas.width, canvas.height);
-
-        applyFilter(ctx, canvas.width, canvas.height, filter);
-        resolve(canvas.toDataURL('image/jpeg', 0.92));
+        outCtx.putImageData(outImg, 0, 0);
+        // Apply filter first; sharpen only when a filter is active (filter=none = preserve original colors exactly)
+        applyFilter(outCtx, outW, outH, filter);
+        if (filter !== 'none') applySharpen(outCtx, outW, outH);
+        resolve(outCanvas.toDataURL('image/jpeg', 0.95));
       } catch (err) {
         reject(new Error(`Perspective transform failed: ${err}`));
       }
     };
-    img.onerror = () => reject(new Error('Failed to load image for perspective transform'));
+    img.onerror = () => reject(new Error('Failed to load image'));
     img.src = src;
   });
-
-/**
- * Compute inverse homography matrix using Direct Linear Transform (DLT)
- * Maps source quad to destination rectangle
- */
-const computeInverseHomography = (srcPoints: number[], dstW: number, dstH: number): number[] | null => {
-  const dstPoints = [0, 0, dstW, 0, dstW, dstH, 0, dstH];
-
-  // Build matrix A for Ax = 0 (homography equations)
-  const A: number[][] = [];
-  for (let i = 0; i < 4; i++) {
-    const sx = srcPoints[i * 2];
-    const sy = srcPoints[i * 2 + 1];
-    const dx = dstPoints[i * 2];
-    const dy = dstPoints[i * 2 + 1];
-    // h11*sx + h12*sy + h13 = dx*sx + dx*sy + dx (actually: h11*dx + h12*dy + h13 = sx*w)
-    // For source = H * dest: sx*w = h11*dx + h12*dy + h13, sy*w = h21*dx + h22*dy + h23, w = h31*dx + h32*dy + h33
-    A.push([dx, dy, 1, 0, 0, 0, -dx * sx, -dy * sx, sx]);
-    A.push([0, 0, 0, dx, dy, 1, -dx * sy, -dy * sy, sy]);
-  }
-
-  // Solve using SVD-like approach (Gauss-Jordan)
-  const h = solveLinearSystem(A);
-  if (!h) return null;
-
-  // Normalize to make h33 = 1
-  const scale = h[8];
-  if (Math.abs(scale) < 1e-10) return null;
-
-  return [
-    h[0] / scale, h[1] / scale, h[2] / scale,
-    h[3] / scale, h[4] / scale, h[5] / scale,
-    h[6] / scale, h[7] / scale, 1
-  ];
-};
-
-/**
- * Solve linear system using Gauss-Jordan elimination
- * Returns null if matrix is singular
- */
-const solveLinearSystem = (A: number[][]): number[] | null => {
-  const n = A.length;
-  const m = A[0].length;
-  const aug = A.map(row => [...row]);
-
-  for (let i = 0; i < n; i++) {
-    // Find pivot
-    let maxRow = i;
-    for (let k = i + 1; k < n; k++) {
-      if (Math.abs(aug[k][i]) > Math.abs(aug[maxRow][i])) maxRow = k;
-    }
-    [aug[i], aug[maxRow]] = [aug[maxRow], aug[i]];
-
-    // Check for near-zero pivot
-    if (Math.abs(aug[i][i]) < 1e-10) continue;
-
-    // Scale pivot row
-    const pivot = aug[i][i];
-    for (let j = i; j < m; j++) aug[i][j] /= pivot;
-
-    // Eliminate column
-    for (let k = 0; k < n; k++) {
-      if (k !== i) {
-        const factor = aug[k][i];
-        for (let j = i; j < m; j++) aug[k][j] -= factor * aug[i][j];
-      }
-    }
-  }
-
-  // Check for inconsistent or underdetermined system
-  for (let i = 0; i < n; i++) {
-    if (Math.abs(aug[i][i]) < 1e-10) {
-      const lastNonZero = aug[i].slice(0, m - 1).reduce((max, val) => Math.max(max, Math.abs(val)), 0);
-      if (lastNonZero > 1e-10) return null; // Inconsistent
-    }
-  }
-
-  return aug.map(row => row[m - 1]);
-};
 
 /**
  * Detect the 4 corners of the document using edge and contour detection.
@@ -647,41 +735,67 @@ const autoDetectCrop = (src: string): Promise<CropRegion> =>
 
 /**
  * Compile an array of JPEG data-URLs into a single A4 PDF.
+ * Each image fills the page edge-to-edge (portrait or landscape as needed).
  * Returns a blob: URL.
  */
-const imagesToPdf = async (images: string[]): Promise<string> => {
+const imagesToPdf = async (images: string[], title = 'Scanned Document'): Promise<string> => {
   const JsPDF = await loadJsPDF();
-  const A4_W = 210,
-    A4_H = 297;
-  const pdf = new JsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+  const A4_W = 210, A4_H = 297; // mm
+
+  // Resolve image dimensions before creating PDF so we can set correct page orientation
+  const dims = await Promise.all(
+    images.map(
+      (src) =>
+        new Promise<{ w: number; h: number }>((res) => {
+          const img = new window.Image();
+          img.onload = () => res({ w: img.naturalWidth, h: img.naturalHeight });
+          img.onerror = () => res({ w: 1, h: 1 });
+          img.src = src;
+        }),
+    ),
+  );
+
+  const firstLandscape = dims[0] ? dims[0].w > dims[0].h : false;
+  const pdf = new JsPDF({
+    orientation: firstLandscape ? 'landscape' : 'portrait',
+    unit: 'mm',
+    format: 'a4',
+  });
+
+  // Embed metadata
+  pdf.setProperties({
+    title,
+    creator: 'SK Document Scanner',
+    creationDate: new Date(),
+  });
 
   for (let i = 0; i < images.length; i++) {
-    if (i > 0) pdf.addPage();
-    await new Promise<void>((res) => {
-      const img = new window.Image();
-      img.onload = () => {
-        const aspect = img.naturalWidth / img.naturalHeight;
-        const pageAspect = A4_W / A4_H;
-        let dw: number,
-          dh: number,
-          dx: number,
-          dy: number;
-        if (aspect > pageAspect) {
-          dw = A4_W;
-          dh = A4_W / aspect;
-          dx = 0;
-          dy = (A4_H - dh) / 2;
-        } else {
-          dh = A4_H;
-          dw = A4_H * aspect;
-          dx = (A4_W - dw) / 2;
-          dy = 0;
-        }
-        pdf.addImage(images[i], 'JPEG', dx, dy, dw, dh, undefined, 'FAST');
-        res();
-      };
-      img.src = images[i];
-    });
+    const { w, h } = dims[i];
+    const landscape = w > h;
+    const pageW = landscape ? A4_H : A4_W;
+    const pageH = landscape ? A4_W : A4_H;
+
+    if (i > 0) pdf.addPage('a4', landscape ? 'landscape' : 'portrait');
+
+    // Fill the page completely — scale to cover, no borders
+    const imgAspect = w / h;
+    const pageAspect = pageW / pageH;
+    let dw: number, dh: number, dx: number, dy: number;
+    if (imgAspect > pageAspect) {
+      // Image wider than page → fit to height, clip sides
+      dh = pageH;
+      dw = pageH * imgAspect;
+      dx = (pageW - dw) / 2;
+      dy = 0;
+    } else {
+      // Image taller than page → fit to width, clip top/bottom
+      dw = pageW;
+      dh = pageW / imgAspect;
+      dx = 0;
+      dy = (pageH - dh) / 2;
+    }
+
+    pdf.addImage(images[i], 'JPEG', dx, dy, dw, dh, undefined, 'NONE');
   }
 
   const blob: Blob = pdf.output('blob');
@@ -768,9 +882,10 @@ export function useDocumentScanner(): UseDocumentScannerReturn {
           const region = { x: minX, y: minY, w: maxX - minX, h: maxY - minY };
           try {
             cropped = await applyPerspectiveCrop(cropImageSrc, corners, filterMode);
-            // Fallback if result is too small
-            if (cropped && cropped.length < 1000) {
-              console.log('Auto perspective result too small, falling back');
+            // Fallback if result is suspiciously tiny
+            const MIN_BYTES = 5000;
+            if (!cropped || cropped.length < MIN_BYTES) {
+              console.warn('Auto perspective result suspiciously small, falling back');
               cropped = await applyCrop(cropImageSrc, region, filterMode);
             }
           } catch (e) {
@@ -842,31 +957,25 @@ export function useDocumentScanner(): UseDocumentScannerReturn {
       };
 
       // Check if corners are significantly different from bounding box (perspective adjustment)
-      const defaultCorners = {
-        tl: { x: region.x, y: region.y },
-        tr: { x: region.x + region.w, y: region.y },
-        br: { x: region.x + region.w, y: region.y + region.h },
-        bl: { x: region.x, y: region.y + region.h },
+      // Check if the quad is non-rectangular by testing if corners form a parallelogram
+      // Compare opposite side slopes — a rectangle has equal slopes; a trapezoid does not
+      const isNonRectangular = () => {
+        const { tl, tr, br, bl } = corners;
+        // Top edge slope vs bottom edge slope
+        const topSlope = (tr.y - tl.y) / (tr.x - tl.x + 0.001);
+        const botSlope = (br.y - bl.y) / (br.x - bl.x + 0.001);
+        // Left edge slope vs right edge slope
+        const leftSlope  = (bl.y - tl.y) / (bl.x - tl.x + 0.001);
+        const rightSlope = (br.y - tr.y) / (br.x - tr.x + 0.001);
+        return Math.abs(topSlope - botSlope) > 0.03 || Math.abs(leftSlope - rightSlope) > 0.03;
       };
-
-      let usePerspective = false;
-      // Disabled - always use simple crop for reliability
-      // const tolerance = 10;
-      // for (const key of ['tl', 'tr', 'br', 'bl'] as const) {
-      //   if (Math.abs(corners[key].x - defaultCorners[key].x) > tolerance ||
-      //       Math.abs(corners[key].y - defaultCorners[key].y) > tolerance) {
-      //     usePerspective = true;
-      //     break;
-      //   }
-      // }
+      const usePerspective = isNonRectangular();
 
       console.log('Applying crop:', {
         usePerspective,
         filter,
         actualRegion,
         corners,
-        defaultCorners,
-        region // Also log original region for comparison
       });
 
       // Validate actualRegion before cropping
@@ -879,9 +988,10 @@ export function useDocumentScanner(): UseDocumentScannerReturn {
       try {
         if (usePerspective) {
           cropped = await applyPerspectiveCrop(imageSrc, corners, filter);
-          // Fallback to simple crop if perspective result is suspiciously small
-          if (cropped && cropped.length < 1000) {
-            console.log('Perspective result too small, falling back to simple crop');
+          // Fallback: if the result is suspiciously tiny (corrupt warp), use simple crop
+          const MIN_BYTES = 5000;
+          if (!cropped || cropped.length < MIN_BYTES) {
+            console.warn('Perspective result suspiciously small, falling back to simple crop');
             cropped = await applyCrop(imageSrc, actualRegion, filter);
           }
         } else {
@@ -993,11 +1103,13 @@ export function useDocumentScanner(): UseDocumentScannerReturn {
     if (!pages.length) return null;
     setConvertingToPdf(true);
     try {
-      const uri = await imagesToPdf(pages.map((p) => p.dataUrl));
-      // Estimate size from blob (not always available via blob: URL, so null is OK)
+      const now = new Date();
+      const stamp = now.toISOString().slice(0, 10); // YYYY-MM-DD
+      const title = `Scanned Document ${stamp}`;
+      const uri = await imagesToPdf(pages.map((p) => p.dataUrl), title);
       return {
         uri,
-        name: `scanned_document_${Date.now()}.pdf`,
+        name: `scanned_document_${stamp}_${now.getTime()}.pdf`,
         type: 'application/pdf',
         size: null,
       };
