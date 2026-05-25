@@ -1,14 +1,15 @@
-import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import {
   View, Text, TextInput, ScrollView, TouchableOpacity,
   StyleSheet, SafeAreaView, StatusBar, Dimensions, Image, Modal,
+  Platform, Alert, ActivityIndicator,
 } from 'react-native';
 import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { useNav } from './navContext';
 import { useAuth } from './authContext';
 import { supabase } from '../../utils/supabase';
 import * as DocumentPicker from 'expo-document-picker';
-
+import { DocumentScannerButton } from './scanner/DocumentScannerButton';
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const isMobile = SCREEN_WIDTH < 768;
 
@@ -104,6 +105,7 @@ const FileIcon = ({ name }) => {
     </View>
   );
 };
+
 
 // ─── MAIN SCREEN ──────────────────────────────────────────────────────────────
 export default function SKDocumentListScreen() {
@@ -489,10 +491,8 @@ export default function SKDocumentListScreen() {
             <Text style={styles.headerSub}>SANGGUNIANG KABATAAN</Text>
             <Text style={styles.headerTitle}>{barangayName.toUpperCase()}</Text>
           </View>
-          {/* Upload Button */}
-          <TouchableOpacity style={styles.uploadBtn} onPress={() => setUploadModalVisible(true)} activeOpacity={0.8}>
-            <Text style={styles.uploadBtnText}>Upload</Text>
-            <Text style={styles.uploadIcon}>↑</Text>
+          <TouchableOpacity style={styles.bellBtn}>
+            <BellIcon hasNotif={notifCount > 0} />
           </TouchableOpacity>
         </View>
       )}
@@ -572,19 +572,18 @@ export default function SKDocumentListScreen() {
             </TouchableOpacity>
           )}
         </View>
-        <TouchableOpacity
-          style={styles.scanBtn}
-          onPress={() => router.push('/(tabs)/sk-scan')}
-          activeOpacity={0.8}
-        >
-          <Text style={styles.scanIcon}>⊟</Text>
-          <Text style={styles.scanText}>Scan</Text>
-        </TouchableOpacity>
-        {isMobile && (
-          <TouchableOpacity style={styles.uploadBtnMobile} onPress={() => setUploadModalVisible(true)} activeOpacity={0.8}>
-            <Text style={styles.uploadBtnText}>Upload ↑</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+<DocumentScannerButton
+  style={styles.scanBtn}
+  onPdfReady={(file) => {
+    setSelectedFile(file);
+    setUploadModalVisible(true);
+  }}/>
+          <TouchableOpacity style={styles.scanBtn} onPress={() => setUploadModalVisible(true)} activeOpacity={0.8}>
+            <Text style={styles.scanIcon}>↑</Text>
+            <Text style={styles.scanText}>Upload</Text>
           </TouchableOpacity>
-        )}
+        </View>
       </View>
 
       {/* SubType filter pills */}
@@ -679,8 +678,6 @@ export default function SKDocumentListScreen() {
         )}
         {renderSidebar()}
         {renderContent()}
-
-      {/* Upload Modal */}
       <Modal
         visible={uploadModalVisible}
         animationType="fade"
@@ -941,13 +938,12 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between', marginBottom: 16,
   },
   scanBtn: {
-    flexDirection: 'row', alignItems: 'center', gap: 6,
-    paddingHorizontal: 14, paddingVertical: 8,
-    borderRadius: 20, borderWidth: 1.5, borderColor: COLORS.navy,
-    backgroundColor: COLORS.white,
+    flexDirection: 'row', alignItems: 'center', gap: 5,
+    backgroundColor: '#133E75', borderRadius: 8,
+    paddingHorizontal: 12, paddingVertical: 9,
   },
-  scanIcon: { fontSize: 13, color: COLORS.navy },
-  scanText: { fontSize: 13, fontWeight: '700', color: COLORS.navy },
+  scanIcon: { fontSize: 16, color: '#FFFFFF' },
+  scanText: { fontSize: 13, fontWeight: '700', color: '#FFFFFF' },
   searchBox: {
     flexDirection: 'row', alignItems: 'center',
     backgroundColor: COLORS.white, borderRadius: 20,
