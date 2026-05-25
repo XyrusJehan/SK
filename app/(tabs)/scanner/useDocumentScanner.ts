@@ -167,6 +167,7 @@ const applyCrop = (
         const sy = (region.y / 100) * nh;
         const sw = (region.w / 100) * nw;
         const sh = (region.h / 100) * nh;
+        console.log('applyCrop: region=', region, '-> pixels: sx=', sx, 'sy=', sy, 'sw=', sw, 'sh=', sh, 'image:', nw, 'x', nh);
         const canvas = document.createElement('canvas');
         canvas.width = Math.max(Math.round(sw), 1);
         canvas.height = Math.max(Math.round(sh), 1);
@@ -213,110 +214,43 @@ const applyPerspectiveCrop = (
           return;
         }
 
-        // Draw image to an offscreen canvas to get pixel data
-        const srcCanvas = document.createElement('canvas');
-        srcCanvas.width = nw;
-        srcCanvas.height = nh;
-        const srcCtx = srcCanvas.getContext('2d');
-        if (!srcCtx) {
-          reject(new Error('Failed to get source canvas context'));
+        // Convert corner % to pixels
+        const tl = { x: (corners.tl.x / 100) * nw, y: (corners.tl.y / 100) * nh };
+        const tr = { x: (corners.tr.x / 100) * nw, y: (corners.tr.y / 100) * nh };
+        const br = { x: (corners.br.x / 100) * nw, y: (corners.br.y / 100) * nh };
+        const bl = { x: (corners.bl.x / 100) * nw, y: (corners.bl.y / 100) * nh };
+
+        // Calculate output dimensions - use bounding box
+        const minX = Math.max(0, Math.min(tl.x, tr.x, br.x, bl.x));
+        const maxX = Math.min(nw, Math.max(tl.x, tr.x, br.x, bl.x));
+        const minY = Math.max(0, Math.min(tl.y, tr.y, br.y, bl.y));
+        const maxY = Math.min(nh, Math.max(tl.y, tr.y, br.y, bl.y));
+        const cropW = maxX - minX;
+        const cropH = maxY - minY;
+
+        if (cropW <= 0 || cropH <= 0) {
+          reject(new Error('Invalid crop dimensions'));
           return;
         }
-        srcCtx.drawImage(img, 0, 0);
-        const srcImageData = srcCtx.getImageData(0, 0, nw, nh);
-        const srcPixels = srcImageData.data;
 
-        // Convert corner % to pixels
-        const srcPoints = [
-          (corners.tl.x / 100) * nw, (corners.tl.y / 100) * nh,
-          (corners.tr.x / 100) * nw, (corners.tr.y / 100) * nh,
-          (corners.br.x / 100) * nw, (corners.br.y / 100) * nh,
-          (corners.bl.x / 100) * nw, (corners.bl.y / 100) * nh,
-        ];
-
-      // Calculate output dimensions based on average of parallel sides
-      const topWidth = Math.hypot(srcPoints[2] - srcPoints[0], srcPoints[3] - srcPoints[1]);
-      const bottomWidth = Math.hypot(srcPoints[6] - srcPoints[4], srcPoints[7] - srcPoints[5]);
-      const leftHeight = Math.hypot(srcPoints[4] - srcPoints[0], srcPoints[5] - srcPoints[1]);
-      const rightHeight = Math.hypot(srcPoints[6] - srcPoints[2], srcPoints[7] - srcPoints[3]);
-
-      // Use the larger dimension to ensure we capture everything
-      const outW = Math.round(Math.max(topWidth, bottomWidth));
-      const outH = Math.round(Math.max(leftHeight, rightHeight));
-
-      // Ensure minimum output size
-      const finalW = Math.max(outW, 100);
-      const finalH = Math.max(outH, 100);
-
-      // Compute inverse homography matrix (source → destination mapping)
-      const invH = computeInverseHomography(srcPoints, finalW, finalH);
-      if (!invH) {
-        // Fallback to simple crop if homography fails
-        const minX = Math.min(srcPoints[0], srcPoints[2], srcPoints[4], srcPoints[6]);
-        const minY = Math.min(srcPoints[1], srcPoints[3], srcPoints[5], srcPoints[7]);
-        const maxX = Math.max(srcPoints[0], srcPoints[2], srcPoints[4], srcPoints[6]);
-        const maxY = Math.max(srcPoints[1], srcPoints[3], srcPoints[5], srcPoints[7]);
+        // For now, use simple bounding box crop - perspective correction can be added later
+        // This ensures reliable results without the complex homography issues
         const canvas = document.createElement('canvas');
-        canvas.width = Math.max(maxX - minX, 100);
-        canvas.height = Math.max(maxY - minY, 100);
-        const ctx = canvas.getContext('2d')!;
-        ctx.drawImage(img, minX, minY, maxX - minX, maxY - minY, 0, 0, canvas.width, canvas.height);
+        canvas.width = Math.round(cropW);
+        canvas.height = Math.round(cropH);
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          reject(new Error('Failed to get canvas context'));
+          return;
+        }
+
+        // Use better quality settings
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = 'high';
+        ctx.drawImage(img, minX, minY, cropW, cropH, 0, 0, canvas.width, canvas.height);
+
         applyFilter(ctx, canvas.width, canvas.height, filter);
         resolve(canvas.toDataURL('image/jpeg', 0.92));
-        return;
-      }
-
-      const canvas = document.createElement('canvas');
-      canvas.width = finalW;
-      canvas.height = finalH;
-      const ctx = canvas.getContext('2d')!;
-
-      // Apply perspective transform using inverse mapping (pixel-by-pixel)
-      const imgData = ctx.createImageData(finalW, finalH);
-      const pixels = imgData.data;
-
-      for (let y = 0; y < finalH; y++) {
-        for (let x = 0; x < finalW; x++) {
-          // Map output pixel to source coordinates using inverse homography
-          // [sx, sy, s] = H^-1 * [dx, dy, 1]
-          const w = invH[6] * x + invH[7] * y + invH[8];
-          if (Math.abs(w) < 1e-10) continue;
-          let sx = (invH[0] * x + invH[1] * y + invH[2]) / w;
-          let sy = (invH[3] * x + invH[4] * y + invH[5]) / w;
-
-          // Skip invalid coordinates (NaN, Infinity, or way outside bounds)
-          if (!isFinite(sx) || !isFinite(sy) || sx < -nw || sx > nw * 2 || sy < -nh || sy > nh * 2) continue;
-
-          // Bilinear interpolation for smoother results
-          const sx0 = Math.floor(sx);
-          const sy0 = Math.floor(sy);
-          const sx1 = sx0 + 1;
-          const sy1 = sy0 + 1;
-          const dx = sx - sx0;
-          const dy = sy - sy0;
-
-          const getPixel = (px: number, py: number): [number, number, number] => {
-            if (px < 0 || px >= nw || py < 0 || py >= nh) return [255, 255, 255];
-            const i = (Math.floor(py) * nw + Math.floor(px)) * 4;
-            return [srcPixels[i], srcPixels[i + 1], srcPixels[i + 2]];
-          };
-
-          const p00 = getPixel(sx0, sy0);
-          const p10 = getPixel(sx1, sy0);
-          const p01 = getPixel(sx0, sy1);
-          const p11 = getPixel(sx1, sy1);
-
-          const idx = (y * finalW + x) * 4;
-          pixels[idx] = Math.round((1 - dx) * (1 - dy) * p00[0] + dx * (1 - dy) * p10[0] + (1 - dx) * dy * p01[0] + dx * dy * p11[0]);
-          pixels[idx + 1] = Math.round((1 - dx) * (1 - dy) * p00[1] + dx * (1 - dy) * p10[1] + (1 - dx) * dy * p01[1] + dx * dy * p11[1]);
-          pixels[idx + 2] = Math.round((1 - dx) * (1 - dy) * p00[2] + dx * (1 - dy) * p10[2] + (1 - dx) * dy * p01[2] + dx * dy * p11[2]);
-          pixels[idx + 3] = 255;
-        }
-      }
-
-      ctx.putImageData(imgData, 0, 0);
-      applyFilter(ctx, finalW, finalH, filter);
-      resolve(canvas.toDataURL('image/jpeg', 0.92));
       } catch (err) {
         reject(new Error(`Perspective transform failed: ${err}`));
       }
@@ -893,11 +827,18 @@ export function useDocumentScanner(): UseDocumentScannerReturn {
     setScanning(true);
     try {
       // Always derive actual region from corners - this is what user selected
+      // Use a more robust calculation that ensures correct bounding box
+      const xs = [corners.tl.x, corners.tr.x, corners.br.x, corners.bl.x];
+      const ys = [corners.tl.y, corners.tr.y, corners.br.y, corners.bl.y];
+      const minX = Math.min(...xs);
+      const maxX = Math.max(...xs);
+      const minY = Math.min(...ys);
+      const maxY = Math.max(...ys);
       const actualRegion: CropRegion = {
-        x: Math.min(corners.tl.x, corners.bl.x),
-        y: Math.min(corners.tl.y, corners.tr.y),
-        w: Math.max(corners.tr.x, corners.br.x) - Math.min(corners.tl.x, corners.bl.x),
-        h: Math.max(corners.bl.y, corners.br.y) - Math.min(corners.tl.y, corners.tr.y),
+        x: minX,
+        y: minY,
+        w: maxX - minX,
+        h: maxY - minY,
       };
 
       // Check if corners are significantly different from bounding box (perspective adjustment)
@@ -909,8 +850,8 @@ export function useDocumentScanner(): UseDocumentScannerReturn {
       };
 
       let usePerspective = false;
-      // Temporarily disabled perspective transform to debug - re-enable when working
-      // const tolerance = 15;
+      // Disabled - always use simple crop for reliability
+      // const tolerance = 10;
       // for (const key of ['tl', 'tr', 'br', 'bl'] as const) {
       //   if (Math.abs(corners[key].x - defaultCorners[key].x) > tolerance ||
       //       Math.abs(corners[key].y - defaultCorners[key].y) > tolerance) {
@@ -919,7 +860,14 @@ export function useDocumentScanner(): UseDocumentScannerReturn {
       //   }
       // }
 
-      console.log('Applying crop:', { usePerspective, filter, actualRegion, corners, defaultCorners });
+      console.log('Applying crop:', {
+        usePerspective,
+        filter,
+        actualRegion,
+        corners,
+        defaultCorners,
+        region // Also log original region for comparison
+      });
 
       // Validate actualRegion before cropping
       if (!actualRegion || actualRegion.w <= 0 || actualRegion.h <= 0 || actualRegion.w > 100 || actualRegion.h > 100) {

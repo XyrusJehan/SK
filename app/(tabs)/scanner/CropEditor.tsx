@@ -207,6 +207,16 @@ function CropEditorWeb({ imageUri, region, corners, onChange, onCornersChange }:
   // Build SVG polygon points
   const polygonPoints = `${activeCorners.tl.x},${activeCorners.tl.y} ${activeCorners.tr.x},${activeCorners.tr.y} ${activeCorners.br.x},${activeCorners.br.y} ${activeCorners.bl.x},${activeCorners.bl.y}`;
 
+  // Compute bounding box from corners for fallback rectangle
+  const cornerXs = [activeCorners.tl.x, activeCorners.tr.x, activeCorners.br.x, activeCorners.bl.x];
+  const cornerYs = [activeCorners.tl.y, activeCorners.tr.y, activeCorners.br.y, activeCorners.bl.y];
+  const derivedRegion = {
+    x: Math.min(...cornerXs),
+    y: Math.min(...cornerYs),
+    w: Math.max(...cornerXs) - Math.min(...cornerXs),
+    h: Math.max(...cornerYs) - Math.min(...cornerYs),
+  };
+
   return (
     <div
       ref={containerRef}
@@ -280,10 +290,10 @@ function CropEditorWeb({ imageUri, region, corners, onChange, onCornersChange }:
       <div
         style={{
           position: 'absolute',
-          top: `${region.y}%`,
-          left: `${region.x}%`,
-          width: `${region.w}%`,
-          height: `${region.h}%`,
+          top: `${derivedRegion.y}%`,
+          left: `${derivedRegion.x}%`,
+          width: `${derivedRegion.w}%`,
+          height: `${derivedRegion.h}%`,
           border: '2px solid rgba(232, 197, 71, 0.3)',
           cursor: 'move',
           pointerEvents: 'none',
@@ -293,9 +303,8 @@ function CropEditorWeb({ imageUri, region, corners, onChange, onCornersChange }:
       {/* Center move handle */}
       <div
         style={{
-          position: 'absolute',
-          top: `${region.y + region.h / 2}%`,
-          left: `${region.x + region.w / 2}%`,
+          top: `${derivedRegion.y + derivedRegion.h / 2}%`,
+          left: `${derivedRegion.x + derivedRegion.w / 2}%`,
           width: 20,
           height: 20,
           marginTop: -10,
