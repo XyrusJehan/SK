@@ -2,7 +2,9 @@
   "permissions": {
     "allow": [
       "Bash(Get-ChildItem -Path \"C:\\\\xampp\\\\htdocs\\\\SK\\\\app\" -Recurse -File)",
-      "Bash(Select-Object FullName)"
+      "Bash(Select-Object FullName)",
+      "Bash(npx tsc *)",
+      "Bash(Select-Object -First 30)"
     ]
   }
 }

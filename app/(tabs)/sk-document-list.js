@@ -1,16 +1,30 @@
-import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import {
   View, Text, TextInput, ScrollView, TouchableOpacity,
   StyleSheet, SafeAreaView, StatusBar, Dimensions, Image, Modal,
+  Platform, Alert, ActivityIndicator,
 } from 'react-native';
 import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { useNav } from './navContext';
 import { useAuth } from './authContext';
 import { supabase } from '../../utils/supabase';
 import * as DocumentPicker from 'expo-document-picker';
-
+import { DocumentScannerButton } from './scanner/DocumentScannerButton';
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const isMobile = SCREEN_WIDTH < 768;
+
+// Supabase timestamps have no 'Z' suffix — JS mis-parses them as local time.
+// toUtcDate forces correct UTC parsing before PHT display.
+const toUtcDate = (dateStr) => {
+  if (!dateStr) return new Date();
+  const iso = String(dateStr).replace(' ', 'T').replace(/Z?$/, 'Z');
+  return new Date(iso);
+};
+
+const toPhilippineDate = (dateStr, options) => {
+  if (!dateStr) return '';
+  return toUtcDate(dateStr).toLocaleDateString('en-PH', { timeZone: 'Asia/Manila', ...options });
+};
 
 // ─── COLORS ───────────────────────────────────────────────────────────────────
 const COLORS = {
@@ -104,6 +118,7 @@ const FileIcon = ({ name }) => {
     </View>
   );
 };
+
 
 // ─── MAIN SCREEN ──────────────────────────────────────────────────────────────
 export default function SKDocumentListScreen() {
@@ -272,8 +287,7 @@ export default function SKDocumentListScreen() {
   }, [allDocs, searchText, sortMode]);
 
   const formatDate = (dateStr) => {
-    const d = new Date(dateStr);
-    return d.toLocaleDateString('en-PH', { year: 'numeric', month: 'short', day: 'numeric' });
+    return toPhilippineDate(dateStr, { year: 'numeric', month: 'short', day: 'numeric' });
   };
 
   const handleNavPress = (tab) => {
@@ -489,37 +503,11 @@ export default function SKDocumentListScreen() {
             <Text style={styles.headerSub}>SANGGUNIANG KABATAAN</Text>
             <Text style={styles.headerTitle}>{barangayName.toUpperCase()}</Text>
           </View>
-          {/* Upload Button */}
-          <TouchableOpacity style={styles.uploadBtn} onPress={() => setUploadModalVisible(true)} activeOpacity={0.8}>
-            <Text style={styles.uploadBtnText}>Upload</Text>
-            <Text style={styles.uploadIcon}>↑</Text>
+          <TouchableOpacity style={styles.bellBtn}>
+            <BellIcon hasNotif={notifCount > 0} />
           </TouchableOpacity>
         </View>
       )}
-
-      {/* Search Bar */}
-      <View style={styles.searchRow}>
-        <View style={styles.searchBox}>
-          <Text style={styles.searchIcon}>🔍</Text>
-          <TextInput
-            style={styles.searchInput}
-            placeholder="Search"
-            placeholderTextColor={COLORS.midGray}
-            value={searchText}
-            onChangeText={setSearchText}
-          />
-          {searchText.length > 0 && (
-            <TouchableOpacity onPress={() => setSearchText('')}>
-              <Text style={{ color: COLORS.midGray, fontSize: 12 }}>✕</Text>
-            </TouchableOpacity>
-          )}
-        </View>
-        {isMobile && (
-          <TouchableOpacity style={styles.uploadBtnMobile} onPress={() => setUploadModalVisible(true)} activeOpacity={0.8}>
-            <Text style={styles.uploadBtnText}>Upload ↑</Text>
-          </TouchableOpacity>
-        )}
-      </View>
 
       {/* Category label + All dropdown + Tab bar */}
       <View style={styles.categoryRow}>
@@ -576,6 +564,37 @@ export default function SKDocumentListScreen() {
               </TouchableOpacity>
             );
           })}
+        </View>
+      </View>
+
+      {/* Search Bar + Scan Button */}
+      <View style={styles.searchRow}>
+        <View style={styles.searchBox}>
+          <Text style={styles.searchIcon}>🔍</Text>
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Search"
+            placeholderTextColor={COLORS.midGray}
+            value={searchText}
+            onChangeText={setSearchText}
+          />
+          {searchText.length > 0 && (
+            <TouchableOpacity onPress={() => setSearchText('')}>
+              <Text style={{ color: COLORS.midGray, fontSize: 12 }}>✕</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+<DocumentScannerButton
+  style={styles.scanBtn}
+  onPdfReady={(file) => {
+    setSelectedFile(file);
+    setUploadModalVisible(true);
+  }}/>
+          <TouchableOpacity style={styles.scanBtn} onPress={() => setUploadModalVisible(true)} activeOpacity={0.8}>
+            <Text style={styles.scanIcon}>↑</Text>
+            <Text style={styles.scanText}>Upload</Text>
+          </TouchableOpacity>
         </View>
       </View>
 
@@ -671,8 +690,6 @@ export default function SKDocumentListScreen() {
         )}
         {renderSidebar()}
         {renderContent()}
-
-      {/* Upload Modal */}
       <Modal
         visible={uploadModalVisible}
         animationType="fade"
@@ -928,13 +945,23 @@ const styles = StyleSheet.create({
   uploadIcon:    { fontSize: 14, color: COLORS.white },
 
   // Search
-  searchRow: { marginBottom: 10, flexDirection: 'row', alignItems: 'center' },
+  searchRow: {
+    flexDirection: 'row', alignItems: 'center',
+    justifyContent: 'space-between', marginBottom: 16,
+  },
+  scanBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 5,
+    backgroundColor: '#133E75', borderRadius: 8,
+    paddingHorizontal: 12, paddingVertical: 9,
+  },
+  scanIcon: { fontSize: 16, color: '#FFFFFF' },
+  scanText: { fontSize: 13, fontWeight: '700', color: '#FFFFFF' },
   searchBox: {
-    flex: 1, flexDirection: 'row', alignItems: 'center',
+    flexDirection: 'row', alignItems: 'center',
     backgroundColor: COLORS.white, borderRadius: 20,
     borderWidth: 1, borderColor: COLORS.lightGray,
     paddingHorizontal: 12, paddingVertical: 7,
-    maxWidth: isMobile ? '100%' : 280,
+    width: isMobile ? '55%' : 280,
   },
   searchIcon:  { fontSize: 12, color: COLORS.midGray, marginRight: 4 },
   searchInput: { flex: 1, fontSize: 12, color: COLORS.darkText },

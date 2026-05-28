@@ -19,8 +19,10 @@ const NAV_TABS = ['Dashboard', 'Documents', 'Monitor', 'Barangay', 'Logs'];
 const COLORS = {
   navy:        '#133E75',
   navyDark:    '#0D2B52',
+  maroon:      '#8B0000',
+  gold:        '#E8C547',
   white:       '#FFFFFF',
-  offWhite:    '#F5F7FA',
+  offWhite:    '#F7F5F2',
   lightGray:   '#E8ECF0',
   midGray:     '#B0B8C4',
   darkText:    '#1A2332',
@@ -67,6 +69,14 @@ const ACTION_FILTER_OPTIONS = [
 const DATE_RANGES = ['All time', 'Today', 'This week', 'This month', 'Last 3 months'];
 
 // ─── ICON COMPONENTS ──────────────────────────────────────────────────────────
+const BellIcon = ({ hasNotif }) => (
+  <View style={styles.bellWrapper}>
+    <View style={styles.bellBody} />
+    <View style={styles.bellBottom} />
+    {hasNotif && <View style={styles.bellDot} />}
+  </View>
+);
+
 const MenuIcon = () => (
   <View style={styles.menuIconContainer}>
     <View style={styles.menuLine} />
@@ -146,8 +156,31 @@ export default function LYDOLogsScreen() {
   const dateButtonRef = useRef(null);
   const safeAreaRef = useRef(null);
   const [sidebarVisible, setSidebarVisible] = useState(false);
+  const [notifCount]                        = useState(2);
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [currentTime, setCurrentTime]       = useState('');
+
+  const today = new Date().toLocaleDateString('en-PH', {
+    timeZone: 'Asia/Manila', month: 'long', day: 'numeric', year: 'numeric',
+  });
+
+  useEffect(() => {
+    const tick = () => {
+      const now = new Date();
+      setCurrentTime(
+        now.toLocaleTimeString('en-PH', {
+          timeZone: 'Asia/Manila',
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit',
+        })
+      );
+    };
+    tick();
+    const interval = setInterval(tick, 1000);
+    return () => clearInterval(interval);
+  }, []);
 
   const municipalityName = user?.barangay?.municipality || 'Rizal, Laguna';
 
@@ -270,7 +303,7 @@ export default function LYDOLogsScreen() {
 
   // ── Sidebar ────────────────────────────────────────────────────────────────
   const renderSidebar = () => (
-    <View style={[styles.sidebar, isMobile && !sidebarVisible && styles.sidebarHidden]}>
+    <View style={styles.sidebar}>
       <View style={styles.logoPill}>
         <Image
           source={require('./../../assets/images/lydo-logo.png')}
@@ -336,13 +369,9 @@ export default function LYDOLogsScreen() {
 
         <View style={styles.layout}>
           {isMobile && sidebarVisible && (
-            <TouchableOpacity
-              style={styles.sidebarOverlay}
-              activeOpacity={1}
-              onPress={() => setSidebarVisible(false)}
-            />
+            <TouchableOpacity style={styles.sidebarOverlay} activeOpacity={1} onPress={() => setSidebarVisible(false)} />
           )}
-          {renderSidebar()}
+          {isMobile ? (sidebarVisible && renderSidebar()) : renderSidebar()}
 
           <ScrollView
             style={[styles.main, isMobile && styles.mainMobile]}
@@ -360,15 +389,40 @@ export default function LYDOLogsScreen() {
               </View>
             )}
 
-            {/* Page Header */}
-            <View style={styles.pageHeader}>
-              <View>
-                <Text style={styles.headerSub}>SANGGUNIANG KABATAAN FEDERATION</Text>
-                <Text style={styles.headerTitle}>{municipalityName.toUpperCase()}</Text>
+            {/* Desktop Header */}
+            {!isMobile && (
+              <View style={styles.header}>
+                <View>
+                  <Text style={styles.headerSub}>SANGGUNIANG KABATAAN FEDERATION</Text>
+                  <Text style={styles.headerTitle}>RIZAL, LAGUNA</Text>
+                </View>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                  <View style={styles.datetimeCard}>
+                    <View style={styles.datetimeRow}>
+                      <View style={styles.datetimeDivider} />
+                      <View style={styles.datetimeBlock}>
+                        <Text style={styles.datetimeLabel}>DATE</Text>
+                        <Text style={styles.datetimeValue}>{today}</Text>
+                      </View>
+                      <View style={styles.datetimeSeparator} />
+                      <View style={[styles.datetimeDivider, { backgroundColor: '#22C55E' }]} />
+                      <View style={styles.datetimeBlock}>
+                        <Text style={styles.datetimeLabel}>TIME (PHT)</Text>
+                        <Text style={[styles.datetimeValue, styles.datetimeTime]}>{currentTime}</Text>
+                      </View>
+                    </View>
+                  </View>
+                  <TouchableOpacity style={styles.bellBtn} activeOpacity={0.7}>
+                    <BellIcon hasNotif={notifCount > 0} />
+                    {notifCount > 0 && (
+                      <View style={styles.notifBadge}>
+                        <Text style={styles.notifBadgeText}>{notifCount}</Text>
+                      </View>
+                    )}
+                  </TouchableOpacity>
+                </View>
               </View>
-            </View>
-
-            <View style={styles.divider} />
+            )}
 
             {/* Section title */}
             <View style={styles.sectionTitleRow}>
@@ -526,13 +580,11 @@ const styles = StyleSheet.create({
   layout: { flex: 1, flexDirection: 'row' },
   sidebar: {
     width: 250, backgroundColor: COLORS.navy,
-    alignItems: 'center', paddingTop: 20, paddingBottom: 24, paddingHorizontal: 10, zIndex: 20,
-    ...(isMobile ? { position: 'absolute', top: 0, left: 0, bottom: 0, zIndex: 20 } : {}),
+    alignItems: 'center', paddingTop: 20, paddingBottom: 24, paddingHorizontal: 10, zIndex: 10,
   },
-  sidebarHidden: { display: 'none' },
   sidebarOverlay: {
     position: 'absolute', left: 0, top: 0, bottom: 0, right: 0,
-    backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 15,
+    backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 5,
   },
   sidebarSpacer: { height: 28 },
 
@@ -544,7 +596,7 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
     marginBottom: 8, borderWidth: 2, borderColor: 'rgba(255,255,255,0.3)',
   },
-    logoImage: {
+  logoImage: {
     width: 110,
     height: 110,
   },
@@ -553,9 +605,9 @@ const styles = StyleSheet.create({
     borderRadius: 24, marginBottom: 8, alignItems: 'center',
     borderWidth: 1.5, borderColor: COLORS.white, backgroundColor: COLORS.navy,
   },
-  navItemActive: { backgroundColor: COLORS.white, borderWidth: 1.5, borderColor: '#000000' },
-  navLabel: { fontSize: 13, fontWeight: '600', color: 'rgba(255,255,255,0.8)', letterSpacing: 0.3 },
-  navLabelActive: { color: '#000000', fontWeight: '800' },
+  navItemActive: { backgroundColor: COLORS.white, borderColor: '#000' },
+  navLabel: { fontSize: 13, fontWeight: '600', color: COLORS.white, letterSpacing: 0.3 },
+  navLabelActive: { color: '#000', fontWeight: '800' },
   logoutBtn: {
     width: '100%', paddingVertical: 12, paddingHorizontal: 12,
     borderRadius: 24, marginTop: 8, alignItems: 'center',
@@ -566,7 +618,7 @@ const styles = StyleSheet.create({
   // ── Main area
   main: { flex: 1, backgroundColor: COLORS.offWhite, borderTopLeftRadius: 20 },
   mainMobile: { borderTopLeftRadius: 0 },
-  mainContent: { padding: isMobile ? 12 : 24, paddingBottom: isMobile ? 24 : 48 },
+  mainContent: { padding: 20, paddingBottom: 40 },
 
   // ── Mobile header
   mobileHeader: {
@@ -582,18 +634,28 @@ const styles = StyleSheet.create({
   mobileTitle: { fontSize: 16, fontWeight: '800', color: COLORS.darkText },
 
   // ── Page header
-  pageHeader: {
-    flexDirection: 'row', alignItems: 'flex-start',
-    justifyContent: 'space-between', marginBottom: 12,
-  },
-  headerSub: {
-    fontSize: isMobile ? 9 : 11, fontWeight: '600', color: COLORS.subText,
-    letterSpacing: 2, marginBottom: 2, textTransform: 'uppercase',
-  },
-  headerTitle: {
-    fontSize: isMobile ? 18 : 22, fontWeight: '900', color: COLORS.darkText, letterSpacing: 0.4,
-  },
-  divider: { height: 1.5, backgroundColor: COLORS.navy + '25', marginBottom: 20 },
+  header:      { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 16 },
+  headerSub:   { fontSize: 10, fontWeight: '600', color: COLORS.subText, letterSpacing: 2, textTransform: 'uppercase', marginBottom: 2 },
+  headerTitle: { fontSize: 20, fontWeight: '900', color: COLORS.darkText, letterSpacing: 0.5 },
+
+  // ── Datetime card
+  datetimeCard:      { backgroundColor: '#F7F5F2', borderRadius: 12, paddingVertical: 10, paddingHorizontal: 16, borderWidth: 1, borderColor: '#E0DDD9', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 2 },
+  datetimeRow:       { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  datetimeSeparator: { width: 1, height: 36, backgroundColor: '#D0CCC8', marginHorizontal: 4 },
+  datetimeDivider:   { width: 3, height: 28, borderRadius: 2, backgroundColor: '#133E75' },
+  datetimeBlock:     { flexDirection: 'column' },
+  datetimeLabel:     { fontSize: 9, fontWeight: '700', color: '#666666', letterSpacing: 1.2, textTransform: 'uppercase', marginBottom: 1 },
+  datetimeValue:     { fontSize: 13, fontWeight: '700', color: '#1A1A1A', letterSpacing: 0.2 },
+  datetimeTime:      { fontVariant: ['tabular-nums'], color: '#133E75', fontSize: 14, fontWeight: '800' },
+
+  // ── Bell
+  bellBtn:        { width: 40, height: 40, borderRadius: 20, backgroundColor: COLORS.cardBg, alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 6, elevation: 3 },
+  bellWrapper:    { width: 20, height: 22, alignItems: 'center' },
+  bellBody:       { width: 14, height: 12, borderRadius: 7, borderWidth: 2, borderColor: COLORS.maroon, marginTop: 4 },
+  bellBottom:     { width: 8, height: 4, borderBottomLeftRadius: 4, borderBottomRightRadius: 4, backgroundColor: COLORS.maroon, marginTop: -1 },
+  bellDot:        { position: 'absolute', top: 0, right: 1, width: 7, height: 7, borderRadius: 4, backgroundColor: COLORS.gold, borderWidth: 1.5, borderColor: COLORS.cardBg },
+  notifBadge:     { position: 'absolute', top: -2, right: -2, width: 16, height: 16, borderRadius: 8, backgroundColor: COLORS.gold, alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: COLORS.white },
+  notifBadgeText: { fontSize: 8, fontWeight: '900', color: COLORS.navy },
 
   // ── Section title
   sectionTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 20 },

@@ -27,7 +27,7 @@ const COLORS = {
 };
 
 // ─── NAV & PORTAL TABS ───────────────────────────────────────────────────────
-const NAV_TABS    = ['Dashboard', 'Documents', 'Planning', 'Portal', 'Logs', 'Account'];
+const NAV_TABS    = ['Dashboard', 'Documents', 'Planning', 'Portal', 'Logs', 'Account'];  
 const PORTAL_TABS = ['Published', 'Feedback'];
 const YEAR_FILTERS = ['All Years', '2026', '2025', '2024'];
 const DOCUMENT_FILTERS = ['All Documents', 'Annual Barangay Youth Investment Program', 'Approved Annual Budget 2026', 'Comprehensive Barangay Youth Development Plan (CBYDP) 2026'];

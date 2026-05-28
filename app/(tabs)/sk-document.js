@@ -320,7 +320,38 @@ export default function SKDocumentScreen() {
         </View>
       )}
 
-      {/* Search Bar */}
+      {/* Category label + Tab bar */}
+      <View style={styles.categoryRow}>
+        <Text style={styles.categoryLabel}>Category:</Text>
+      </View>
+
+      <View style={styles.filterRow}>
+        {/* Folder / Document Management tab bar */}
+        <View style={styles.docTabBar}>
+          {DOCUMENT_TABS.map(tab => {
+            const active = activeDocTab === tab;
+            return (
+              <TouchableOpacity
+                key={tab}
+                style={[styles.docTab, active && styles.docTabActive]}
+                onPress={() => {
+                  setActiveDocTab(tab);
+                  if (tab === 'Document Management') {
+                    router.push({ pathname: '/(tabs)/sk-document-management' });
+                  }
+                }}
+                activeOpacity={0.8}
+              >
+                <Text style={[styles.docTabText, active && styles.docTabTextActive]}>
+                  {tab}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      </View>
+
+      {/* Search Bar + Scan Button */}
       <View style={styles.searchRow}>
         <View style={styles.searchBox}>
           <Text style={styles.searchIcon}>🔍</Text>
@@ -337,37 +368,14 @@ export default function SKDocumentScreen() {
             </TouchableOpacity>
           )}
         </View>
-      </View>
-
-      {/* Category label + All dropdown + Tab bar */}
-      {/* Category label + Tab bar */}
-      <View style={styles.categoryRow}>
-        <Text style={styles.categoryLabel}>Category:</Text>
-      </View>
-
-      <View style={styles.filterRow}>
-        {/* Folder / Document Management tab bar */}
-        <View style={styles.docTabBar}>
-          {DOCUMENT_TABS.map(tab => {
-            const active = activeDocTab === tab;
-            return (
-              <TouchableOpacity
-                key={tab}
-                style={[styles.docTab, active && styles.docTabActive]}
-                onPress={() => {
-                  if (tab === 'Document Management') {
-                    router.push({ pathname: '/(tabs)/sk-document-management' });
-                  }
-                }}
-                activeOpacity={0.8}
-              >
-                <Text style={[styles.docTabText, active && styles.docTabTextActive]}>
-                  {tab}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </View>
+        <TouchableOpacity
+          style={styles.scanBtn}
+          onPress={() => router.push('/(tabs)/sk-scan')}
+          activeOpacity={0.8}
+        >
+          <Text style={styles.scanIcon}>⊟</Text>
+          <Text style={styles.scanText}>Scan</Text>
+        </TouchableOpacity>
       </View>
 
       {/* Document Cards Grid */}
@@ -494,17 +502,28 @@ const styles = StyleSheet.create({
   notifBadge:  { position: 'absolute', top: -2, right: -2, width: 16, height: 16, borderRadius: 8, backgroundColor: COLORS.gold, alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: COLORS.white },
   notifBadgeText: { fontSize: 8, fontWeight: '900', color: COLORS.navy },
 
-  // Search
-  searchRow: { marginBottom: 10 },
+  // Search + Scan
+  searchRow: {
+    flexDirection: 'row', alignItems: 'center',
+    justifyContent: 'space-between', marginBottom: 16,
+  },
   searchBox: {
     flexDirection: 'row', alignItems: 'center',
     backgroundColor: COLORS.white, borderRadius: 20,
     borderWidth: 1, borderColor: COLORS.lightGray,
     paddingHorizontal: 12, paddingVertical: 7,
-    maxWidth: isMobile ? '100%' : 280,
+    width: isMobile ? '60%' : 280,
   },
   searchIcon:  { fontSize: 12, color: COLORS.midGray, marginRight: 4 },
   searchInput: { flex: 1, fontSize: 12, color: COLORS.darkText },
+  scanBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    paddingHorizontal: 14, paddingVertical: 8,
+    borderRadius: 20, borderWidth: 1.5, borderColor: COLORS.navy,
+    backgroundColor: COLORS.white,
+  },
+  scanIcon: { fontSize: 13, color: COLORS.navy },
+  scanText: { fontSize: 13, fontWeight: '700', color: COLORS.navy },
 
   // Category label
   categoryRow:   { flexDirection: 'row', alignItems: 'center', marginBottom: 4 },
