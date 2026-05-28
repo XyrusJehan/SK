@@ -11,6 +11,15 @@ import { supabase } from '../../utils/supabase';
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const isMobile = SCREEN_WIDTH < 768;
 
+// Supabase returns timestamps without a timezone suffix (e.g. '2026-05-28 03:50:28').
+// JS treats that as local time, not UTC, causing an 8-hour display error in PHT.
+// This helper forces correct UTC parsing before any display conversion.
+const toUtcDate = (dateStr) => {
+  if (!dateStr) return new Date();
+  const iso = dateStr.toString().replace(' ', 'T').replace(/Z?$/, 'Z');
+  return new Date(iso);
+};
+
 const COLORS = {
   maroon: '#8B0000', maroonDark: '#6B0000', maroonLight: '#A50000',
   gold: '#E8C547', accent: '#D4A017', calGold: '#E8A020',
@@ -195,7 +204,7 @@ export default function LogsScreen() {
                 : 'Officer',
               action: row.action || 'Create document',
               description: row.description || '',
-              createdAt: new Date(row.created_at),
+              createdAt: toUtcDate(row.created_at),
             };
           });
 
@@ -265,10 +274,10 @@ export default function LogsScreen() {
   const handleLogout = () => { logout(); router.replace('/'); };
 
   const formatDate = (date) =>
-    new Date(date).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' });
+    new Date(date).toLocaleDateString('en-PH', { timeZone: 'Asia/Manila', month: 'short', day: 'numeric', year: 'numeric' });
 
   const formatTime = (date) =>
-    new Date(date).toLocaleTimeString('en-PH', { hour: 'numeric', minute: '2-digit', hour12: true });
+    new Date(date).toLocaleTimeString('en-PH', { timeZone: 'Asia/Manila', hour: 'numeric', minute: '2-digit', hour12: true });
 
   // ── Sidebar ────────────────────────────────────────────────────────────────
   const renderSidebar = () => (

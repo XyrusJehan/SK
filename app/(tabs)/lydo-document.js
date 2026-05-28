@@ -283,6 +283,7 @@ export default function LYDODocumentsScreen({ navigation }) {
   const [selectedDocType, setSelectedDocType]     = useState(null);
   const [searchText, setSearchText]               = useState('');
   const [notifCount]                              = useState(2);
+  const [currentTime, setCurrentTime]             = useState('');
   const [sidebarVisible, setSidebarVisible]       = useState(false);
   const [activeDocumentTab, setActiveDocumentTab] = useState('Barangay Folders');
   const [barangays, setBarangays]                 = useState([]);
@@ -304,6 +305,27 @@ export default function LYDODocumentsScreen({ navigation }) {
   };
 
   useEffect(() => { setActiveTab('Documents'); }, []);
+
+  const today = new Date().toLocaleDateString('en-PH', {
+    timeZone: 'Asia/Manila', month: 'long', day: 'numeric', year: 'numeric',
+  });
+
+  useEffect(() => {
+    const tick = () => {
+      const now = new Date();
+      setCurrentTime(
+        now.toLocaleTimeString('en-PH', {
+          timeZone: 'Asia/Manila',
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit',
+        })
+      );
+    };
+    tick();
+    const interval = setInterval(tick, 1000);
+    return () => clearInterval(interval);
+  }, []);
 
   // Fetch all barangays and all years from database
   useEffect(() => {
@@ -522,14 +544,31 @@ export default function LYDODocumentsScreen({ navigation }) {
             <Text style={styles.headerSub}>SANGGUNIANG KABATAAN FEDERATION</Text>
             <Text style={styles.headerTitle}>RIZAL, LAGUNA</Text>
           </View>
-          <TouchableOpacity style={styles.bellBtn} activeOpacity={0.7}>
-            <BellIcon hasNotif={notifCount > 0} />
-            {notifCount > 0 && (
-              <View style={styles.notifBadge}>
-                <Text style={styles.notifBadgeText}>{notifCount}</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+            <View style={styles.datetimeCard}>
+              <View style={styles.datetimeRow}>
+                <View style={styles.datetimeDivider} />
+                <View style={styles.datetimeBlock}>
+                  <Text style={styles.datetimeLabel}>DATE</Text>
+                  <Text style={styles.datetimeValue}>{today}</Text>
+                </View>
+                <View style={styles.datetimeSeparator} />
+                <View style={[styles.datetimeDivider, { backgroundColor: '#22C55E' }]} />
+                <View style={styles.datetimeBlock}>
+                  <Text style={styles.datetimeLabel}>TIME (PHT)</Text>
+                  <Text style={[styles.datetimeValue, styles.datetimeTime]}>{currentTime}</Text>
+                </View>
               </View>
-            )}
-          </TouchableOpacity>
+            </View>
+            <TouchableOpacity style={styles.bellBtn} activeOpacity={0.7}>
+              <BellIcon hasNotif={notifCount > 0} />
+              {notifCount > 0 && (
+                <View style={styles.notifBadge}>
+                  <Text style={styles.notifBadgeText}>{notifCount}</Text>
+                </View>
+              )}
+            </TouchableOpacity>
+          </View>
         </View>
       )}
 
@@ -1064,6 +1103,61 @@ const styles = StyleSheet.create({
     letterSpacing: 2, textTransform: 'uppercase', marginBottom: 2,
   },
   headerTitle: { fontSize: 20, fontWeight: '900', color: COLORS.darkText, letterSpacing: 0.5 },
+
+  // Datetime card
+  datetimeCard: {
+    backgroundColor: '#F7F5F2',
+    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderWidth: 1,
+    borderColor: '#E0DDD9',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  datetimeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  datetimeSeparator: {
+    width: 1,
+    height: 36,
+    backgroundColor: '#D0CCC8',
+    marginHorizontal: 4,
+  },
+  datetimeDivider: {
+    width: 3,
+    height: 28,
+    borderRadius: 2,
+    backgroundColor: '#133E75',
+  },
+  datetimeBlock: {
+    flexDirection: 'column',
+  },
+  datetimeLabel: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: '#666666',
+    letterSpacing: 1.2,
+    textTransform: 'uppercase',
+    marginBottom: 1,
+  },
+  datetimeValue: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#1A1A1A',
+    letterSpacing: 0.2,
+  },
+  datetimeTime: {
+    fontVariant: ['tabular-nums'],
+    color: '#133E75',
+    fontSize: 14,
+    fontWeight: '800',
+  },
 
   // Bell
   bellBtn: {

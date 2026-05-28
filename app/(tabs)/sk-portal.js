@@ -1,16 +1,37 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View, Text, TextInput, ScrollView, TouchableOpacity,
   StyleSheet, SafeAreaView, StatusBar, Dimensions,
-  Modal, Alert, Image,
+  Modal, Alert, Image, Platform, Linking,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import * as DocumentPicker from 'expo-document-picker';
+import * as FileSystem from 'expo-file-system';
+import * as Sharing from 'expo-sharing';
 import { useNav } from './navContext';
 import { useAuth } from './authContext';
 import { supabase } from '../../utils/supabase';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const isMobile = SCREEN_WIDTH < 768;
+
+// Supabase timestamps have no 'Z' suffix — JS mis-parses them as local time.
+// toUtcDate forces correct UTC parsing before PHT display.
+const toUtcDate = (dateStr) => {
+  if (!dateStr) return new Date();
+  const iso = String(dateStr).replace(' ', 'T').replace(/Z?$/, 'Z');
+  return new Date(iso);
+};
+
+const toPhilippineDate = (dateStr, options) => {
+  if (!dateStr) return '';
+  return toUtcDate(dateStr).toLocaleDateString('en-PH', { timeZone: 'Asia/Manila', ...options });
+};
+
+const toPhilippineTime = (dateStr, options) => {
+  if (!dateStr) return '';
+  return toUtcDate(dateStr).toLocaleTimeString('en-PH', { timeZone: 'Asia/Manila', ...options });
+};
 
 // ─── COLORS (identical to sk-planning) ───────────────────────────────────────
 const COLORS = {
@@ -142,6 +163,37 @@ export default function SKPortalScreen() {
   const [showUploadYearDropdown, setShowUploadYearDropdown] = useState(false);
   const [publishedDocs, setPublishedDocs] = useState([]);
   const [feedbackItems, setFeedbackItems] = useState([]);
+  const [isUploading, setIsUploading] = useState(false);
+  const [alertModal, setAlertModal] = useState({ visible: false, type: 'publish', docTitle: '', onConfirm: null });
+  const [successModal, setSuccessModal] = useState({ visible: false, type: 'publish', docTitle: '' });
+
+  const openAlert = (type, docTitle, onConfirm) =>
+    setAlertModal({ visible: true, type, docTitle, onConfirm });
+  const closeAlert = () =>
+    setAlertModal(prev => ({ ...prev, visible: false, onConfirm: null }));
+  const openSuccess = (type, docTitle) =>
+    setSuccessModal({ visible: true, type, docTitle });
+  const closeSuccess = () =>
+    setSuccessModal(prev => ({ ...prev, visible: false }));
+
+  // Refs + layout state for dropdown anchoring (float above everything via Modal)
+  const docFilterRef  = useRef(null);
+  const yearFilterRef = useRef(null);
+  const uploadCatRef  = useRef(null);
+  const uploadYearRef = useRef(null);
+  const [docDropdownPos,        setDocDropdownPos]        = useState(null);
+  const [yearDropdownPos,       setYearDropdownPos]       = useState(null);
+  const [uploadCatDropdownPos,  setUploadCatDropdownPos]  = useState(null);
+  const [uploadYearDropdownPos, setUploadYearDropdownPos] = useState(null);
+
+  const measureAndOpen = (ref, setPos, setVisible) => {
+    if (ref.current) {
+      ref.current.measureInWindow((x, y, width, height) => {
+        setPos({ x, y: y + height + 2, width });
+        setVisible(true);
+      });
+    }
+  };
 
   // Fetch published documents for this barangay
   useEffect(() => {
@@ -165,8 +217,9 @@ export default function SKPortalScreen() {
           id: doc.website_post_id,
           title: doc.title || 'Untitled',
           category: doc.document_category || 'Unknown',
-          year: doc.year || new Date(doc.published_at).getFullYear().toString(),
-          uploadedAt: new Date(doc.published_at).toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' }),
+          year: doc.year?.toString() || toUtcDate(doc.published_at).toLocaleDateString('en-PH', { timeZone: 'Asia/Manila', year: 'numeric' }),
+          uploadedAt: toPhilippineDate(doc.published_at, { month: 'long', day: 'numeric', year: 'numeric' }),
+          fileUrl: doc.file_url,
         })) || [];
 
         setPublishedDocs(formattedDocs);
@@ -220,7 +273,7 @@ export default function SKPortalScreen() {
           id: c.comment_id,
           name: `${c.users?.first_name || 'Unknown'} ${c.users?.last_name || 'User'}`,
           comment: c.content,
-          date: new Date(c.created_at).toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' }),
+          date: toPhilippineDate(c.created_at, { month: 'long', day: 'numeric', year: 'numeric' }),
           status: c.is_read ? 'Read' : 'New',
         })) || [];
 
@@ -288,6 +341,98 @@ export default function SKPortalScreen() {
     </View>
   );
 
+  // -- View handler (open in browser/viewer) --
+  const handleView = async (fileUrl) => {
+    if (!fileUrl) {
+      Alert.alert('No File', 'This document has no file attached.');
+      return;
+    }
+    if (Platform.OS === 'web') {
+      window.open(fileUrl, '_blank');
+      return;
+    }
+    try {
+      const supported = await Linking.canOpenURL(fileUrl);
+      if (supported) {
+        await Linking.openURL(fileUrl);
+      } else {
+        Alert.alert('Error', 'Cannot open this file on this device.');
+      }
+    } catch (e) {
+      console.error('View error:', e);
+      Alert.alert('Error', 'Could not open the file.');
+    }
+  };
+
+  // -- Download handler --
+  const handleDownload = async (fileUrl, title) => {
+    if (!fileUrl) {
+      Alert.alert('No File', 'This document has no file attached.');
+      return;
+    }
+    const ext = fileUrl.split('.').pop().split('?')[0] || 'pdf';
+    const safeName = (title || 'document').replace(/[^\w]/g, '_') + '.' + ext;
+
+    if (Platform.OS === 'web') {
+      // Web: fetch as blob then trigger browser save-as dialog
+      try {
+        const response = await fetch(fileUrl);
+        const blob = await response.blob();
+        const objectUrl = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = objectUrl;
+        a.download = safeName;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(objectUrl);
+      } catch (e) {
+        console.error('Web download error:', e);
+        // Fallback: open in new tab
+        window.open(fileUrl, '_blank');
+      }
+      return;
+    }
+
+    // Native: FileSystem + Sharing
+    try {
+      // Timestamp prevents collisions when re-downloading the same file
+      const localUri = FileSystem.documentDirectory + (title || 'doc').replace(/[^\w]/g, '_') + '_' + Date.now() + '.' + ext;
+      const { uri } = await FileSystem.downloadAsync(fileUrl, localUri);
+      const canShare = await Sharing.isAvailableAsync();
+      if (canShare) {
+        await Sharing.shareAsync(uri, { dialogTitle: title || 'Document' });
+      } else {
+        Alert.alert('Downloaded', 'File saved to device.');
+      }
+    } catch (e) {
+      console.error('Download error:', e);
+      Alert.alert('Error', 'Could not download the file.');
+    }
+  };
+
+  // -- Unpublish handler --
+  const handleUnpublish = () => {
+    // Snapshot values now - selectedDoc may be cleared before the async callback runs
+    const docId = selectedDoc?.id;
+    const docTitle = selectedDoc?.title || 'Document';
+    if (!docId) return;
+
+    const doUnpublish = async () => {
+      const { error } = await supabase
+        .from('website_posts')
+        .update({ portal_status: 'unpublished', unpublished_at: new Date().toISOString() })
+        .eq('website_post_id', docId);
+      if (error) { Alert.alert('Error', error.message); return; }
+      await logActivity('Unpublish document', `Unpublished "${docTitle}" from the transparency portal`);
+      setPublishedDocs(prev => prev.filter(d => d.id !== docId));
+      setShowDocModal(false);
+      openSuccess('unpublish', docTitle);
+    };
+
+    openAlert('unpublish', docTitle, () => { closeAlert(); doUnpublish(); });
+  };
+
   // ── Doc Detail Modal ──
   const renderDocModal = () => (
     <Modal
@@ -317,19 +462,19 @@ export default function SKPortalScreen() {
           <View style={styles.modalActions}>
             <TouchableOpacity
               style={[styles.modalActionBtn, { backgroundColor: '#EAF0FB' }]}
-              onPress={() => { Alert.alert('View', 'Opening document…'); setShowDocModal(false); }}
+              onPress={() => handleView(selectedDoc?.fileUrl)}
             >
               <Text style={[styles.modalActionText, { color: COLORS.navy }]}>👁  View</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.modalActionBtn, { backgroundColor: '#EAFBEA' }]}
-              onPress={() => { Alert.alert('Download', 'Downloading…'); setShowDocModal(false); }}
+              onPress={() => handleDownload(selectedDoc?.fileUrl, selectedDoc?.title)}
             >
               <Text style={[styles.modalActionText, { color: '#2E7D32' }]}>⬇  Download</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.modalActionBtn, { backgroundColor: '#FFEBEE' }]}
-              onPress={() => { Alert.alert('Unpublish', 'Remove from portal?'); setShowDocModal(false); }}
+              onPress={handleUnpublish}
             >
               <Text style={[styles.modalActionText, { color: '#B71C1C' }]}>✕  Unpublish</Text>
             </TouchableOpacity>
@@ -351,6 +496,29 @@ export default function SKPortalScreen() {
   ];
   const UPLOAD_YEARS = ['2026', '2025', '2024', '2023'];
 
+  const pickDocument = async () => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: ['application/pdf', 'application/msword',
+               'application/vnd.openxmlformats-officedocument.wordprocessingml.document'],
+        copyToCacheDirectory: true,
+      });
+      if (!result.canceled && result.assets?.length > 0) {
+        setUploadFile(result.assets[0]);
+      }
+    } catch (e) {
+      Alert.alert('Error', 'Could not open file picker');
+    }
+  };
+
+  const getFileExt = (name = '') => (name.split('.').pop() || 'FILE').toUpperCase().slice(0, 4);
+  const formatFileSize = (bytes) => {
+    if (!bytes) return '';
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  };
+
   const renderUploadModal = () => (
     <Modal
       visible={showUploadModal}
@@ -368,135 +536,149 @@ export default function SKPortalScreen() {
           activeOpacity={1}
           onPress={() => {}}
         >
-          {/* Header */}
+          {/* ── Header ── */}
           <View style={styles.uploadModalHeader}>
-            <Text style={styles.uploadModalHeaderText}>UPLOAD NEW DOCUMENT TO PUBLIC PORTAL</Text>
+            <View>
+              <Text style={styles.uploadModalHeaderEyebrow}>TRANSPARENCY PORTAL</Text>
+              <Text style={styles.uploadModalHeaderText}>Upload New Document</Text>
+            </View>
             <TouchableOpacity onPress={() => setShowUploadModal(false)} style={styles.uploadModalClose}>
               <Text style={styles.uploadModalCloseText}>✕</Text>
             </TouchableOpacity>
           </View>
 
+          {/* ── Divider ── */}
+          <View style={styles.uploadModalDivider} />
+
           <View style={styles.uploadModalBody}>
-            {/* LEFT — Step 1 */}
+
+            {/* ── LEFT — File Selection ── */}
             <View style={styles.uploadModalLeft}>
-              <Text style={styles.uploadStepLabel}>Step 1: Choose Document</Text>
+              {/* Step badge */}
+              <View style={styles.stepBadgeRow}>
+                <View style={styles.stepBadge}><Text style={styles.stepBadgeText}>1</Text></View>
+                <Text style={styles.stepBadgeLabel}>Choose Document</Text>
+              </View>
 
-              {/* Drag & drop zone */}
-              <TouchableOpacity
-                style={[styles.dropZone, uploadFile && styles.dropZoneActive]}
-                activeOpacity={0.8}
-                onPress={() => Alert.alert('Select File', 'File picker would open here.')}
-              >
-                <Text style={styles.dropZoneTopLabel}>Drag & Drop</Text>
-                <View style={styles.dropZoneIconWrap}>
-                  {/* Upload arrow icon */}
-                  <View style={styles.uploadArrowBody} />
-                  <View style={styles.uploadArrowHead} />
+              {uploadFile ? (
+                /* ── Attached file card ── */
+                <View style={styles.fileCard}>
+                  {/* File type badge */}
+                  <View style={styles.fileExtBadge}>
+                    <Text style={styles.fileExtText}>{getFileExt(uploadFile.name)}</Text>
+                  </View>
+                  {/* File info */}
+                  <View style={styles.fileCardInfo}>
+                    <Text style={styles.fileCardName} numberOfLines={2}>{uploadFile.name}</Text>
+                    {uploadFile.size ? (
+                      <Text style={styles.fileCardSize}>{formatFileSize(uploadFile.size)}</Text>
+                    ) : null}
+                  </View>
+                  {/* Remove button */}
+                  <TouchableOpacity
+                    style={styles.removeFileBtn}
+                    onPress={() => setUploadFile(null)}
+                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                  >
+                    <Text style={styles.removeFileBtnText}>✕</Text>
+                  </TouchableOpacity>
                 </View>
-                {uploadFile ? (
-                  <Text style={styles.dropZoneFileName} numberOfLines={2}>{uploadFile}</Text>
-                ) : (
-                  <Text style={styles.dropZoneSubLabel}>DRAG & DROP{'\n'}DOCUMENT HERE</Text>
-                )}
-              </TouchableOpacity>
+              ) : (
+                /* ── Drop zone ── */
+                <TouchableOpacity style={styles.dropZone} activeOpacity={0.8} onPress={pickDocument}>
+                  {/* Cloud upload icon */}
+                  <View style={styles.dropZoneIconWrap}>
+                    <View style={styles.cloudBase} />
+                    <View style={styles.cloudTop} />
+                    <View style={styles.cloudArrowShaft} />
+                    <View style={styles.cloudArrowHead} />
+                  </View>
+                  <Text style={styles.dropZoneMainLabel}>Tap to browse files</Text>
+                  <Text style={styles.dropZoneSubLabel}>PDF or Word document</Text>
+                </TouchableOpacity>
+              )}
 
-              <TouchableOpacity
-                style={styles.selectFileBtn}
-                activeOpacity={0.8}
-                onPress={() => { setUploadFile('document_sample.pdf'); Alert.alert('File Selected', 'document_sample.pdf'); }}
-              >
-                <Text style={styles.selectFileBtnText}>Select Document to Upload</Text>
-              </TouchableOpacity>
+              {/* Replace / change link shown when file is attached */}
+              {uploadFile && (
+                <TouchableOpacity onPress={pickDocument} style={styles.replaceFileLink}>
+                  <Text style={styles.replaceFileLinkText}>↺  Replace file</Text>
+                </TouchableOpacity>
+              )}
             </View>
 
-            {/* RIGHT — Step 2 & 3 */}
+            {/* ── Vertical separator ── */}
+            <View style={styles.uploadModalSeparator} />
+
+            {/* ── RIGHT — Details & Actions ── */}
             <View style={styles.uploadModalRight}>
-              <Text style={styles.uploadStepLabel}>Step 2 : Add Document Details</Text>
+              {/* Step 2 */}
+              <View style={styles.stepBadgeRow}>
+                <View style={styles.stepBadge}><Text style={styles.stepBadgeText}>2</Text></View>
+                <Text style={styles.stepBadgeLabel}>Document Details</Text>
+              </View>
 
               {/* Document Title */}
-              <Text style={styles.uploadFieldLabel}>Document Title</Text>
+              <Text style={styles.uploadFieldLabel}>Document Title <Text style={{ color: '#C0392B' }}>*</Text></Text>
               <TextInput
                 style={styles.uploadTextInput}
                 value={uploadTitle}
                 onChangeText={setUploadTitle}
-                placeholder=""
+                placeholder="Enter document title"
                 placeholderTextColor={COLORS.midGray}
               />
 
               {/* Category & Year */}
               <View style={styles.uploadRowFields}>
-                {/* Category dropdown */}
                 <View style={{ flex: 1.6 }}>
-                  <Text style={styles.uploadFieldLabel}>Document Category</Text>
-                  <View style={{ position: 'relative', zIndex: 100 }}>
-                    <TouchableOpacity
-                      style={styles.uploadDropdownBtn}
-                      onPress={() => { setShowUploadCatDropdown(v => !v); setShowUploadYearDropdown(false); }}
-                      activeOpacity={0.8}
-                    >
-                      <Text style={[styles.uploadDropdownText, !uploadCategory && { color: COLORS.midGray }]} numberOfLines={1}>
-                        {uploadCategory || ''}
-                      </Text>
-                      <Text style={styles.uploadDropdownCaret}>▾</Text>
-                    </TouchableOpacity>
-                    {showUploadCatDropdown && ( 
-                      <View style={[styles.filterDropdownPanel, { minWidth: 220, zIndex: 100 }]}>
-                        {UPLOAD_CATEGORIES.map(opt => (
-                          <TouchableOpacity
-                            key={opt}
-                            style={[styles.filterDropdownItem, uploadCategory === opt && styles.filterDropdownItemActive]}
-                            onPress={() => { setUploadCategory(opt); setShowUploadCatDropdown(false); }}
-                          >
-                            <Text style={[styles.filterDropdownItemText, uploadCategory === opt && { color: COLORS.navy, fontWeight: '700' }]} numberOfLines={2}>
-                              {opt}
-                            </Text>
-                          </TouchableOpacity>
-                        ))}
-                      </View>
-                    )}
-                  </View>
+                  <Text style={styles.uploadFieldLabel}>Category <Text style={{ color: '#C0392B' }}>*</Text></Text>
+                  <TouchableOpacity
+                    ref={uploadCatRef}
+                    style={styles.uploadDropdownBtn}
+                    onPress={() => {
+                      setShowUploadYearDropdown(false);
+                      if (showUploadCatDropdown) { setShowUploadCatDropdown(false); }
+                      else { measureAndOpen(uploadCatRef, setUploadCatDropdownPos, setShowUploadCatDropdown); }
+                    }}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={[styles.uploadDropdownText, !uploadCategory && { color: COLORS.midGray }]} numberOfLines={1}>
+                      {uploadCategory || 'Select category…'}
+                    </Text>
+                    <Text style={styles.uploadDropdownCaret}>▾</Text>
+                  </TouchableOpacity>
                 </View>
 
-                {/* Year dropdown */}
-                <View style={{ flex: 1, marginLeft: 10 }}>
-                  <Text style={styles.uploadFieldLabel}>Year</Text>
-                  <View style={{ position: 'relative', zIndex: 1000 }}>
-                    <TouchableOpacity
-                      style={styles.uploadDropdownBtn}
-                      onPress={() => { setShowUploadYearDropdown(v => !v); setShowUploadCatDropdown(false); }}
-                      activeOpacity={0.8}
-                    >
-                      <Text style={[styles.uploadDropdownText, !uploadYear && { color: COLORS.midGray }]}>
-                        {uploadYear || ''}
-                      </Text>
-                      <Text style={styles.uploadDropdownCaret}>▾</Text>
-                    </TouchableOpacity>
-                    {showUploadYearDropdown && (
-                      <View style={[styles.filterDropdownPanel, { minWidth: 90, zIndex: 99999 }]}>
-                        {UPLOAD_YEARS.map(opt => (
-                          <TouchableOpacity
-                            key={opt}
-                            style={[styles.filterDropdownItem, uploadYear === opt && styles.filterDropdownItemActive]}
-                            onPress={() => { setUploadYear(opt); setShowUploadYearDropdown(false); }}
-                          >
-                            <Text style={[styles.filterDropdownItemText, uploadYear === opt && { color: COLORS.navy, fontWeight: '700' }]}>
-                              {opt}
-                            </Text>
-                          </TouchableOpacity>
-                        ))}
-                      </View>
-                    )}
-                  </View>
+                <View style={{ flex: 0.9, marginLeft: 10 }}>
+                  <Text style={styles.uploadFieldLabel}>Year <Text style={{ color: '#C0392B' }}>*</Text></Text>
+                  <TouchableOpacity
+                    ref={uploadYearRef}
+                    style={styles.uploadDropdownBtn}
+                    onPress={() => {
+                      setShowUploadCatDropdown(false);
+                      if (showUploadYearDropdown) { setShowUploadYearDropdown(false); }
+                      else { measureAndOpen(uploadYearRef, setUploadYearDropdownPos, setShowUploadYearDropdown); }
+                    }}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={[styles.uploadDropdownText, !uploadYear && { color: COLORS.midGray }]}>
+                      {uploadYear || 'Year'}
+                    </Text>
+                    <Text style={styles.uploadDropdownCaret}>▾</Text>
+                  </TouchableOpacity>
                 </View>
               </View>
 
               {/* Step 3 */}
-              <Text style={[styles.uploadStepLabel, { marginTop: 18 }]}>Step 3 : Review and Post</Text>
+              <View style={[styles.stepBadgeRow, { marginTop: 16 }]}>
+                <View style={styles.stepBadge}><Text style={styles.stepBadgeText}>3</Text></View>
+                <Text style={styles.stepBadgeLabel}>Review &amp; Publish</Text>
+              </View>
 
               <TouchableOpacity
-                style={styles.publishBtn}
+                style={[styles.publishBtn, isUploading && { opacity: 0.6 }]}
                 activeOpacity={0.85}
-                onPress={async () => {
+                disabled={isUploading}
+                onPress={() => {
                   if (!uploadFile || !uploadTitle || !uploadCategory || !uploadYear) {
                     Alert.alert('Missing Info', 'Please complete all fields before publishing.');
                     return;
@@ -506,11 +688,13 @@ export default function SKPortalScreen() {
                     return;
                   }
 
-                  try {
-                    let fileUrl = null;
+                  // Show confirm modal first; actual upload runs on confirm
+                  openAlert('publish', uploadTitle, async () => {
+                    closeAlert();
+                    setIsUploading(true);
+                    try {
+                      let fileUrl = null;
 
-                    // Upload file to Supabase storage if selected
-                    if (uploadFile) {
                       const sanitizedName = uploadFile.name
                         .replace(/[^\w\s.-]/g, '')
                         .replace(/\s+/g, '_');
@@ -520,78 +704,126 @@ export default function SKPortalScreen() {
                       const blob = await response.blob();
 
                       const { data: uploadData, error: uploadError } = await supabase.storage
-                        .from('documents')
+                        .from('portal_documents')
                         .upload(fileName, blob, {
-                          contentType: uploadFile.type || 'application/octet-stream',
+                          contentType: uploadFile.mimeType || 'application/octet-stream',
                         });
 
                       if (uploadError) {
-                        Alert.alert('Error', 'Failed to upload file: ' + uploadError.message);
+                        Alert.alert('Upload Error', 'Failed to upload file: ' + uploadError.message);
+                        setIsUploading(false);
                         return;
                       }
 
                       const { data: urlData } = supabase.storage
-                        .from('documents')
+                        .from('portal_documents')
                         .getPublicUrl(fileName);
 
                       fileUrl = urlData.publicUrl;
+
+                      const { error: insertError } = await supabase
+                        .from('website_posts')
+                        .insert({
+                          barangay_id: barangayId,
+                          published_by: user.userId,
+                          title: uploadTitle.trim(),
+                          document_category: uploadCategory,
+                          year: parseInt(uploadYear) || new Date().getFullYear(),
+                          file_url: fileUrl,
+                          portal_status: 'published',
+                          published_at: new Date().toISOString(),
+                        });
+
+                      if (insertError) {
+                        Alert.alert('Error', 'Failed to publish: ' + insertError.message);
+                        setIsUploading(false);
+                        return;
+                      }
+
+                      await logActivity('Upload to website', `Published "${uploadTitle}" to the transparency portal`);
+
+                      const { data: freshDocs } = await supabase
+                        .from('website_posts')
+                        .select('*')
+                        .eq('barangay_id', barangayId)
+                        .eq('portal_status', 'published')
+                        .order('published_at', { ascending: false });
+
+                      if (freshDocs) {
+                        setPublishedDocs(freshDocs.map(doc => ({
+                          id: doc.website_post_id,
+                          title: doc.title || 'Untitled',
+                          category: doc.document_category || 'Unknown',
+                          year: doc.year?.toString() || toUtcDate(doc.published_at).toLocaleDateString('en-PH', { timeZone: 'Asia/Manila', year: 'numeric' }),
+                          uploadedAt: toPhilippineDate(doc.published_at, { month: 'long', day: 'numeric', year: 'numeric' }),
+                          fileUrl: doc.file_url,
+                        })));
+                      }
+
+                      const _title = uploadTitle;
+                      setUploadFile(null);
+                      setUploadTitle('');
+                      setUploadCategory('');
+                      setUploadYear('');
+                      setShowUploadModal(false);
+                      openSuccess('publish', _title);
+                    } catch (error) {
+                      console.error('Publish error:', error);
+                      Alert.alert('Error', 'An error occurred while publishing');
+                    } finally {
+                      setIsUploading(false);
                     }
-
-                    // Insert into website_posts
-                    const { error: insertError } = await supabase
-                      .from('website_posts')
-                      .insert({
-                        barangay_id: barangayId,
-                        published_by: user.userId,
-                        title: uploadTitle,
-                        document_category: uploadCategory,
-                        year: parseInt(uploadYear) || new Date().getFullYear(),
-                        file_url: fileUrl,
-                        portal_status: 'published',
-                        published_at: new Date().toISOString(),
-                      });
-
-                    if (insertError) {
-                      Alert.alert('Error', 'Failed to publish: ' + insertError.message);
-                      return;
-                    }
-
-                    // Log the activity
-                    await logActivity('Upload to website', `Published "${uploadTitle}" to the transparency portal`);
-
-                    Alert.alert('Published!', `"${uploadTitle}" has been published to the portal.`);
-                    setShowUploadModal(false);
-                  } catch (error) {
-                    console.error('Publish error:', error);
-                    Alert.alert('Error', 'An error occurred while publishing');
-                  }
+                  });
                 }}
               >
-                <Text style={styles.publishBtnText}>Publish to Transparency Portal</Text>
+                <Text style={styles.publishBtnText}>{isUploading ? 'Publishing…' : 'Publish to Transparency Portal'}</Text>
               </TouchableOpacity>
 
               <TouchableOpacity
                 style={styles.draftBtn}
                 activeOpacity={0.85}
-                onPress={() => {
-                  Alert.alert('Saved as Draft', 'Document saved as draft.');
-                  setShowUploadModal(false);
+                onPress={async () => {
+                  if (!uploadTitle || !barangayId || !user?.userId) {
+                    Alert.alert('Missing Info', 'Please add at least a title before saving as draft.');
+                    return;
+                  }
+                  try {
+                    const { error: insertError } = await supabase
+                      .from('website_posts')
+                      .insert({
+                        barangay_id: barangayId,
+                        published_by: user.userId,
+                        title: uploadTitle.trim(),
+                        document_category: uploadCategory || null,
+                        year: parseInt(uploadYear) || new Date().getFullYear(),
+                        file_url: null,
+                        portal_status: 'draft',
+                      });
+                    if (insertError) {
+                      Alert.alert('Error', 'Failed to save draft: ' + insertError.message);
+                      return;
+                    }
+                    openAlert('draft', uploadTitle, () => {
+                      closeAlert();
+                      setUploadFile(null); setUploadTitle(''); setUploadCategory(''); setUploadYear('');
+                      setShowUploadModal(false);
+                    });
+                  } catch (e) {
+                    Alert.alert('Error', 'An error occurred while saving');
+                  }
                 }}
               >
                 <Text style={styles.draftBtnText}>Save as Draft</Text>
               </TouchableOpacity>
-            </View>
-          </View>
 
-          {/* Footer */}
-          <View style={styles.uploadModalFooter}>
-            <TouchableOpacity
-              style={styles.cancelUploadBtn}
-              onPress={() => setShowUploadModal(false)}
-              activeOpacity={0.8}
-            >
-              <Text style={styles.cancelUploadText}>Cancel Upload</Text>
-            </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.cancelUploadInlineBtn}
+                onPress={() => setShowUploadModal(false)}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.cancelUploadInlineText}>Cancel</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </TouchableOpacity>
       </TouchableOpacity>
@@ -664,62 +896,38 @@ export default function SKPortalScreen() {
           {/* Filter row: Document | Year | Search | Upload */}
           <View style={styles.filterBarRow}>
             {/* Document filter dropdown */}
-            <View style={{ position: 'relative' }}>
-              <TouchableOpacity
-                style={styles.filterDropdownBtn}
-                onPress={() => { setShowDocDropdown(v => !v); setShowYearDropdown(false); }}
-                activeOpacity={0.8}
-              >
-                <Text style={styles.filterDropdownText} numberOfLines={1}>
-                  {docFilter === 'All Documents' ? 'Document' : docFilter.length > 20 ? docFilter.slice(0, 20) + '…' : docFilter}
-                </Text>
-                <Text style={styles.filterDropdownCaret}>▾</Text>
-              </TouchableOpacity>
-              {showDocDropdown && (
-                <View style={styles.filterDropdownPanel}>
-                  {DOCUMENT_FILTERS.map(opt => (
-                    <TouchableOpacity
-                      key={opt}
-                      style={[styles.filterDropdownItem, docFilter === opt && styles.filterDropdownItemActive]}
-                      onPress={() => { setDocFilter(opt); setShowDocDropdown(false); }}
-                    >
-                      <Text style={[styles.filterDropdownItemText, docFilter === opt && { color: COLORS.navy, fontWeight: '700' }]}>
-                        {opt}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              )}
-            </View>
+            <TouchableOpacity
+              ref={docFilterRef}
+              style={styles.filterDropdownBtn}
+              onPress={() => {
+                setShowYearDropdown(false);
+                if (showDocDropdown) { setShowDocDropdown(false); }
+                else { measureAndOpen(docFilterRef, setDocDropdownPos, setShowDocDropdown); }
+              }}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.filterDropdownText} numberOfLines={1}>
+                {docFilter === 'All Documents' ? 'Document' : docFilter.length > 20 ? docFilter.slice(0, 20) + '…' : docFilter}
+              </Text>
+              <Text style={styles.filterDropdownCaret}>▾</Text>
+            </TouchableOpacity>
 
             {/* Year filter dropdown */}
-            <View style={{ position: 'relative' }}>
-              <TouchableOpacity
-                style={styles.filterDropdownBtn}
-                onPress={() => { setShowYearDropdown(v => !v); setShowDocDropdown(false); }}
-                activeOpacity={0.8}
-              >
-                <Text style={styles.filterDropdownText}>
-                  {yearFilter === 'All Years' ? 'Year' : yearFilter}
-                </Text>
-                <Text style={styles.filterDropdownCaret}>▾</Text>
-              </TouchableOpacity>
-              {showYearDropdown && (
-                <View style={styles.filterDropdownPanel}>
-                  {YEAR_FILTERS.map(opt => (
-                    <TouchableOpacity
-                      key={opt}
-                      style={[styles.filterDropdownItem, yearFilter === opt && styles.filterDropdownItemActive]}
-                      onPress={() => { setYearFilter(opt); setShowYearDropdown(false); }}
-                    >
-                      <Text style={[styles.filterDropdownItemText, yearFilter === opt && { color: COLORS.navy, fontWeight: '700' }]}>
-                        {opt}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              )}
-            </View>
+            <TouchableOpacity
+              ref={yearFilterRef}
+              style={styles.filterDropdownBtn}
+              onPress={() => {
+                setShowDocDropdown(false);
+                if (showYearDropdown) { setShowYearDropdown(false); }
+                else { measureAndOpen(yearFilterRef, setYearDropdownPos, setShowYearDropdown); }
+              }}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.filterDropdownText}>
+                {yearFilter === 'All Years' ? 'Year' : yearFilter}
+              </Text>
+              <Text style={styles.filterDropdownCaret}>▾</Text>
+            </TouchableOpacity>
 
             {/* Search */}
             <View style={styles.searchBox}>
@@ -809,12 +1017,205 @@ export default function SKPortalScreen() {
     </ScrollView>
   );
 
+    // -- Success Modal --
+  const renderSuccessModal = () => {
+    const { visible, type, docTitle } = successModal;
+    const isPublish = type === 'publish';
+    const accentColor = isPublish ? '#1B6B32' : '#B71C1C';
+    const iconBg      = isPublish ? '#D4EDDA'  : '#FFCDD2';
+    const iconColor   = isPublish ? '#1B6B32'  : '#B71C1C';
+    const accentLight = isPublish ? '#EAFBEA'  : '#FFEBEE';
+    const heading     = isPublish ? 'Published Successfully!' : 'Unpublished Successfully';
+    const message     = isPublish
+      ? 'The document is now live on the Transparency Portal and visible to the public.'
+      : 'The document has been removed from the Transparency Portal.';
+
+    const renderIcon = () => (
+      <View style={[successStyles.iconRing, { borderColor: accentColor }]}>
+        <View style={[successStyles.iconCircle, { backgroundColor: iconBg }]}>
+          {isPublish ? (
+            <>
+              <View style={[successStyles.checkLong,  { backgroundColor: iconColor }]} />
+              <View style={[successStyles.checkShort, { backgroundColor: iconColor }]} />
+            </>
+          ) : (
+            <>
+              <View style={[successStyles.xBar1, { backgroundColor: iconColor }]} />
+              <View style={[successStyles.xBar2, { backgroundColor: iconColor }]} />
+            </>
+          )}
+        </View>
+      </View>
+    );
+
+    return (
+      <Modal visible={visible} transparent animationType="fade" onRequestClose={closeSuccess}>
+        <TouchableOpacity style={successStyles.overlay} activeOpacity={1} onPress={closeSuccess}>
+          <TouchableOpacity style={successStyles.card} activeOpacity={1} onPress={() => {}}>
+            <View style={[successStyles.topBar, { backgroundColor: accentColor }]} />
+            <View style={successStyles.body}>
+              <View style={{ marginBottom: 16 }}>{renderIcon()}</View>
+              <Text style={successStyles.eyebrow}>TRANSPARENCY PORTAL</Text>
+              <Text style={[successStyles.heading, { color: accentColor }]}>{heading}</Text>
+              <View style={[successStyles.divider, { backgroundColor: accentColor + '33' }]} />
+              <Text style={successStyles.message}>{message}</Text>
+              {!!docTitle && (
+                <View style={[successStyles.docChip, { backgroundColor: accentLight }]}>
+                  <View style={[successStyles.docChipDot, { backgroundColor: accentColor }]} />
+                  <Text style={[successStyles.docChipText, { color: accentColor }]} numberOfLines={2}>
+                    {docTitle}
+                  </Text>
+                </View>
+              )}
+              <TouchableOpacity
+                style={[successStyles.doneBtn, { backgroundColor: accentColor }]}
+                activeOpacity={0.85}
+                onPress={closeSuccess}
+              >
+                <Text style={successStyles.doneBtnText}>Done</Text>
+              </TouchableOpacity>
+            </View>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
+    );
+  };
+
+// ── Alert Modal ──
+  const ALERT_VARIANTS = {
+    publish:   { accentColor: '#1B6B32', accentLight: '#EAFBEA', iconBg: '#D4EDDA', iconColor: '#1B6B32', eyebrow: 'TRANSPARENCY PORTAL', confirmLabel: 'Publish Now',    confirmStyle: 'primary' },
+    draft:     { accentColor: COLORS.navy, accentLight: '#EAF0FB', iconBg: '#D6E4F7', iconColor: COLORS.navy, eyebrow: 'TRANSPARENCY PORTAL', confirmLabel: 'Save as Draft', confirmStyle: 'outline' },
+    unpublish: { accentColor: '#B71C1C', accentLight: '#FFEBEE', iconBg: '#FFCDD2', iconColor: '#B71C1C', eyebrow: 'TRANSPARENCY PORTAL', confirmLabel: 'Unpublish',      confirmStyle: 'danger'  },
+  };
+  const ALERT_DEFAULT_COPY = {
+    publish:   { title: 'Publish Document',   message: 'This document will be visible to the public on the Transparency Portal.' },
+    draft:     { title: 'Save as Draft',      message: 'Your document will be saved privately. You can publish it anytime.' },
+    unpublish: { title: 'Unpublish Document', message: 'This will remove the document from the Transparency Portal. Residents will no longer be able to view it.' },
+  };
+
+  const renderAlertModal = () => {
+    const { visible, type, docTitle, onConfirm } = alertModal;
+    const cfg  = ALERT_VARIANTS[type]      || ALERT_VARIANTS.publish;
+    const copy = ALERT_DEFAULT_COPY[type]  || ALERT_DEFAULT_COPY.publish;
+
+    const confirmBtnStyle = cfg.confirmStyle === 'outline'
+      ? { backgroundColor: COLORS.white, borderWidth: 1.5, borderColor: cfg.accentColor }
+      : { backgroundColor: cfg.accentColor };
+    const confirmTextColor = cfg.confirmStyle === 'outline' ? cfg.accentColor : COLORS.white;
+
+    const renderAlertIcon = () => {
+      if (type === 'publish') return (
+        <View style={[alertStyles.iconCircle, { backgroundColor: cfg.iconBg }]}>
+          <View style={[alertStyles.checkLong,  { backgroundColor: cfg.iconColor }]} />
+          <View style={[alertStyles.checkShort, { backgroundColor: cfg.iconColor }]} />
+        </View>
+      );
+      if (type === 'draft') return (
+        <View style={[alertStyles.iconCircle, { backgroundColor: cfg.iconBg }]}>
+          {[0,1,2].map(i => (
+            <View key={i} style={[alertStyles.draftLine, { backgroundColor: cfg.iconColor, marginTop: i === 0 ? 0 : 5 }]} />
+          ))}
+        </View>
+      );
+      if (type === 'unpublish') return (
+        <View style={[alertStyles.iconCircle, { backgroundColor: cfg.iconBg }]}>
+          <View style={[alertStyles.xBar1, { backgroundColor: cfg.iconColor }]} />
+          <View style={[alertStyles.xBar2, { backgroundColor: cfg.iconColor }]} />
+        </View>
+      );
+      return null;
+    };
+
+    return (
+      <Modal visible={visible} transparent animationType="fade" onRequestClose={closeAlert}>
+        <TouchableOpacity style={alertStyles.overlay} activeOpacity={1} onPress={closeAlert}>
+          <TouchableOpacity style={alertStyles.card} activeOpacity={1} onPress={() => {}}>
+            {/* Colored top stripe */}
+            <View style={[alertStyles.topBar, { backgroundColor: cfg.accentColor }]} />
+
+            <View style={alertStyles.body}>
+              {/* Icon */}
+              <View style={{ marginBottom: 16 }}>{renderAlertIcon()}</View>
+
+              {/* Eyebrow */}
+              <Text style={alertStyles.eyebrow}>{cfg.eyebrow}</Text>
+
+              {/* Title */}
+              <Text style={alertStyles.title}>{copy.title}</Text>
+
+              {/* Divider */}
+              <View style={alertStyles.divider} />
+
+              {/* Message */}
+              <Text style={alertStyles.message}>{copy.message}</Text>
+
+              {/* Doc name chip */}
+              {!!docTitle && (
+                <View style={[alertStyles.docChip, { backgroundColor: cfg.accentLight }]}>
+                  <View style={[alertStyles.docChipDot, { backgroundColor: cfg.accentColor }]} />
+                  <Text style={[alertStyles.docChipText, { color: cfg.accentColor }]} numberOfLines={2}>
+                    {docTitle}
+                  </Text>
+                </View>
+              )}
+
+              {/* Confirm */}
+              <TouchableOpacity
+                style={[alertStyles.confirmBtn, confirmBtnStyle]}
+                activeOpacity={0.85}
+                onPress={onConfirm}
+              >
+                <Text style={[alertStyles.confirmBtnText, { color: confirmTextColor }]}>
+                  {cfg.confirmLabel}
+                </Text>
+              </TouchableOpacity>
+
+              {/* Cancel */}
+              <TouchableOpacity style={alertStyles.cancelBtn} activeOpacity={0.7} onPress={closeAlert}>
+                <Text style={alertStyles.cancelBtnText}>Cancel</Text>
+              </TouchableOpacity>
+            </View>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
+    );
+  };
+
+  // ── Floating Dropdown Modals (render above everything incl. other Modals) ──
+  const renderFloatingDropdown = (visible, setVisible, pos, options, selectedValue, onSelect, minWidth = 200) => (
+    <Modal visible={visible} transparent animationType="none" onRequestClose={() => setVisible(false)}>
+      <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={() => setVisible(false)}>
+        <View style={[styles.floatingDropdown, pos && { top: pos.y, left: pos.x, minWidth: Math.max(pos.width || 0, minWidth) }]}>
+          {options.map(opt => (
+            <TouchableOpacity
+              key={opt}
+              style={[styles.filterDropdownItem, selectedValue === opt && styles.filterDropdownItemActive]}
+              onPress={() => { onSelect(opt); setVisible(false); }}
+            >
+              <Text style={[styles.filterDropdownItemText, selectedValue === opt && { color: COLORS.navy, fontWeight: '700' }]} numberOfLines={2}>
+                {opt}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      </TouchableOpacity>
+    </Modal>
+  );
+
   return (
     <SafeAreaView style={styles.safe}>
       <StatusBar barStyle="light-content" backgroundColor={COLORS.navy} />
 
       {renderDocModal()}
       {renderUploadModal()}
+      {renderAlertModal()}
+      {renderSuccessModal()}
+
+      {/* Floating dropdowns — always on top */}
+      {renderFloatingDropdown(showDocDropdown, setShowDocDropdown, docDropdownPos, DOCUMENT_FILTERS, docFilter, setDocFilter, 220)}
+      {renderFloatingDropdown(showYearDropdown, setShowYearDropdown, yearDropdownPos, YEAR_FILTERS, yearFilter, setYearFilter, 100)}
+      {renderFloatingDropdown(showUploadCatDropdown, setShowUploadCatDropdown, uploadCatDropdownPos, UPLOAD_CATEGORIES, uploadCategory, setUploadCategory, 240)}
+      {renderFloatingDropdown(showUploadYearDropdown, setShowUploadYearDropdown, uploadYearDropdownPos, UPLOAD_YEARS, uploadYear, setUploadYear, 90)}
 
       <View style={styles.layout}>
         {isMobile && sidebarVisible && (
@@ -993,6 +1394,21 @@ const styles = StyleSheet.create({
   filterDropdownItemActive: { backgroundColor: COLORS.offWhite },
   filterDropdownItemText: { fontSize: 13, color: COLORS.darkText },
 
+  // Floating dropdown overlay (always on top)
+  floatingDropdown: {
+    position: 'absolute',
+    backgroundColor: COLORS.white,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: COLORS.lightGray,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 10,
+    elevation: 30,
+    zIndex: 9999,
+  },
+
   searchBox: {
     flexDirection: 'row', alignItems: 'center',
     backgroundColor: COLORS.white, borderRadius: 20,
@@ -1120,14 +1536,14 @@ const styles = StyleSheet.create({
   // ── Upload Modal ──
   uploadModalCard: {
     backgroundColor: COLORS.white,
-    borderRadius: 14,
+    borderRadius: 16,
     width: '95%',
-    maxWidth: 620,
+    maxWidth: 640,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.22,
-    shadowRadius: 24,
-    elevation: 16,
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.2,
+    shadowRadius: 28,
+    elevation: 20,
     overflow: 'hidden',
   },
   uploadModalHeader: {
@@ -1135,132 +1551,176 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 18,
-    paddingVertical: 14,
+    paddingHorizontal: 22,
+    paddingVertical: 16,
+  },
+  uploadModalHeaderEyebrow: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: 'rgba(255,255,255,0.55)',
+    letterSpacing: 1.2,
+    marginBottom: 2,
   },
   uploadModalHeaderText: {
-    fontSize: 13,
+    fontSize: 16,
     fontWeight: '800',
     color: COLORS.white,
-    letterSpacing: 0.4,
-    flex: 1,
+    letterSpacing: 0.2,
   },
   uploadModalClose: {
-    width: 28, height: 28, borderRadius: 14,
-    backgroundColor: 'rgba(255,255,255,0.2)',
+    width: 30, height: 30, borderRadius: 15,
+    backgroundColor: 'rgba(255,255,255,0.15)',
     alignItems: 'center', justifyContent: 'center',
     marginLeft: 10,
   },
   uploadModalCloseText: { fontSize: 13, fontWeight: '800', color: COLORS.white },
-
+  uploadModalDivider: { height: 1, backgroundColor: COLORS.lightGray },
   uploadModalBody: {
     flexDirection: 'row',
-    padding: 18,
-    gap: 18,
+    padding: 22,
+    gap: 0,
   },
   uploadModalLeft: {
     flex: 1,
-    alignItems: 'center',
+    paddingRight: 20,
+  },
+  uploadModalSeparator: {
+    width: 1,
+    backgroundColor: COLORS.lightGray,
+    marginVertical: 4,
   },
   uploadModalRight: {
-    flex: 1.4,
+    flex: 1.5,
+    paddingLeft: 20,
   },
 
-  uploadStepLabel: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: COLORS.darkText,
-    marginBottom: 10,
-    alignSelf: 'flex-start',
+  // Step indicator
+  stepBadgeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 14,
   },
+  stepBadge: {
+    width: 22, height: 22, borderRadius: 11,
+    backgroundColor: COLORS.navy,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  stepBadgeText: { fontSize: 11, fontWeight: '800', color: COLORS.white },
+  stepBadgeLabel: { fontSize: 12, fontWeight: '700', color: COLORS.darkText, letterSpacing: 0.2 },
 
+  // Drop zone
   dropZone: {
     width: '100%',
     borderWidth: 1.5,
-    borderColor: COLORS.navy,
-    borderRadius: 8,
+    borderColor: '#C5D3E8',
+    borderRadius: 10,
+    borderStyle: 'dashed',
     alignItems: 'center',
-    paddingVertical: 18,
-    paddingHorizontal: 10,
-    backgroundColor: '#F0F4FA',
-    marginBottom: 10,
-  },
-  dropZoneActive: {
-    borderColor: COLORS.gold,
-    backgroundColor: '#FFFDF0',
-  },
-  dropZoneTopLabel: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: COLORS.navy,
-    marginBottom: 10,
+    paddingVertical: 28,
+    paddingHorizontal: 12,
+    backgroundColor: '#F5F8FF',
+    marginBottom: 12,
   },
   dropZoneIconWrap: {
     alignItems: 'center',
-    marginBottom: 10,
+    marginBottom: 12,
+    position: 'relative',
   },
-  uploadArrowBody: {
-    width: 3,
-    height: 22,
+  cloudBase: {
+    width: 34, height: 18,
+    backgroundColor: '#C5D3E8',
+    borderRadius: 9,
+    marginTop: 10,
+  },
+  cloudTop: {
+    width: 18, height: 18,
+    backgroundColor: '#C5D3E8',
+    borderRadius: 9,
+    position: 'absolute',
+    top: 0, left: 8,
+  },
+  cloudArrowShaft: {
+    width: 2, height: 14,
     backgroundColor: COLORS.navy,
-    borderRadius: 2,
+    borderRadius: 1,
+    marginTop: 4,
   },
-  uploadArrowHead: {
-    width: 0,
-    height: 0,
-    borderLeftWidth: 8,
-    borderRightWidth: 8,
-    borderBottomWidth: 12,
-    borderLeftColor: 'transparent',
-    borderRightColor: 'transparent',
-    borderBottomColor: COLORS.navy,
-    marginBottom: -22,
-    marginTop: -34,
+  cloudArrowHead: {
+    width: 0, height: 0,
+    borderLeftWidth: 6, borderRightWidth: 6, borderTopWidth: 8,
+    borderLeftColor: 'transparent', borderRightColor: 'transparent',
+    borderTopColor: COLORS.navy,
+    marginTop: 1,
+  },
+  dropZoneMainLabel: {
+    fontSize: 13, fontWeight: '700', color: COLORS.navy, marginBottom: 4,
   },
   dropZoneSubLabel: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: COLORS.navy,
-    textAlign: 'center',
-    marginTop: 10,
-    lineHeight: 17,
-    letterSpacing: 0.3,
-  },
-  dropZoneFileName: {
-    fontSize: 11,
-    color: COLORS.navy,
-    textAlign: 'center',
-    fontWeight: '600',
-    marginTop: 6,
+    fontSize: 11, color: COLORS.subText, textAlign: 'center',
   },
 
-  selectFileBtn: {
+  // Attached file card
+  fileCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
     borderWidth: 1,
-    borderColor: COLORS.midGray,
-    borderRadius: 6,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    backgroundColor: COLORS.white,
-    alignSelf: 'center',
+    borderColor: '#C5D3E8',
+    borderRadius: 10,
+    padding: 12,
+    backgroundColor: '#F5F8FF',
+    gap: 10,
+    marginBottom: 10,
   },
-  selectFileBtnText: {
-    fontSize: 12,
-    color: COLORS.darkText,
-    fontWeight: '500',
+  fileExtBadge: {
+    width: 40, height: 44,
+    backgroundColor: COLORS.navy,
+    borderRadius: 6,
+    alignItems: 'center', justifyContent: 'center',
+    flexShrink: 0,
+  },
+  fileExtText: {
+    fontSize: 9, fontWeight: '800', color: COLORS.white, letterSpacing: 0.5,
+  },
+  fileCardInfo: { flex: 1 },
+  fileCardName: {
+    fontSize: 12, fontWeight: '600', color: COLORS.darkText, lineHeight: 17,
+  },
+  fileCardSize: {
+    fontSize: 11, color: COLORS.subText, marginTop: 2,
+  },
+  removeFileBtn: {
+    width: 24, height: 24, borderRadius: 12,
+    backgroundColor: '#FFECEC',
+    borderWidth: 1, borderColor: '#F5C6C6',
+    alignItems: 'center', justifyContent: 'center',
+    flexShrink: 0,
+  },
+  removeFileBtnText: {
+    fontSize: 10, color: '#C0392B', fontWeight: '800',
+  },
+  replaceFileLink: {
+    alignSelf: 'center',
+    paddingVertical: 4,
+  },
+  replaceFileLinkText: {
+    fontSize: 11, color: COLORS.navy, fontWeight: '600',
   },
 
   uploadFieldLabel: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '600',
-    color: COLORS.darkText,
+    color: COLORS.subText,
     marginBottom: 5,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
   uploadTextInput: {
     borderWidth: 1,
     borderColor: COLORS.lightGray,
-    borderRadius: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
     fontSize: 13,
     color: COLORS.darkText,
     backgroundColor: COLORS.white,
@@ -1269,15 +1729,16 @@ const styles = StyleSheet.create({
   uploadRowFields: {
     flexDirection: 'row',
     alignItems: 'flex-start',
+    marginBottom: 4,
   },
   uploadDropdownBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     borderWidth: 1,
     borderColor: COLORS.lightGray,
-    borderRadius: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
     backgroundColor: COLORS.white,
   },
   uploadDropdownText: {
@@ -1292,11 +1753,14 @@ const styles = StyleSheet.create({
   },
 
   publishBtn: {
-    backgroundColor: '#2E7D32',
+    backgroundColor: '#1B6B32',
     borderRadius: 8,
     paddingVertical: 12,
     alignItems: 'center',
-    marginBottom: 10,
+    marginBottom: 8,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 6,
   },
   publishBtnText: {
     fontSize: 13,
@@ -1305,36 +1769,326 @@ const styles = StyleSheet.create({
     letterSpacing: 0.3,
   },
   draftBtn: {
-    backgroundColor: COLORS.navy,
+    backgroundColor: COLORS.white,
+    borderWidth: 1.5,
+    borderColor: COLORS.navy,
     borderRadius: 8,
-    paddingVertical: 12,
+    paddingVertical: 11,
     alignItems: 'center',
+    marginBottom: 8,
   },
   draftBtnText: {
     fontSize: 13,
     fontWeight: '700',
-    color: COLORS.white,
+    color: COLORS.navy,
+    letterSpacing: 0.2,
+  },
+  cancelUploadInlineBtn: {
+    alignItems: 'center',
+    paddingVertical: 8,
+  },
+  cancelUploadInlineText: {
+    fontSize: 12,
+    color: COLORS.subText,
+    fontWeight: '500',
+  },
+});
+
+// ─── ALERT MODAL STYLES ───────────────────────────────────────────────────────
+const alertStyles = StyleSheet.create({
+  overlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  card: {
+    backgroundColor: COLORS.white,
+    borderRadius: 18,
+    width: '100%',
+    maxWidth: 360,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.22,
+    shadowRadius: 24,
+    elevation: 18,
+  },
+  topBar: {
+    height: 5,
+    width: '100%',
+  },
+  body: {
+    paddingHorizontal: 24,
+    paddingTop: 28,
+    paddingBottom: 24,
+    alignItems: 'center',
+  },
+  // ── Icon circle ──
+  iconCircle: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  // Publish checkmark
+  checkLong: {
+    position: 'absolute',
+    width: 20,
+    height: 2.5,
+    borderRadius: 2,
+    transform: [{ rotate: '-45deg' }, { translateX: 2 }, { translateY: -2 }],
+  },
+  checkShort: {
+    position: 'absolute',
+    width: 10,
+    height: 2.5,
+    borderRadius: 2,
+    transform: [{ rotate: '45deg' }, { translateX: -5 }, { translateY: 3 }],
+  },
+  // Draft lines
+  draftLine: {
+    width: 22,
+    height: 2.5,
+    borderRadius: 2,
+  },
+  // Unpublish X
+  xBar1: {
+    position: 'absolute',
+    width: 22,
+    height: 2.5,
+    borderRadius: 2,
+    transform: [{ rotate: '45deg' }],
+  },
+  xBar2: {
+    position: 'absolute',
+    width: 22,
+    height: 2.5,
+    borderRadius: 2,
+    transform: [{ rotate: '-45deg' }],
+  },
+  // ── Text ──
+  eyebrow: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: COLORS.midGray,
+    letterSpacing: 1.6,
+    textTransform: 'uppercase',
+    marginBottom: 6,
+  },
+  title: {
+    fontSize: 17,
+    fontWeight: '800',
+    color: COLORS.darkText,
+    textAlign: 'center',
+    letterSpacing: 0.2,
+    marginBottom: 14,
+  },
+  divider: {
+    width: 40,
+    height: 2,
+    backgroundColor: COLORS.lightGray,
+    borderRadius: 2,
+    marginBottom: 14,
+  },
+  message: {
+    fontSize: 13,
+    color: COLORS.subText,
+    textAlign: 'center',
+    lineHeight: 20,
+    marginBottom: 16,
+  },
+  // Doc name chip
+  docChip: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    width: '100%',
+    marginBottom: 20,
+  },
+  docChipDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    marginTop: 4,
+    flexShrink: 0,
+  },
+  docChipText: {
+    flex: 1,
+    fontSize: 12,
+    fontWeight: '700',
+    lineHeight: 18,
+  },
+  // Confirm button
+  confirmBtn: {
+    width: '100%',
+    paddingVertical: 13,
+    borderRadius: 10,
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  confirmBtnText: {
+    fontSize: 14,
+    fontWeight: '800',
     letterSpacing: 0.3,
   },
+  // Cancel button
+  cancelBtn: {
+    width: '100%',
+    paddingVertical: 10,
+    borderRadius: 10,
+    alignItems: 'center',
+    backgroundColor: COLORS.offWhite,
+  },
+  cancelBtnText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: COLORS.subText,
+  },
+});
 
-  uploadModalFooter: {
-    borderTopWidth: 1,
-    borderTopColor: COLORS.lightGray,
-    paddingHorizontal: 18,
-    paddingVertical: 12,
-    alignItems: 'flex-end',
+// --- SUCCESS MODAL STYLES ---
+const successStyles = StyleSheet.create({
+  overlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
   },
-  cancelUploadBtn: {
-    borderWidth: 1,
-    borderColor: COLORS.midGray,
-    borderRadius: 6,
-    paddingHorizontal: 16,
-    paddingVertical: 7,
-    backgroundColor: COLORS.white,
+  card: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    width: '100%',
+    maxWidth: 340,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 14 },
+    shadowOpacity: 0.22,
+    shadowRadius: 28,
+    elevation: 20,
   },
-  cancelUploadText: {
+  topBar: {
+    height: 5,
+    width: '100%',
+  },
+  body: {
+    paddingHorizontal: 24,
+    paddingTop: 32,
+    paddingBottom: 28,
+    alignItems: 'center',
+  },
+  // Icon with outer ring
+  iconRing: {
+    width: 76,
+    height: 76,
+    borderRadius: 38,
+    borderWidth: 2,
+    borderStyle: 'dashed',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  iconCircle: {
+    width: 58,
+    height: 58,
+    borderRadius: 29,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  checkLong: {
+    position: 'absolute',
+    width: 22,
+    height: 2.5,
+    borderRadius: 2,
+    transform: [{ rotate: '-45deg' }, { translateX: 2 }, { translateY: -2 }],
+  },
+  checkShort: {
+    position: 'absolute',
+    width: 11,
+    height: 2.5,
+    borderRadius: 2,
+    transform: [{ rotate: '45deg' }, { translateX: -5 }, { translateY: 3 }],
+  },
+  xBar1: {
+    position: 'absolute',
+    width: 22,
+    height: 2.5,
+    borderRadius: 2,
+    transform: [{ rotate: '45deg' }],
+  },
+  xBar2: {
+    position: 'absolute',
+    width: 22,
+    height: 2.5,
+    borderRadius: 2,
+    transform: [{ rotate: '-45deg' }],
+  },
+  eyebrow: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: '#B0B0B0',
+    letterSpacing: 1.6,
+    textTransform: 'uppercase',
+    marginBottom: 8,
+  },
+  heading: {
+    fontSize: 18,
+    fontWeight: '900',
+    textAlign: 'center',
+    letterSpacing: 0.2,
+    marginBottom: 12,
+  },
+  divider: {
+    width: 48,
+    height: 2,
+    borderRadius: 2,
+    marginBottom: 12,
+  },
+  message: {
+    fontSize: 13,
+    color: '#666666',
+    textAlign: 'center',
+    lineHeight: 20,
+    marginBottom: 16,
+  },
+  docChip: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    width: '100%',
+    marginBottom: 22,
+  },
+  docChipDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    marginTop: 4,
+    flexShrink: 0,
+  },
+  docChipText: {
+    flex: 1,
     fontSize: 12,
-    color: COLORS.darkText,
-    fontWeight: '500',
+    fontWeight: '700',
+    lineHeight: 18,
+  },
+  doneBtn: {
+    width: '100%',
+    paddingVertical: 13,
+    borderRadius: 10,
+    alignItems: 'center',
+  },
+  doneBtnText: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    letterSpacing: 0.3,
   },
 });

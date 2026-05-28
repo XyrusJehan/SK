@@ -13,6 +13,19 @@ import { DocumentScannerButton } from './scanner/DocumentScannerButton';
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const isMobile = SCREEN_WIDTH < 768;
 
+// Supabase timestamps have no 'Z' suffix — JS mis-parses them as local time.
+// toUtcDate forces correct UTC parsing before PHT display.
+const toUtcDate = (dateStr) => {
+  if (!dateStr) return new Date();
+  const iso = String(dateStr).replace(' ', 'T').replace(/Z?$/, 'Z');
+  return new Date(iso);
+};
+
+const toPhilippineDate = (dateStr, options) => {
+  if (!dateStr) return '';
+  return toUtcDate(dateStr).toLocaleDateString('en-PH', { timeZone: 'Asia/Manila', ...options });
+};
+
 // ─── COLORS ───────────────────────────────────────────────────────────────────
 const COLORS = {
   navy:      '#133E75',
@@ -274,8 +287,7 @@ export default function SKDocumentListScreen() {
   }, [allDocs, searchText, sortMode]);
 
   const formatDate = (dateStr) => {
-    const d = new Date(dateStr);
-    return d.toLocaleDateString('en-PH', { year: 'numeric', month: 'short', day: 'numeric' });
+    return toPhilippineDate(dateStr, { year: 'numeric', month: 'short', day: 'numeric' });
   };
 
   const handleNavPress = (tab) => {

@@ -19,6 +19,29 @@ import { supabase } from '../../utils/supabase';
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const isMobile = SCREEN_WIDTH < 768;
 
+// Supabase timestamps have no 'Z' suffix — JS mis-parses them as local time.
+// toUtcDate forces correct UTC parsing before PHT display.
+const toUtcDate = (dateStr) => {
+  if (!dateStr) return new Date();
+  if (dateStr instanceof Date) return dateStr;
+  const iso = String(dateStr).replace(' ', 'T').replace(/Z?$/, 'Z');
+  return new Date(iso);
+};
+
+const toPhilippineDate = (dateStr, options) => {
+  if (!dateStr) return '';
+  const d = toUtcDate(dateStr);
+  if (isNaN(d.getTime())) return '';
+  return d.toLocaleDateString('en-PH', { timeZone: 'Asia/Manila', ...options });
+};
+
+const toPhilippineTime = (dateStr, options) => {
+  if (!dateStr) return '';
+  const d = toUtcDate(dateStr);
+  if (isNaN(d.getTime())) return '';
+  return d.toLocaleTimeString('en-PH', { timeZone: 'Asia/Manila', ...options });
+};
+
 // ─── NAV TABS ─────────────────────────────────────────────────────────────────
 const NAV_TABS = ['Dashboard', 'Documents', 'Monitor', 'Barangay', 'Logs'];
 
@@ -27,8 +50,8 @@ const COLORS = {
   navy:       '#133E75',
   navyDark:   '#0D2B52',
   white:      '#FFFFFF',
-  offWhite:   '#F5F7FA',
-  lightGray:  '#E8ECF0',
+  offWhite:   '#F7F5F2',
+  lightGray:  '#ECECEC',
   midGray:    '#B0B8C4',
   darkText:   '#1A2332',
   subText:    '#6B7A8F',
@@ -43,7 +66,7 @@ const COLORS = {
   yellow:     '#EAB308',
   yellowLight:'#FEF9C3',
   cardBg:     '#FFFFFF',
-  borderColor:'#E2E8F0',
+  borderColor:'#E0DDD9',
 };
 
 // ─── MOCK / STATIC DATA ───────────────────────────────────────────────────────
@@ -70,6 +93,14 @@ const QUICK_ACTIONS = [
 ];
 
 // ─── ICON COMPONENTS ──────────────────────────────────────────────────────────
+const BellIcon = ({ hasNotif }) => (
+  <View style={ic.bellWrapper}>
+    <View style={ic.bellBody} />
+    <View style={ic.bellBottom} />
+    {hasNotif && <View style={ic.bellDot} />}
+  </View>
+);
+
 const MenuIcon = () => (
   <View style={ic.menuIconContainer}>
     <View style={ic.menuLine} />
@@ -81,6 +112,10 @@ const MenuIcon = () => (
 const ic = StyleSheet.create({
   menuIconContainer: { width: 20, height: 16, justifyContent: 'space-between' },
   menuLine: { width: 20, height: 2, backgroundColor: COLORS.navy, borderRadius: 1 },
+  bellWrapper: { width: 20, height: 22, alignItems: 'center' },
+  bellBody: { width: 14, height: 12, borderRadius: 7, borderWidth: 2, borderColor: '#8B0000', marginTop: 4 },
+  bellBottom: { width: 8, height: 4, borderBottomLeftRadius: 4, borderBottomRightRadius: 4, backgroundColor: '#8B0000', marginTop: -1 },
+  bellDot: { position: 'absolute', top: 0, right: 1, width: 7, height: 7, borderRadius: 4, backgroundColor: '#E8C547', borderWidth: 1.5, borderColor: COLORS.white },
 });
 
 // ─── DONUT CHART (SVG-free, CSS approximation) ────────────────────────────────
@@ -121,6 +156,8 @@ export default function LYDOHomeScreen() {
   const [forRevision, setForRevision] = useState(0);
   const [approved, setApproved] = useState(0);
   const [missingDocs, setMissingDocs] = useState(0);
+  const [currentTime, setCurrentTime] = useState('');
+  const [notifCount] = useState(2);
 
   useEffect(() => {
     if (user && user.role !== 'lydo') router.replace('/');
@@ -128,6 +165,23 @@ export default function LYDOHomeScreen() {
 
   useEffect(() => {
     setActiveTab('Dashboard');
+  }, []);
+
+  useEffect(() => {
+    const tick = () => {
+      const now = new Date();
+      setCurrentTime(
+        now.toLocaleTimeString('en-PH', {
+          timeZone: 'Asia/Manila',
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit',
+        })
+      );
+    };
+    tick();
+    const interval = setInterval(tick, 1000);
+    return () => clearInterval(interval);
   }, []);
 
   useEffect(() => {
@@ -186,13 +240,12 @@ export default function LYDOHomeScreen() {
               icon = '↩';
             }
             const date = doc.submitted_at || doc.saved_at || doc.created_at;
-            const dateObj = date ? new Date(date) : new Date();
             return {
               id: doc.document_id,
               label: actionLabel,
               barangay: doc.barangay?.barangay_name || 'Unknown Barangay',
-              time: dateObj.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
-              date: dateObj.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }),
+              time: toPhilippineTime(date, { hour: '2-digit', minute: '2-digit' }),
+              date: toPhilippineDate(date, { month: 'long', day: 'numeric', year: 'numeric' }),
               type: actionType,
               icon,
             };
@@ -206,7 +259,7 @@ export default function LYDOHomeScreen() {
     fetchData();
   }, []);
 
-  const today = new Date().toLocaleDateString('en-US', { weekday: undefined, month: 'long', day: 'numeric', year: 'numeric' });
+  const today = toPhilippineDate(new Date(), { weekday: undefined, month: 'long', day: 'numeric', year: 'numeric' });
 
   const handleNav = (tab) => {
     setActiveTab(tab);
@@ -282,17 +335,48 @@ export default function LYDOHomeScreen() {
                 <MenuIcon />
               </TouchableOpacity>
               <Text style={styles.mobileTitle}>LYDO Dashboard</Text>
-              <View style={{ width: 40 }} />
+              <TouchableOpacity style={styles.bellBtn} activeOpacity={0.7}>
+                <BellIcon hasNotif={notifCount > 0} />
+                {notifCount > 0 && (
+                  <View style={styles.notifBadge}>
+                    <Text style={styles.notifBadgeText}>{notifCount}</Text>
+                  </View>
+                )}
+              </TouchableOpacity>
             </View>
           )}
 
           {/* ── PAGE HEADER ── */}
-          <View style={styles.pageHeader}>
+          <View style={styles.header}>
             <View>
               <Text style={styles.headerSub}>SANGGUNIANG KABATAAN FEDERATION</Text>
               <Text style={styles.headerTitle}>RIZAL, LAGUNA</Text>
             </View>
-            <Text style={styles.todayText}>Today: {today}</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+              <View style={styles.datetimeCard}>
+                <View style={styles.datetimeRow}>
+                  <View style={styles.datetimeDivider} />
+                  <View style={styles.datetimeBlock}>
+                    <Text style={styles.datetimeLabel}>DATE</Text>
+                    <Text style={styles.datetimeValue}>{today}</Text>
+                  </View>
+                  <View style={styles.datetimeSeparator} />
+                  <View style={[styles.datetimeDivider, { backgroundColor: '#22C55E' }]} />
+                  <View style={styles.datetimeBlock}>
+                    <Text style={styles.datetimeLabel}>TIME (PHT)</Text>
+                    <Text style={[styles.datetimeValue, styles.datetimeTime]}>{currentTime}</Text>
+                  </View>
+                </View>
+              </View>
+              <TouchableOpacity style={styles.bellBtn} activeOpacity={0.7}>
+                <BellIcon hasNotif={notifCount > 0} />
+                {notifCount > 0 && (
+                  <View style={styles.notifBadge}>
+                    <Text style={styles.notifBadgeText}>{notifCount}</Text>
+                  </View>
+                )}
+              </TouchableOpacity>
+            </View>
           </View>
 
           {/* ── STAT CARDS ROW ── */}
@@ -430,8 +514,8 @@ export default function LYDOHomeScreen() {
                       <Text style={styles.activityMeta}>{act.barangay}</Text>
                     </View>
                     <View style={styles.activityTime}>
-                      <Text style={styles.activityTimeText}>{act.time}</Text>
                       <Text style={styles.activityDateText}>{act.date}</Text>
+                      <Text style={styles.activityTimeText}>{act.time}</Text>
                     </View>
                   </View>
                 ))}
@@ -518,7 +602,7 @@ const styles = StyleSheet.create({
   // Main
   main: { flex: 1, backgroundColor: COLORS.offWhite, borderTopLeftRadius: 20 },
   mainMobile: { borderTopLeftRadius: 0 },
-  mainContent: { padding: isMobile ? 14 : 24 },
+  mainContent: { padding: 20, paddingBottom: 40 },
 
   // Mobile Header
   mobileHeader: {
@@ -532,22 +616,85 @@ const styles = StyleSheet.create({
   },
   mobileTitle: { fontSize: 18, fontWeight: '800', color: COLORS.darkText },
 
-  // Page Header
-  pageHeader: {
-    flexDirection: isMobile ? 'column' : 'row',
-    alignItems: isMobile ? 'flex-start' : 'flex-end',
-    justifyContent: 'space-between',
-    marginBottom: 20,
+  // Desktop Header
+  header: {
+    flexDirection: 'row', alignItems: 'flex-start',
+    justifyContent: 'space-between', marginBottom: 16,
   },
   headerSub: {
-    fontSize: 11, fontWeight: '600', color: COLORS.subText,
-    letterSpacing: 1.5, textTransform: 'uppercase', marginBottom: 2,
+    fontSize: 10, fontWeight: '600', color: COLORS.subText,
+    letterSpacing: 2, textTransform: 'uppercase', marginBottom: 2,
   },
-  headerTitle: { fontSize: 26, fontWeight: '900', color: COLORS.darkText, letterSpacing: 0.3 },
-  todayText: {
-    fontSize: 13, fontWeight: '700', color: COLORS.navy,
-    marginTop: isMobile ? 6 : 0,
+  headerTitle: { fontSize: 20, fontWeight: '900', color: COLORS.darkText, letterSpacing: 0.5 },
+  datetimeCard: {
+    backgroundColor: '#F7F5F2',
+    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderWidth: 1,
+    borderColor: '#E0DDD9',
+    marginTop: isMobile ? 12 : 0,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
   },
+  datetimeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  datetimeSeparator: {
+    width: 1,
+    height: 36,
+    backgroundColor: '#D0CCC8',
+    marginHorizontal: 4,
+  },
+  datetimeDivider: {
+    width: 3,
+    height: 28,
+    borderRadius: 2,
+    backgroundColor: COLORS.navy,
+  },
+  datetimeBlock: {
+    flexDirection: 'column',
+  },
+  datetimeLabel: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: COLORS.subText,
+    letterSpacing: 1.2,
+    textTransform: 'uppercase',
+    marginBottom: 1,
+  },
+  datetimeValue: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: COLORS.darkText,
+    letterSpacing: 0.2,
+  },
+  datetimeTime: {
+    fontVariant: ['tabular-nums'],
+    color: COLORS.navy,
+    fontSize: 14,
+    fontWeight: '800',
+  },
+
+  // Bell
+  bellBtn: {
+    width: 40, height: 40, borderRadius: 20,
+    backgroundColor: COLORS.cardBg, alignItems: 'center', justifyContent: 'center',
+    shadowColor: 'rgba(0,0,0,0.08)', shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 1, shadowRadius: 6, elevation: 3,
+  },
+  notifBadge: {
+    position: 'absolute', top: -2, right: -2,
+    width: 16, height: 16, borderRadius: 8,
+    backgroundColor: '#E8C547', alignItems: 'center', justifyContent: 'center',
+    borderWidth: 1.5, borderColor: COLORS.white,
+  },
+  notifBadgeText: { fontSize: 8, fontWeight: '900', color: '#133E75' },
 
   // Stat Cards
   statsRow: { flexDirection: 'row', gap: 10, marginBottom: 18, flexWrap: 'wrap' },
