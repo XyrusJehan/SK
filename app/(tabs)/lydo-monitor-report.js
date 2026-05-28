@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View, Text, TextInput, ScrollView, TouchableOpacity,
   StyleSheet, SafeAreaView, StatusBar, Dimensions,
@@ -399,6 +399,28 @@ export default function LYDOMonitorReportScreen() {
   const [searchText,   setSearchText]   = useState('');
   const [notifCount]                    = useState(2);
   const [sidebarVisible, setSidebarVisible] = useState(false);
+  const [currentTime, setCurrentTime]   = useState('');
+
+  const today = new Date().toLocaleDateString('en-PH', {
+    timeZone: 'Asia/Manila', month: 'long', day: 'numeric', year: 'numeric',
+  });
+
+  useEffect(() => {
+    const tick = () => {
+      const now = new Date();
+      setCurrentTime(
+        now.toLocaleTimeString('en-PH', {
+          timeZone: 'Asia/Manila',
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit',
+        })
+      );
+    };
+    tick();
+    const interval = setInterval(tick, 1000);
+    return () => clearInterval(interval);
+  }, []);
   const [pdfModalVisible, setPdfModalVisible] = useState(false);
 
   const isAllView = selectedDoc === 'All';
@@ -501,14 +523,31 @@ export default function LYDOMonitorReportScreen() {
               SK Full Disclosure Policy Compliance Portal for the Submission and Validation{'\n'}of Statutory Financial Reports and Developmental Plans
             </Text>
           </View>
-          <TouchableOpacity style={styles.bellBtn} activeOpacity={0.7}>
-            <BellIcon hasNotif={notifCount > 0} />
-            {notifCount > 0 && (
-              <View style={styles.notifBadge}>
-                <Text style={styles.notifBadgeText}>{notifCount}</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+            <View style={styles.datetimeCard}>
+              <View style={styles.datetimeRow}>
+                <View style={styles.datetimeDivider} />
+                <View style={styles.datetimeBlock}>
+                  <Text style={styles.datetimeLabel}>DATE</Text>
+                  <Text style={styles.datetimeValue}>{today}</Text>
+                </View>
+                <View style={styles.datetimeSeparator} />
+                <View style={[styles.datetimeDivider, { backgroundColor: '#22C55E' }]} />
+                <View style={styles.datetimeBlock}>
+                  <Text style={styles.datetimeLabel}>TIME (PHT)</Text>
+                  <Text style={[styles.datetimeValue, styles.datetimeTime]}>{currentTime}</Text>
+                </View>
               </View>
-            )}
-          </TouchableOpacity>
+            </View>
+            <TouchableOpacity style={styles.bellBtn} activeOpacity={0.7}>
+              <BellIcon hasNotif={notifCount > 0} />
+              {notifCount > 0 && (
+                <View style={styles.notifBadge}>
+                  <Text style={styles.notifBadgeText}>{notifCount}</Text>
+                </View>
+              )}
+            </TouchableOpacity>
+          </View>
         </View>
       )}
 
@@ -785,6 +824,16 @@ const styles = StyleSheet.create({
   headerSub:   { fontSize: 10, fontWeight: '600', color: COLORS.subText, letterSpacing: 2, textTransform: 'uppercase', marginBottom: 2 },
   headerTitle: { fontSize: 20, fontWeight: '900', color: COLORS.darkText, letterSpacing: 0.5 },
   headerDesc: { fontSize: 15, fontWeight: '700', color: COLORS.darkText, marginTop: 6, lineHeight: 17 },
+
+  // Datetime card
+  datetimeCard: { backgroundColor: '#F7F5F2', borderRadius: 12, paddingVertical: 10, paddingHorizontal: 16, borderWidth: 1, borderColor: '#E0DDD9', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 2 },
+  datetimeRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  datetimeSeparator: { width: 1, height: 36, backgroundColor: '#D0CCC8', marginHorizontal: 4 },
+  datetimeDivider: { width: 3, height: 28, borderRadius: 2, backgroundColor: '#133E75' },
+  datetimeBlock: { flexDirection: 'column' },
+  datetimeLabel: { fontSize: 9, fontWeight: '700', color: '#666666', letterSpacing: 1.2, textTransform: 'uppercase', marginBottom: 1 },
+  datetimeValue: { fontSize: 13, fontWeight: '700', color: '#1A1A1A', letterSpacing: 0.2 },
+  datetimeTime: { fontVariant: ['tabular-nums'], color: '#133E75', fontSize: 14, fontWeight: '800' },
 
   // Bell
   bellBtn:        { width: 40, height: 40, borderRadius: 20, backgroundColor: COLORS.cardBg, alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 6, elevation: 3 },

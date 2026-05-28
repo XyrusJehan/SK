@@ -65,8 +65,10 @@ export function CropModal({ scanner }: CropModalProps) {
     cropModalVisible,
     cropImageSrc,
     cropRegion,
+    cropCorners,
     autoDetecting,
     setCropRegion,
+    setCropCorners,
     handleAutoCrop,
     handleCropConfirm,
     handleCropSkip,
@@ -128,9 +130,11 @@ export function CropModal({ scanner }: CropModalProps) {
           {/* ── Crop editor ── */}
           <View style={s.editorWrap}>
             <CropEditor
-              imageUri={cropImageSrc}
+              imageUri={cropImageSrc || ''}
               region={cropRegion}
+              corners={cropCorners}
               onChange={setCropRegion}
+              onCornersChange={setCropCorners}
             />
           </View>
 
