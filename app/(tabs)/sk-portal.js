@@ -160,6 +160,8 @@ export default function SKPortalScreen() {
   const [uploadCategory, setUploadCategory]     = useState('');
   const [uploadYear, setUploadYear]             = useState('');
   const [showUploadCatDropdown, setShowUploadCatDropdown] = useState(false);
+  const [showUploadDocTypeDropdown, setShowUploadDocTypeDropdown] = useState(false);
+  const [uploadDocType, setUploadDocType] = useState(null);
   const [showUploadYearDropdown, setShowUploadYearDropdown] = useState(false);
   const [publishedDocs, setPublishedDocs] = useState([]);
   const [feedbackItems, setFeedbackItems] = useState([]);
@@ -179,12 +181,14 @@ export default function SKPortalScreen() {
   // Refs + layout state for dropdown anchoring (float above everything via Modal)
   const docFilterRef  = useRef(null);
   const yearFilterRef = useRef(null);
-  const uploadCatRef  = useRef(null);
-  const uploadYearRef = useRef(null);
-  const [docDropdownPos,        setDocDropdownPos]        = useState(null);
-  const [yearDropdownPos,       setYearDropdownPos]       = useState(null);
-  const [uploadCatDropdownPos,  setUploadCatDropdownPos]  = useState(null);
-  const [uploadYearDropdownPos, setUploadYearDropdownPos] = useState(null);
+  const uploadCatRef     = useRef(null);
+  const uploadDocTypeRef = useRef(null);
+  const uploadYearRef    = useRef(null);
+  const [docDropdownPos,           setDocDropdownPos]           = useState(null);
+  const [yearDropdownPos,          setYearDropdownPos]          = useState(null);
+  const [uploadCatDropdownPos,     setUploadCatDropdownPos]     = useState(null);
+  const [uploadDocTypeDropdownPos, setUploadDocTypeDropdownPos] = useState(null);
+  const [uploadYearDropdownPos,    setUploadYearDropdownPos]    = useState(null);
 
   const measureAndOpen = (ref, setPos, setVisible) => {
     if (ref.current) {
@@ -488,12 +492,34 @@ export default function SKPortalScreen() {
   );
 
   // ── Upload Modal ──
-  const UPLOAD_CATEGORIES = [
-    'Comprehensive Barangay Youth Development Plan',
-    'Annual Barangay Youth Investment Program',
-    'Approved Annual Budget',
-    'Quarterly Register of Cash in Bank',
-  ];
+  const UPLOAD_FOLDER_CATEGORIES = ['Planning', 'Financial', 'Governance', 'Performance'];
+
+  const CATEGORY_DOC_TYPES = {
+    Planning: [
+      { label: 'ABYIP',             value: 'Annual Barangay Youth Investment Program (ABYIP)' },
+      { label: 'CBYDP',             value: 'Comprehensive Barangay Youth Development Plan (CBYDP)' },
+      { label: 'Work Plans',        value: 'Work Plans' },
+      { label: 'Project Proposals', value: 'Project Proposals' },
+    ],
+    Financial: [
+      { label: 'Monthly Itemized List',     value: 'Monthly Itemized List' },
+      { label: 'Quarterly Register of Bank', value: 'Quarterly Register of Bank' },
+      { label: 'Annual Budget',             value: 'Annual Budget' },
+      { label: 'Disbursement Vouchers',     value: 'Disbursement Vouchers' },
+      { label: 'Liquidation Reports',       value: 'Liquidation Reports' },
+    ],
+    Governance: [
+      { label: 'Resolutions', value: 'Resolutions' },
+      { label: 'Ordinances',  value: 'Ordinances' },
+    ],
+    Performance: [
+      { label: 'Accomplishment Reports',  value: 'Accomplishment Reports' },
+      { label: 'Activity Documentation', value: 'Activity Documentation' },
+      { label: 'Event Reports',          value: 'Event Reports' },
+      { label: 'Minutes of the meetings', value: 'Minutes of the meetings' },
+    ],
+  };
+
   const UPLOAD_YEARS = ['2026', '2025', '2024', '2023'];
 
   const pickDocument = async () => {
@@ -627,14 +653,15 @@ export default function SKPortalScreen() {
                 placeholderTextColor={COLORS.midGray}
               />
 
-              {/* Category & Year */}
+              {/* Category & Document Type */}
               <View style={styles.uploadRowFields}>
-                <View style={{ flex: 1.6 }}>
+                <View style={{ flex: 1 }}>
                   <Text style={styles.uploadFieldLabel}>Category <Text style={{ color: '#C0392B' }}>*</Text></Text>
                   <TouchableOpacity
                     ref={uploadCatRef}
                     style={styles.uploadDropdownBtn}
                     onPress={() => {
+                      setShowUploadDocTypeDropdown(false);
                       setShowUploadYearDropdown(false);
                       if (showUploadCatDropdown) { setShowUploadCatDropdown(false); }
                       else { measureAndOpen(uploadCatRef, setUploadCatDropdownPos, setShowUploadCatDropdown); }
@@ -648,24 +675,47 @@ export default function SKPortalScreen() {
                   </TouchableOpacity>
                 </View>
 
-                <View style={{ flex: 0.9, marginLeft: 10 }}>
-                  <Text style={styles.uploadFieldLabel}>Year <Text style={{ color: '#C0392B' }}>*</Text></Text>
+                <View style={{ flex: 1, marginLeft: 10 }}>
+                  <Text style={styles.uploadFieldLabel}>Document Type <Text style={{ color: '#C0392B' }}>*</Text></Text>
                   <TouchableOpacity
-                    ref={uploadYearRef}
-                    style={styles.uploadDropdownBtn}
+                    ref={uploadDocTypeRef}
+                    style={[styles.uploadDropdownBtn, !uploadCategory && { opacity: 0.5 }]}
+                    disabled={!uploadCategory}
                     onPress={() => {
                       setShowUploadCatDropdown(false);
-                      if (showUploadYearDropdown) { setShowUploadYearDropdown(false); }
-                      else { measureAndOpen(uploadYearRef, setUploadYearDropdownPos, setShowUploadYearDropdown); }
+                      setShowUploadYearDropdown(false);
+                      if (showUploadDocTypeDropdown) { setShowUploadDocTypeDropdown(false); }
+                      else { measureAndOpen(uploadDocTypeRef, setUploadDocTypeDropdownPos, setShowUploadDocTypeDropdown); }
                     }}
                     activeOpacity={0.8}
                   >
-                    <Text style={[styles.uploadDropdownText, !uploadYear && { color: COLORS.midGray }]}>
-                      {uploadYear || 'Year'}
+                    <Text style={[styles.uploadDropdownText, !uploadDocType && { color: COLORS.midGray }]} numberOfLines={1}>
+                      {uploadDocType?.label || 'Select type…'}
                     </Text>
                     <Text style={styles.uploadDropdownCaret}>▾</Text>
                   </TouchableOpacity>
                 </View>
+              </View>
+
+              {/* Year */}
+              <View style={{ marginTop: 10 }}>
+                <Text style={styles.uploadFieldLabel}>Year <Text style={{ color: '#C0392B' }}>*</Text></Text>
+                <TouchableOpacity
+                  ref={uploadYearRef}
+                  style={styles.uploadDropdownBtn}
+                  onPress={() => {
+                    setShowUploadCatDropdown(false);
+                    setShowUploadDocTypeDropdown(false);
+                    if (showUploadYearDropdown) { setShowUploadYearDropdown(false); }
+                    else { measureAndOpen(uploadYearRef, setUploadYearDropdownPos, setShowUploadYearDropdown); }
+                  }}
+                  activeOpacity={0.8}
+                >
+                  <Text style={[styles.uploadDropdownText, !uploadYear && { color: COLORS.midGray }]}>
+                    {uploadYear || 'Select year…'}
+                  </Text>
+                  <Text style={styles.uploadDropdownCaret}>▾</Text>
+                </TouchableOpacity>
               </View>
 
               {/* Step 3 */}
@@ -679,7 +729,7 @@ export default function SKPortalScreen() {
                 activeOpacity={0.85}
                 disabled={isUploading}
                 onPress={() => {
-                  if (!uploadFile || !uploadTitle || !uploadCategory || !uploadYear) {
+                  if (!uploadFile || !uploadTitle || !uploadCategory || !uploadDocType || !uploadYear) {
                     Alert.alert('Missing Info', 'Please complete all fields before publishing.');
                     return;
                   }
@@ -721,6 +771,7 @@ export default function SKPortalScreen() {
 
                       fileUrl = urlData.publicUrl;
 
+                      const now = new Date().toISOString();
                       const { error: insertError } = await supabase
                         .from('website_posts')
                         .insert({
@@ -728,10 +779,11 @@ export default function SKPortalScreen() {
                           published_by: user.userId,
                           title: uploadTitle.trim(),
                           document_category: uploadCategory,
+                          document_type: uploadDocType.value,
                           year: parseInt(uploadYear) || new Date().getFullYear(),
                           file_url: fileUrl,
                           portal_status: 'published',
-                          published_at: new Date().toISOString(),
+                          published_at: now,
                         });
 
                       if (insertError) {
@@ -764,6 +816,7 @@ export default function SKPortalScreen() {
                       setUploadFile(null);
                       setUploadTitle('');
                       setUploadCategory('');
+                      setUploadDocType(null);
                       setUploadYear('');
                       setShowUploadModal(false);
                       openSuccess('publish', _title);
@@ -805,7 +858,7 @@ export default function SKPortalScreen() {
                     }
                     openAlert('draft', uploadTitle, () => {
                       closeAlert();
-                      setUploadFile(null); setUploadTitle(''); setUploadCategory(''); setUploadYear('');
+                      setUploadFile(null); setUploadTitle(''); setUploadCategory(''); setUploadDocType(null); setUploadYear('');
                       setShowUploadModal(false);
                     });
                   } catch (e) {
@@ -951,7 +1004,7 @@ export default function SKPortalScreen() {
             {/* Upload button */}
             <TouchableOpacity
               style={styles.uploadBtn}
-              onPress={() => { setUploadFile(null); setUploadTitle(''); setUploadCategory(''); setUploadYear(''); setShowUploadModal(true); }}
+              onPress={() => { setUploadFile(null); setUploadTitle(''); setUploadCategory(''); setUploadDocType(null); setUploadYear(''); setShowUploadModal(true); }}
               activeOpacity={0.8}
             >
               <UploadIcon />
@@ -1214,7 +1267,8 @@ export default function SKPortalScreen() {
       {/* Floating dropdowns — always on top */}
       {renderFloatingDropdown(showDocDropdown, setShowDocDropdown, docDropdownPos, DOCUMENT_FILTERS, docFilter, setDocFilter, 220)}
       {renderFloatingDropdown(showYearDropdown, setShowYearDropdown, yearDropdownPos, YEAR_FILTERS, yearFilter, setYearFilter, 100)}
-      {renderFloatingDropdown(showUploadCatDropdown, setShowUploadCatDropdown, uploadCatDropdownPos, UPLOAD_CATEGORIES, uploadCategory, setUploadCategory, 240)}
+      {renderFloatingDropdown(showUploadCatDropdown, setShowUploadCatDropdown, uploadCatDropdownPos, UPLOAD_FOLDER_CATEGORIES, uploadCategory, (val) => { setUploadCategory(val); setUploadDocType(null); }, 200)}
+      {renderFloatingDropdown(showUploadDocTypeDropdown, setShowUploadDocTypeDropdown, uploadDocTypeDropdownPos, (CATEGORY_DOC_TYPES[uploadCategory] || []).map(d => d.label), uploadDocType?.label, (val) => { const found = (CATEGORY_DOC_TYPES[uploadCategory] || []).find(d => d.label === val); setUploadDocType(found || null); }, 260)}
       {renderFloatingDropdown(showUploadYearDropdown, setShowUploadYearDropdown, uploadYearDropdownPos, UPLOAD_YEARS, uploadYear, setUploadYear, 90)}
 
       <View style={styles.layout}>
