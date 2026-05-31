@@ -83,9 +83,9 @@ const APPROACHING_DEADLINES = [
 ];
 
 const QUICK_ACTIONS = [
-  { id: 'consultation', label: 'Consultation', badge: 5, color: COLORS.navy, icon: '💬', route: null },
-  { id: 'budget', label: 'View Budget', color: '#1A2332', icon: '📊', route: null },
-  { id: 'export', label: 'Export  Reports', color: COLORS.navy, icon: '⬇', route: null },
+  { id: 'consultation', label: 'Consultation', badge: 5, color: COLORS.navy, icon: '💬', route: '/(tabs)/lydo-monitor' },
+  { id: 'budget', label: 'View Budget', color: '#1A2332', icon: '📊', route: '/(tabs)/lydo-monitor-budget' },
+  { id: 'export', label: 'Export  Reports', color: COLORS.navy, icon: '⬇', route: '/(tabs)/lydo-monitor-report' },
   { id: 'calendar', label: 'View Deadline Calendar', color: '#F97316', icon: '📅', route: null },
   { id: 'missing', label: 'View Missing Documents', color: '#EF4444', icon: '📄', route: null },
   { id: 'archive', label: 'View Archive', color: '#6B7A8F', icon: '🗃', route: null },
@@ -528,7 +528,12 @@ export default function LYDOHomeScreen() {
               <View style={styles.divider} />
               <View style={styles.quickGrid}>
                 {QUICK_ACTIONS.filter(a => !a.fullWidth).map((action) => (
-                  <TouchableOpacity key={action.id} style={styles.quickBtn} activeOpacity={0.8}>
+                  <TouchableOpacity
+                    key={action.id}
+                    style={styles.quickBtn}
+                    activeOpacity={0.8}
+                    onPress={() => action.route && router.push(action.route)}
+                  >
                     <View style={[styles.quickIconBox, { backgroundColor: action.color + '18' }]}>
                       <Text style={styles.quickIcon}>{action.icon}</Text>
                     </View>

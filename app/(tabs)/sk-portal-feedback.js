@@ -1,10 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, TextInput, ScrollView, TouchableOpacity,
   StyleSheet, SafeAreaView, StatusBar, Dimensions,
   Modal, Image,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { useNav } from './navContext';
 import { useAuth } from './authContext';
 import { supabase } from '../../utils/supabase';
@@ -122,40 +122,75 @@ export default function SKPortalFeedbackScreen() {
   const [feedbackList, setFeedbackList]         = useState([]);
 
   // Fetch feedback for this barangay
-  useEffect(() => {
-    const fetchFeedback = async () => {
-      if (!barangayId) return;
+  const fetchFeedback = useCallback(async () => {
+    if (!barangayId) return;
 
-      try {
-        const { data: feedback, error } = await supabase
-          .from('resident_comments')
-          .select('*')
-          .eq('barangay_id', barangayId)
-          .order('created_at', { ascending: false });
+    try {
+      // Fetch resident comments with user info and website post info
+      const { data: feedback, error } = await supabase
+        .from('resident_comments')
+        .select(`
+          comment_id,
+          website_post_id,
+          resident_id,
+          content,
+          is_read,
+          is_flagged,
+          created_at,
+          barangay_id,
+          reply,
+          user:users!resident_id(
+            first_name,
+            last_name,
+            middle_initial
+          ),
+          website_post:website_posts!website_post_id(
+            title
+          )
+        `)
+        .eq('barangay_id', barangayId)
+        .order('created_at', { ascending: false });
 
-        if (error) {
-          console.error('Error fetching feedback:', error);
-          return;
-        }
+      if (error) {
+        console.error('Error fetching feedback:', error);
+        return;
+      }
 
-        const formattedFeedback = feedback?.map(f => ({
+      const formattedFeedback = feedback?.map(f => {
+        const firstName = f.user?.first_name || '';
+        const lastName = f.user?.last_name || '';
+        const middleInitial = f.user?.middle_initial || '';
+        const name = `${firstName} ${middleInitial ? middleInitial + '. ' : ''}${lastName}`.trim() || 'Anonymous';
+
+        return {
           id: f.comment_id,
-          name: f.resident_name || 'Anonymous',
-          document: f.document_title || 'Unknown',
-          comment: f.comment || '',
+          residentId: f.resident_id,
+          name: name,
+          document: f.website_post?.title || 'Unknown Document',
+          comment: f.content || '',
           date: f.created_at ? new Date(f.created_at).toLocaleDateString() : '',
           status: f.is_read ? 'Read' : 'Unread',
           reply: f.reply || '',
-        })) || [];
+          postId: f.website_post_id,
+        };
+      }) || [];
 
-        setFeedbackList(formattedFeedback);
-      } catch (error) {
-        console.error('Error:', error);
-      }
-    };
-
-    fetchFeedback();
+      setFeedbackList(formattedFeedback);
+    } catch (error) {
+      console.error('Error:', error);
+    }
   }, [barangayId]);
+
+  // Fetch on mount and when screen gains focus
+  useEffect(() => {
+    fetchFeedback();
+  }, [fetchFeedback]);
+
+  useFocusEffect(
+    useCallback(() => {
+      fetchFeedback();
+    }, [fetchFeedback])
+  );
 
   const handleNavPress = (tab) => {
     setActiveTab(tab);
@@ -177,12 +212,33 @@ export default function SKPortalFeedbackScreen() {
   const handleViewReply = (item) => {
     setSelectedFeedback(item);
     setReplyText(item.reply || '');
-    // Mark as read
-    setFeedbackList(prev => prev.map(f => f.id === item.id ? { ...f, status: 'Read' } : f));
+    // Mark as read in database
+    if (item.status === 'Unread') {
+      supabase
+        .from('resident_comments')
+        .update({ is_read: true })
+        .eq('comment_id', item.id)
+        .then(({ error }) => {
+          if (error) console.error('Error marking as read:', error);
+        });
+      setFeedbackList(prev => prev.map(f => f.id === item.id ? { ...f, status: 'Read' } : f));
+    }
   };
 
-  const handleSendReply = () => {
-    if (!replyText.trim()) return;
+  const handleSendReply = async () => {
+    if (!replyText.trim() || !selectedFeedback) return;
+
+    // Save reply to database
+    const { error } = await supabase
+      .from('resident_comments')
+      .update({ reply: replyText.trim(), is_read: true })
+      .eq('comment_id', selectedFeedback.id);
+
+    if (error) {
+      console.error('Error saving reply:', error);
+      return;
+    }
+
     setFeedbackList(prev => prev.map(f =>
       f.id === selectedFeedback.id ? { ...f, reply: replyText.trim(), status: 'Read' } : f
     ));
