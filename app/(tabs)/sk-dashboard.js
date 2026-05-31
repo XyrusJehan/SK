@@ -385,8 +385,12 @@ export default function HomeScreen({ navigation }) {
 
   const handleQuickAction = (id) => {
     if (id === 'calendar') setCalendarVisible(true);
-    else if (id === 'drafts') router.push('/(tabs)/sk-document');
+    else if (id === 'proposal') router.push('/(tabs)/sk-planning');
+    else if (id === 'drafts') router.push('/(tabs)/sk-document-management?initialTab=Drafts');
     else if (id === 'logs') router.push('/(tabs)/sk-logs');
+    else if (id === 'consultation') router.push('/(tabs)/sk-document-management?initialTab=Saved');
+    else if (id === 'upload') router.push('/(tabs)/sk-document-list?openScanner=true');
+    else if (id === 'returned') router.push('/(tabs)/sk-document-management?initialTab=Returned');
     else if (id === 'archive') router.push('/(tabs)/sk-document');
   };
 

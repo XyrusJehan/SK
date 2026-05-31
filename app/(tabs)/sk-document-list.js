@@ -4,12 +4,13 @@ import {
   StyleSheet, SafeAreaView, StatusBar, Dimensions, Image, Modal,
   Platform, Alert, ActivityIndicator,
 } from 'react-native';
-import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
+import { useRouter, useLocalSearchParams, useFocusEffect, useNavigation } from 'expo-router';
 import { useNav } from './navContext';
 import { useAuth } from './authContext';
 import { supabase } from '../../utils/supabase';
 import * as DocumentPicker from 'expo-document-picker';
 import { DocumentScannerButton } from './scanner/DocumentScannerButton';
+import { useDocumentScanner } from './scanner/useDocumentScanner';
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const isMobile = SCREEN_WIDTH < 768;
 
@@ -162,6 +163,25 @@ export default function SKDocumentListScreen() {
   const [uploadTitle, setUploadTitle] = useState('');
   const [uploadCategory, setUploadCategory] = useState('planning');
   const [uploadDocType, setUploadDocType] = useState('');
+
+  // Scanner hook for auto-trigger
+  const scanner = useDocumentScanner();
+  const scannerTriggered = useRef(false);
+
+  // Handle auto-trigger scanner from dashboard using useFocusEffect
+  useFocusEffect(
+    React.useCallback(() => {
+      if (params?.openScanner === 'true' && !scannerTriggered.current) {
+        scannerTriggered.current = true;
+        // Open scanner modal directly
+        scanner.openScanModal();
+        // Clear the URL param after triggering to prevent re-triggering
+        setTimeout(() => {
+          router.setParams({ openScanner: undefined });
+        }, 500);
+      }
+    }, [params?.openScanner, scanner])
+  );
   const [categoryDropdownOpen, setCategoryDropdownOpen] = useState(false);
   const [docTypeDropdownOpen, setDocTypeDropdownOpen] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -243,13 +263,18 @@ export default function SKDocumentListScreen() {
   useFocusEffect(
     useCallback(() => {
       fetchDocuments();
-    }, [fetchDocuments])
+    }, [barangayId, activeDocTab])
   );
 
   // Also re-fetch immediately when the active tab changes
   useEffect(() => {
     fetchDocuments();
   }, [activeDocTab]);
+
+  // Always refresh on mount
+  useEffect(() => {
+    fetchDocuments();
+  }, []);
 
   // Accent color based on active tab
   const tabColor = COLORS[activeDocTab.toLowerCase()] || COLORS.planning;
@@ -587,6 +612,7 @@ export default function SKDocumentListScreen() {
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
 <DocumentScannerButton
   style={styles.scanBtn}
+  scanner={scanner}
   onPdfReady={(file) => {
     setSelectedFile(file);
     setUploadModalVisible(true);
