@@ -1,13 +1,21 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
   View, Text, TextInput, ScrollView, TouchableOpacity,
   StyleSheet, SafeAreaView, StatusBar, Dimensions,
-  Modal, Alert, Image,
+  Modal, Alert, Image, Linking, ActivityIndicator,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useNav } from './navContext';
 import { useAuth } from './authContext';
 import { supabase } from '../../utils/supabase';
+
+// WebView: use react-native-webview on native, iframe on web
+let WebView = null;
+if (typeof window !== 'undefined' && !window.location.href.includes('localhost')) {
+  try {
+    WebView = require('react-native-webview').WebView;
+  } catch (e) { WebView = null; }
+}
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const isMobile = SCREEN_WIDTH < 768;
@@ -125,6 +133,10 @@ export default function SKPlanningScreen() {
   const [showEditModal, setShowEditModal]         = useState(false);
   const [templates, setTemplates]                = useState([]);
   const [budgetData, setBudgetData]               = useState(null);
+  const [viewerModal, setViewerModal]             = useState({ visible: false, fileUrl: null, title: '' });
+  const [webViewLoading, setWebViewLoading]       = useState(false);
+  const [downloadModalVisible, setDownloadModalVisible] = useState(false);
+  const [documentToDownload, setDocumentToDownload]   = useState(null);
 
   // Fetch templates distributed to this barangay
   useEffect(() => {
@@ -275,23 +287,38 @@ export default function SKPlanningScreen() {
 
   // ── Edit Modal ──
   const handleViewTemplate = () => {
-    if (selectedItem?.fileUrl) {
-      Alert.alert('View Template', `Opening: ${selectedItem.fileUrl}`);
-      // In production, you would open the URL in a WebView or Linking
-    } else {
+    if (!selectedItem?.fileUrl) {
       Alert.alert('No File', 'This template has no file attached.');
+      return;
     }
+    setViewerModal({ visible: true, fileUrl: selectedItem.fileUrl, title: selectedItem.name });
+    setWebViewLoading(true);
     setShowEditModal(false);
   };
 
   const handleDownloadTemplate = () => {
-    if (selectedItem?.fileUrl) {
-      Alert.alert('Download', `Downloading: ${selectedItem.name}`);
-      // In production, you would use expo-file-system or Linking to download
-    } else {
+    if (!selectedItem?.fileUrl) {
       Alert.alert('No File', 'This template has no file to download.');
+      return;
     }
+    setDocumentToDownload(selectedItem);
+    setDownloadModalVisible(true);
     setShowEditModal(false);
+  };
+
+  const handleDownloadConfirm = async () => {
+    if (!documentToDownload?.fileUrl) {
+      Alert.alert('No File', 'This template does not have an attached file.');
+      return;
+    }
+    setDownloadModalVisible(false);
+    setDocumentToDownload(null);
+    try {
+      await Linking.openURL(documentToDownload.fileUrl);
+    } catch (error) {
+      console.error('Download error:', error);
+      Alert.alert('Download Failed', `Could not open the file: ${error.message}`);
+    }
   };
 
   const renderEditModal = () => (
@@ -339,6 +366,97 @@ export default function SKPlanningScreen() {
           </TouchableOpacity>
         </View>
       </TouchableOpacity>
+    </Modal>
+  );
+
+  // ── Viewer Modal (PDF/Image viewer) ──────────────────────────────────────────────
+  const renderViewerModal = () => {
+    if (!viewerModal.visible) return null;
+
+    const googleViewerUrl = `https://docs.google.com/gview?embedded=true&url=${encodeURIComponent(viewerModal.fileUrl)}`;
+
+    return (
+      <Modal visible={viewerModal.visible} animationType="slide" onRequestClose={() => setViewerModal({ ...viewerModal, visible: false })}>
+        <SafeAreaView style={styles.safe}>
+          <View style={styles.viewerHeader}>
+            <TouchableOpacity onPress={() => setViewerModal({ ...viewerModal, visible: false })}>
+              <Text style={styles.viewerCloseText}>← Back</Text>
+            </TouchableOpacity>
+            <Text style={styles.viewerTitle} numberOfLines={1}>{viewerModal.title}</Text>
+            <TouchableOpacity onPress={() => {
+              setDocumentToDownload({ fileUrl: viewerModal.fileUrl, title: viewerModal.title });
+              setDownloadModalVisible(true);
+            }}>
+              <Text style={styles.viewerDownloadText}>⬇</Text>
+            </TouchableOpacity>
+          </View>
+          {webViewLoading && (
+            <View style={styles.viewerLoading}>
+              <ActivityIndicator size="large" color={COLORS.navy} />
+              <Text style={styles.viewerLoadingText}>Loading document...</Text>
+            </View>
+          )}
+          {viewerModal.fileUrl && (
+            typeof window !== 'undefined' && window.location.href.includes('localhost') ? (
+              // Web: use iframe
+              <View style={styles.viewerWebContainer}>
+                <iframe
+                  src={googleViewerUrl}
+                  style={{ flex: 1, border: 'none' }}
+                  title={viewerModal.title}
+                />
+              </View>
+            ) : WebView ? (
+              <WebView
+                source={{ uri: googleViewerUrl }}
+                style={{ flex: 1 }}
+                onLoadStart={() => setWebViewLoading(true)}
+                onLoadEnd={() => setWebViewLoading(false)}
+                onError={(syntheticEvent) => {
+                  const { nativeEvent } = syntheticEvent;
+                  console.error('WebView error:', nativeEvent);
+                  setWebViewLoading(false);
+                }}
+              />
+            ) : (
+              <View style={styles.viewerFallback}>
+                <Text style={styles.viewerFallbackText}>Document Viewer not available</Text>
+                <TouchableOpacity style={styles.viewerFallbackBtn} onPress={() => Linking.openURL(viewerModal.fileUrl)}>
+                  <Text style={styles.viewerFallbackBtnText}>Open in Browser</Text>
+                </TouchableOpacity>
+              </View>
+            )
+          )}
+        </SafeAreaView>
+      </Modal>
+    );
+  };
+
+  // ── Download Confirm Modal ───────────────────────────────────────────────────
+  const renderDownloadModal = () => (
+    <Modal visible={downloadModalVisible} transparent animationType="fade" onRequestClose={() => setDownloadModalVisible(false)}>
+      <View style={styles.downloadModalBackdrop}>
+        <View style={styles.downloadModalCard}>
+          <Text style={styles.downloadModalTitle}>Download Document</Text>
+          <Text style={styles.downloadModalText}>
+            Do you want to download "{documentToDownload?.name}"?
+          </Text>
+          <View style={styles.downloadModalActions}>
+            <TouchableOpacity
+              style={[styles.downloadModalBtn, { backgroundColor: COLORS.lightGray }]}
+              onPress={() => { setDownloadModalVisible(false); setDocumentToDownload(null); }}
+            >
+              <Text style={styles.downloadModalBtnText}>Cancel</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.downloadModalBtn, { backgroundColor: COLORS.navy }]}
+              onPress={handleDownloadConfirm}
+            >
+              <Text style={[styles.downloadModalBtnText, { color: COLORS.white }]}>Download</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
     </Modal>
   );
 
@@ -505,6 +623,8 @@ export default function SKPlanningScreen() {
       <StatusBar barStyle="light-content" backgroundColor={COLORS.navy} />
 
       {renderEditModal()}
+      {renderViewerModal()}
+      {renderDownloadModal()}
 
       <View style={styles.layout}>
         {isMobile && sidebarVisible && (
@@ -818,4 +938,30 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.lightGray, alignItems: 'center',
   },
   modalCloseBtnText: { fontSize: 13, fontWeight: '600', color: COLORS.darkText },
+
+  // ── Viewer Modal ──
+  viewerHeader: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: 16, paddingVertical: 12,
+    backgroundColor: COLORS.navy, borderBottomWidth: 1, borderBottomColor: COLORS.lightGray,
+  },
+  viewerCloseText: { fontSize: 14, fontWeight: '600', color: COLORS.white },
+  viewerTitle: { flex: 1, fontSize: 14, fontWeight: '700', color: COLORS.white, textAlign: 'center', marginHorizontal: 10 },
+  viewerDownloadText: { fontSize: 18, color: COLORS.white },
+  viewerLoading: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: COLORS.offWhite },
+  viewerLoadingText: { marginTop: 12, fontSize: 14, color: COLORS.subText },
+  viewerWebContainer: { flex: 1, backgroundColor: COLORS.white },
+  viewerFallback: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: COLORS.offWhite, padding: 20 },
+  viewerFallbackText: { fontSize: 14, color: COLORS.subText, marginBottom: 16 },
+  viewerFallbackBtn: { backgroundColor: COLORS.navy, paddingHorizontal: 20, paddingVertical: 12, borderRadius: 8 },
+  viewerFallbackBtnText: { fontSize: 14, fontWeight: '700', color: COLORS.white },
+
+  // ── Download Modal ──
+  downloadModalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', alignItems: 'center', justifyContent: 'center' },
+  downloadModalCard: { backgroundColor: COLORS.white, borderRadius: 16, padding: 24, width: '100%', maxWidth: 340 },
+  downloadModalTitle: { fontSize: 16, fontWeight: '800', color: COLORS.darkText, marginBottom: 12, textAlign: 'center' },
+  downloadModalText: { fontSize: 13, color: COLORS.subText, marginBottom: 20, textAlign: 'center', lineHeight: 18 },
+  downloadModalActions: { flexDirection: 'row', gap: 10 },
+  downloadModalBtn: { flex: 1, paddingVertical: 12, borderRadius: 10, alignItems: 'center' },
+  downloadModalBtnText: { fontSize: 13, fontWeight: '700', color: COLORS.darkText },
 });
