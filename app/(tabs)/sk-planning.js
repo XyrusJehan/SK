@@ -2,20 +2,12 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
   View, Text, TextInput, ScrollView, TouchableOpacity,
   StyleSheet, SafeAreaView, StatusBar, Dimensions,
-  Modal, Alert, Image, Linking, ActivityIndicator,
+  Modal, Alert, Image, Linking,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useNav } from './navContext';
 import { useAuth } from './authContext';
 import { supabase } from '../../utils/supabase';
-
-// WebView: use react-native-webview on native, iframe on web
-let WebView = null;
-if (typeof window !== 'undefined' && !window.location.href.includes('localhost')) {
-  try {
-    WebView = require('react-native-webview').WebView;
-  } catch (e) { WebView = null; }
-}
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const isMobile = SCREEN_WIDTH < 768;
@@ -134,7 +126,6 @@ export default function SKPlanningScreen() {
   const [templates, setTemplates]                = useState([]);
   const [budgetData, setBudgetData]               = useState(null);
   const [viewerModal, setViewerModal]             = useState({ visible: false, fileUrl: null, title: '' });
-  const [webViewLoading, setWebViewLoading]       = useState(false);
   const [downloadModalVisible, setDownloadModalVisible] = useState(false);
   const [documentToDownload, setDocumentToDownload]   = useState(null);
 
@@ -292,7 +283,6 @@ export default function SKPlanningScreen() {
       return;
     }
     setViewerModal({ visible: true, fileUrl: selectedItem.fileUrl, title: selectedItem.name });
-    setWebViewLoading(true);
     setShowEditModal(false);
   };
 
@@ -390,42 +380,14 @@ export default function SKPlanningScreen() {
               <Text style={styles.viewerDownloadText}>⬇</Text>
             </TouchableOpacity>
           </View>
-          {webViewLoading && (
-            <View style={styles.viewerLoading}>
-              <ActivityIndicator size="large" color={COLORS.navy} />
-              <Text style={styles.viewerLoadingText}>Loading document...</Text>
-            </View>
-          )}
           {viewerModal.fileUrl && (
-            typeof window !== 'undefined' && window.location.href.includes('localhost') ? (
-              // Web: use iframe
-              <View style={styles.viewerWebContainer}>
-                <iframe
-                  src={googleViewerUrl}
-                  style={{ flex: 1, border: 'none' }}
-                  title={viewerModal.title}
-                />
-              </View>
-            ) : WebView ? (
-              <WebView
-                source={{ uri: googleViewerUrl }}
-                style={{ flex: 1 }}
-                onLoadStart={() => setWebViewLoading(true)}
-                onLoadEnd={() => setWebViewLoading(false)}
-                onError={(syntheticEvent) => {
-                  const { nativeEvent } = syntheticEvent;
-                  console.error('WebView error:', nativeEvent);
-                  setWebViewLoading(false);
-                }}
+            <View style={styles.viewerWebContainer}>
+              <iframe
+                src={googleViewerUrl}
+                style={{ flex: 1, border: 'none' }}
+                title={viewerModal.title}
               />
-            ) : (
-              <View style={styles.viewerFallback}>
-                <Text style={styles.viewerFallbackText}>Document Viewer not available</Text>
-                <TouchableOpacity style={styles.viewerFallbackBtn} onPress={() => Linking.openURL(viewerModal.fileUrl)}>
-                  <Text style={styles.viewerFallbackBtnText}>Open in Browser</Text>
-                </TouchableOpacity>
-              </View>
-            )
+            </View>
           )}
         </SafeAreaView>
       </Modal>
