@@ -40,6 +40,8 @@ interface DocumentScannerButtonProps {
   label?: string;
   /** Optional additional TouchableOpacity styles */
   style?: object;
+  /** Optional scanner instance - if provided, uses this instead of creating new */
+  scanner?: ReturnType<typeof useDocumentScanner>;
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -48,8 +50,10 @@ export function DocumentScannerButton({
   onPdfReady,
   label = 'Scan',
   style,
+  scanner: externalScanner,
 }: DocumentScannerButtonProps) {
-  const scanner = useDocumentScanner();
+  const internalScanner = useDocumentScanner();
+  const scanner = externalScanner || internalScanner;
 
   return (
     <>
