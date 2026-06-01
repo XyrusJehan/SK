@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, TextInput, ScrollView, TouchableOpacity,
   StyleSheet, SafeAreaView, StatusBar, Dimensions, Image, Modal,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useFocusEffect } from '@react-navigation/native';
 import { useNav } from './navContext';
 import { useAuth } from './authContext';
 import { supabase } from '../../utils/supabase';
@@ -416,73 +417,75 @@ export default function HomeScreen({ navigation }) {
   }, [user, barangayId]);
 
   // Fetch documents filtered by barangay_id
-  useEffect(() => {
-    const fetchDocuments = async () => {
-      if (!barangayId) return;
-      try {
-        const { data: documents, error } = await supabase
-          .from('documents')
-          .select('status, title, created_at, submitted_at, saved_at')
-          .eq('barangay_id', barangayId)
-          .order('created_at', { ascending: false });
+  const fetchDocuments = useCallback(async () => {
+    if (!barangayId) return;
+    try {
+      const { data: documents, error } = await supabase
+        .from('documents')
+        .select('status, title, created_at, submitted_at, saved_at')
+        .eq('barangay_id', barangayId)
+        .order('created_at', { ascending: false });
 
-        if (error) { console.error('Error fetching documents:', error); return; }
+      if (error) { console.error('Error fetching documents:', error); return; }
 
-        const total = documents?.length || 0;
-        const submitted = documents?.filter(d => ['submitted', 'approved', 'returned'].includes(d.status)).length || 0;
-        const forRevision = documents?.filter(d => d.status === 'returned').length || 0;
-        const approved = documents?.filter(d => d.status === 'approved').length || 0;
-        const drafts = documents?.filter(d => d.status === 'draft').length || 0;
+      const total = documents?.length || 0;
+      const submitted = documents?.filter(d => ['submitted', 'approved', 'returned'].includes(d.status)).length || 0;
+      const forRevision = documents?.filter(d => d.status === 'returned').length || 0;
+      const approved = documents?.filter(d => d.status === 'approved').length || 0;
+      const drafts = documents?.filter(d => d.status === 'draft').length || 0;
 
-        setDocStats({ total, submitted, forRevision, approved, drafts });
+      setDocStats({ total, submitted, forRevision, approved, drafts });
 
-        // Build recent activities from docs
-        const acts = (documents || []).slice(0, 5).map(doc => {
-          const date = doc.submitted_at || doc.saved_at || doc.created_at;
-          let label = doc.title;
-          let actionType = 'create';
-          let role = 'Secretary';
-          if (doc.status === 'submitted' || doc.status === 'approved') { actionType = 'submit'; role = 'Treasurer'; }
-          else if (doc.status === 'returned') { actionType = 'returned'; role = 'Chairman'; }
-          return {
-            id: doc.title + date,
-            label,
-            role,
-            time: new Date(doc.created_at).toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit' }),
-            date: new Date(doc.created_at).toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' }),
-            type: actionType,
-          };
-        });
-        setRecentActivities(acts);
-      } catch (error) { console.error('Error:', error); }
-    };
-    fetchDocuments();
+      // Build recent activities from docs
+      const acts = (documents || []).slice(0, 5).map(doc => {
+        const date = doc.submitted_at || doc.saved_at || doc.created_at;
+        let label = doc.title;
+        let actionType = 'create';
+        let role = 'Secretary';
+        if (doc.status === 'submitted' || doc.status === 'approved') { actionType = 'submit'; role = 'Treasurer'; }
+        else if (doc.status === 'returned') { actionType = 'returned'; role = 'Chairman'; }
+        return {
+          id: doc.title + date,
+          label,
+          role,
+          time: new Date(doc.created_at).toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit' }),
+          date: new Date(doc.created_at).toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' }),
+          type: actionType,
+        };
+      });
+      setRecentActivities(acts);
+    } catch (error) { console.error('Error:', error); }
   }, [barangayId]);
 
   // Fetch compliance tasks/deadlines
-  useEffect(() => {
-    const fetchTasks = async () => {
-      if (!barangayId) return;
-      try {
-        const { data: deadlines, error } = await supabase
-          .from('submission_deadlines')
-          .select('*')
-          .eq('barangay_id', barangayId)
-          .order('deadline_date', { ascending: true });
+  const fetchTasks = useCallback(async () => {
+    if (!barangayId) return;
+    try {
+      const { data: deadlines, error } = await supabase
+        .from('submission_deadlines')
+        .select('*')
+        .eq('barangay_id', barangayId)
+        .order('deadline_date', { ascending: true });
 
-        if (error) { console.error('Error fetching tasks:', error); return; }
+      if (error) { console.error('Error fetching tasks:', error); return; }
 
-        const taskList = (deadlines || []).map(d => ({
-          id: d.deadline_id.toString(),
-          description: d.title || d.document_type,
-          action: d.action_type === 'publish' ? 'Publish' : 'Submit',
-          urgent: new Date(d.deadline_date) <= new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-        }));
-        setComplianceTasks(taskList);
-      } catch (error) { console.error('Error:', error); }
-    };
-    fetchTasks();
+      const taskList = (deadlines || []).map(d => ({
+        id: d.deadline_id.toString(),
+        description: d.title || d.document_type,
+        action: d.action_type === 'publish' ? 'Publish' : 'Submit',
+        urgent: new Date(d.deadline_date) <= new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+      }));
+      setComplianceTasks(taskList);
+    } catch (error) { console.error('Error:', error); }
   }, [barangayId]);
+
+  // Refresh all data whenever the screen comes into focus
+  useFocusEffect(
+    useCallback(() => {
+      fetchDocuments();
+      fetchTasks();
+    }, [fetchDocuments, fetchTasks])
+  );
 
   const handleNavPress = (tab) => {
     if (tab === 'Dashboard') router.push('/(tabs)/sk-dashboard');
