@@ -2,12 +2,19 @@ import React, { useState, useEffect, useRef } from 'react';
 import {
   View, Text, TextInput, ScrollView, TouchableOpacity,
   StyleSheet, SafeAreaView, StatusBar, Dimensions,
-  Modal, Alert, Image, Platform, Linking,
+  Modal, Alert, Image, Platform, Linking, ActivityIndicator,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
+
+// WebView: use react-native-webview on native, iframe on web
+let WebView = null;
+if (Platform.OS !== 'web') {
+  WebView = require('react-native-webview').WebView;
+}
+import { Feather } from '@expo/vector-icons';
 import { useNav } from './navContext';
 import { useAuth } from './authContext';
 import { supabase } from '../../utils/supabase';
@@ -80,6 +87,104 @@ const BellIcon = ({ hasNotif }) => (
 const MenuIcon = () => (
   <View style={styles.menuIconContainer}>
     {[0, 1, 2].map(i => <View key={i} style={styles.menuLine} />)}
+  </View>
+);
+
+// Dashboard: 2×2 grid of rounded squares
+const DashboardIcon = ({ color = '#fff', size = 16 }) => {
+  const s = size * 0.38;
+  const gap = size * 0.12;
+  const r = size * 0.12;
+  const box = { width: s, height: s, borderRadius: r, backgroundColor: color };
+  return (
+    <View style={{ width: size, height: size, justifyContent: 'center', alignItems: 'center' }}>
+      <View style={{ flexDirection: 'row', gap }}>
+        <View style={box} />
+        <View style={box} />
+      </View>
+      <View style={{ height: gap }} />
+      <View style={{ flexDirection: 'row', gap }}>
+        <View style={box} />
+        <View style={box} />
+      </View>
+    </View>
+  );
+};
+
+// Documents: file shape with fold + two lines
+const DocumentsIcon = ({ color = '#fff', size = 16 }) => {
+  const w = size * 0.6, h = size * 0.78;
+  const fold = size * 0.22;
+  return (
+    <View style={{ width: size, height: size, justifyContent: 'center', alignItems: 'center' }}>
+      <View style={{ width: w, height: h, justifyContent: 'flex-end', paddingBottom: size * 0.08, paddingHorizontal: size * 0.1 }}>
+        <View style={{ position: 'absolute', left: 0, right: 0, top: fold, bottom: 0, borderWidth: 1.5, borderColor: color, borderRadius: size * 0.08 }} />
+        <View style={{ position: 'absolute', top: 0, right: 0, width: fold, height: fold, backgroundColor: color, borderBottomLeftRadius: size * 0.06 }} />
+        <View style={{ position: 'absolute', top: 0, left: 0, width: w - fold, height: fold, borderTopWidth: 1.5, borderLeftWidth: 1.5, borderColor: color, borderTopLeftRadius: size * 0.08 }} />
+        <View style={{ height: 1.5, backgroundColor: color, borderRadius: 1, marginBottom: size * 0.1, width: '80%' }} />
+        <View style={{ height: 1.5, backgroundColor: color, borderRadius: 1, width: '55%' }} />
+      </View>
+    </View>
+  );
+};
+
+// Planning: calendar grid
+const PlanningIcon = ({ color = '#fff', size = 16 }) => {
+  const bw = 1.5;
+  return (
+    <View style={{ width: size, height: size, justifyContent: 'center', alignItems: 'center' }}>
+      <View style={{ width: size * 0.82, height: size * 0.75, borderWidth: bw, borderColor: color, borderRadius: size * 0.1, overflow: 'hidden' }}>
+        <View style={{ height: size * 0.22, backgroundColor: color, width: '100%' }} />
+        <View style={{ flex: 1, flexDirection: 'row', justifyContent: 'space-around', alignItems: 'center', paddingHorizontal: size * 0.05 }}>
+          {[0,1,2].map(i => <View key={i} style={{ width: size * 0.1, height: size * 0.1, borderRadius: size * 0.05, backgroundColor: color }} />)}
+        </View>
+      </View>
+      <View style={{ position: 'absolute', top: 0, flexDirection: 'row', gap: size * 0.32 }}>
+        {[0,1].map(i => <View key={i} style={{ width: size * 0.1, height: size * 0.2, backgroundColor: color, borderRadius: size * 0.05 }} />)}
+      </View>
+    </View>
+  );
+};
+
+// Portal: simple globe
+const PortalIcon = ({ color = '#fff', size = 16 }) => (
+  <View style={{ width: size, height: size, justifyContent: 'center', alignItems: 'center' }}>
+    <View style={{ width: size * 0.82, height: size * 0.82, borderRadius: size * 0.41, borderWidth: 1.5, borderColor: color, justifyContent: 'center', alignItems: 'center', overflow: 'hidden' }}>
+      <View style={{ position: 'absolute', height: 1.5, width: '100%', backgroundColor: color }} />
+      <View style={{ width: size * 0.38, height: size * 0.78, borderRadius: size * 0.19, borderWidth: 1.5, borderColor: color, backgroundColor: 'transparent' }} />
+    </View>
+  </View>
+);
+
+// Logs: clipboard with checkmark lines
+const LogsIcon = ({ color = '#fff', size = 16 }) => (
+  <View style={{ width: size, height: size, justifyContent: 'center', alignItems: 'center' }}>
+    <View style={{ width: size * 0.75, height: size * 0.85, borderWidth: 1.5, borderColor: color, borderRadius: size * 0.1, paddingHorizontal: size * 0.1, paddingVertical: size * 0.1, justifyContent: 'space-around' }}>
+      <View style={{ position: 'absolute', top: -size * 0.08, alignSelf: 'center', width: size * 0.3, height: size * 0.14, backgroundColor: color, borderRadius: size * 0.04 }} />
+      {[0,1,2].map(i => (
+        <View key={i} style={{ flexDirection: 'row', alignItems: 'center', gap: size * 0.08, marginTop: i === 0 ? size * 0.1 : 0 }}>
+          <View style={{ width: size * 0.1, height: size * 0.1, borderRadius: size * 0.05, backgroundColor: color }} />
+          <View style={{ flex: 1, height: 1.5, backgroundColor: color, borderRadius: 1 }} />
+        </View>
+      ))}
+    </View>
+  </View>
+);
+
+// Account: head + shoulders silhouette
+const AccountIcon = ({ color = '#fff', size = 16 }) => (
+  <View style={{ width: size, height: size, justifyContent: 'center', alignItems: 'center' }}>
+    <View style={{ width: size * 0.38, height: size * 0.38, borderRadius: size * 0.19, borderWidth: 1.5, borderColor: color, marginBottom: size * 0.04 }} />
+    <View style={{ width: size * 0.72, height: size * 0.36, borderBottomLeftRadius: size * 0.36, borderBottomRightRadius: size * 0.36, borderWidth: 1.5, borderColor: color, borderTopWidth: 0, overflow: 'hidden' }} />
+  </View>
+);
+
+// Logout: door with arrow
+const LogoutNavIcon = ({ color = '#fff', size = 16 }) => (
+  <View style={{ width: size, height: size, justifyContent: 'center', alignItems: 'center' }}>
+    <View style={{ position: 'absolute', left: 0, top: 0, width: size * 0.55, height: size, borderWidth: 1.5, borderColor: color, borderRadius: size * 0.08 }} />
+    <View style={{ position: 'absolute', right: size * 0.02, width: size * 0.52, height: 1.8, backgroundColor: color, borderRadius: 1 }} />
+    <View style={{ position: 'absolute', right: size * 0.02, width: size * 0.2, height: size * 0.2, borderTopWidth: 1.8, borderRightWidth: 1.8, borderColor: color, transform: [{ rotate: '45deg' }], marginTop: -size * 0.01 }} />
   </View>
 );
 
@@ -168,6 +273,10 @@ export default function SKPortalScreen() {
   const [isUploading, setIsUploading] = useState(false);
   const [alertModal, setAlertModal] = useState({ visible: false, type: 'publish', docTitle: '', onConfirm: null });
   const [successModal, setSuccessModal] = useState({ visible: false, type: 'publish', docTitle: '' });
+  const [viewerModal, setViewerModal] = useState({ visible: false, fileUrl: null, title: '' });
+  const [webViewLoading, setWebViewLoading] = useState(false);
+  const [downloadModalVisible, setDownloadModalVisible] = useState(false);
+  const [documentToDownload, setDocumentToDownload] = useState(null);
 
   const openAlert = (type, docTitle, onConfirm) =>
     setAlertModal({ visible: true, type, docTitle, onConfirm });
@@ -315,6 +424,15 @@ export default function SKPortalScreen() {
   });
 
   // ── Sidebar ──
+  const NAV_ITEMS = [
+    { tab: 'Dashboard', IconComponent: DashboardIcon },
+    { tab: 'Documents', IconComponent: DocumentsIcon },
+    { tab: 'Planning',  IconComponent: PlanningIcon  },
+    { tab: 'Portal',    IconComponent: PortalIcon    },
+    { tab: 'Logs',      IconComponent: LogsIcon      },
+    { tab: 'Account',   IconComponent: AccountIcon   },
+  ];
+
   const renderSidebar = () => (
     <View style={[styles.sidebar, isMobile && !sidebarVisible && styles.sidebarHidden]}>
       <View style={styles.logoPill}>
@@ -325,8 +443,9 @@ export default function SKPortalScreen() {
         />
       </View>
       <View style={{ height: 28 }} />
-      {NAV_TABS.map(tab => {
-        const active = activeTab === tab || (tab === 'Portal' && activeTab === 'Portal');
+      {NAV_ITEMS.map(({ tab, IconComponent }) => {
+        const active = activeTab === tab;
+        const iconColor = active ? '#133E75' : 'rgba(255,255,255,0.85)';
         return (
           <TouchableOpacity
             key={tab}
@@ -334,55 +453,59 @@ export default function SKPortalScreen() {
             onPress={() => tab === 'Portal' ? setActiveTab('Portal') : handleNavPress(tab)}
             activeOpacity={0.8}
           >
-            <Text style={[styles.navLabel, active && styles.navLabelActive]}>{tab}</Text>
+            <View style={styles.navItemInner}>
+              <IconComponent color={iconColor} size={16} />
+              <Text style={[styles.navLabel, active && styles.navLabelActive]}>{tab}</Text>
+            </View>
           </TouchableOpacity>
         );
       })}
       <View style={{ flex: 1 }} />
       <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout} activeOpacity={0.8}>
-        <Text style={styles.logoutText}>Logout</Text>
+        <View style={styles.navItemInner}>
+          <LogoutNavIcon color="rgba(255,255,255,0.85)" size={16} />
+          <Text style={styles.logoutText}>Logout</Text>
+        </View>
       </TouchableOpacity>
     </View>
   );
 
-  // -- View handler (open in browser/viewer) --
-  const handleView = async (fileUrl) => {
+  // -- View handler: opens full-screen Google Docs viewer modal --
+  const handleView = (fileUrl, title) => {
     if (!fileUrl) {
       Alert.alert('No File', 'This document has no file attached.');
       return;
     }
-    if (Platform.OS === 'web') {
-      window.open(fileUrl, '_blank');
-      return;
-    }
-    try {
-      const supported = await Linking.canOpenURL(fileUrl);
-      if (supported) {
-        await Linking.openURL(fileUrl);
-      } else {
-        Alert.alert('Error', 'Cannot open this file on this device.');
-      }
-    } catch (e) {
-      console.error('View error:', e);
-      Alert.alert('Error', 'Could not open the file.');
-    }
+    setViewerModal({ visible: true, fileUrl, title: title || 'Document' });
+    setWebViewLoading(true);
   };
 
-  // -- Download handler --
-  const handleDownload = async (fileUrl, title) => {
+  // -- Download handler: shows confirmation modal then opens URL --
+  const handleDownload = (fileUrl, title) => {
     if (!fileUrl) {
       Alert.alert('No File', 'This document has no file attached.');
       return;
     }
-    const ext = fileUrl.split('.').pop().split('?')[0] || 'pdf';
-    const safeName = (title || 'document').replace(/[^\w]/g, '_') + '.' + ext;
+    setDocumentToDownload({ fileUrl, title: title || 'Document' });
+    setDownloadModalVisible(true);
+  };
+
+  const handleDownloadConfirm = async () => {
+    if (!documentToDownload?.fileUrl) {
+      Alert.alert('No File', 'This document does not have an attached file.');
+      return;
+    }
+    setDownloadModalVisible(false);
+    const { fileUrl, title } = documentToDownload;
+    setDocumentToDownload(null);
 
     if (Platform.OS === 'web') {
-      // Web: fetch as blob then trigger browser save-as dialog
       try {
         const response = await fetch(fileUrl);
         const blob = await response.blob();
         const objectUrl = URL.createObjectURL(blob);
+        const ext = fileUrl.split('.').pop().split('?')[0] || 'pdf';
+        const safeName = (title || 'document').replace(/[^\w]/g, '_') + '.' + ext;
         const a = document.createElement('a');
         a.href = objectUrl;
         a.download = safeName;
@@ -391,27 +514,15 @@ export default function SKPortalScreen() {
         document.body.removeChild(a);
         URL.revokeObjectURL(objectUrl);
       } catch (e) {
-        console.error('Web download error:', e);
-        // Fallback: open in new tab
         window.open(fileUrl, '_blank');
       }
       return;
     }
 
-    // Native: FileSystem + Sharing
     try {
-      // Timestamp prevents collisions when re-downloading the same file
-      const localUri = FileSystem.documentDirectory + (title || 'doc').replace(/[^\w]/g, '_') + '_' + Date.now() + '.' + ext;
-      const { uri } = await FileSystem.downloadAsync(fileUrl, localUri);
-      const canShare = await Sharing.isAvailableAsync();
-      if (canShare) {
-        await Sharing.shareAsync(uri, { dialogTitle: title || 'Document' });
-      } else {
-        Alert.alert('Downloaded', 'File saved to device.');
-      }
+      await Linking.openURL(fileUrl);
     } catch (e) {
-      console.error('Download error:', e);
-      Alert.alert('Error', 'Could not download the file.');
+      Alert.alert('Download Failed', 'Could not open the file.');
     }
   };
 
@@ -466,7 +577,7 @@ export default function SKPortalScreen() {
           <View style={styles.modalActions}>
             <TouchableOpacity
               style={[styles.modalActionBtn, { backgroundColor: '#EAF0FB' }]}
-              onPress={() => handleView(selectedDoc?.fileUrl)}
+              onPress={() => handleView(selectedDoc?.fileUrl, selectedDoc?.title)}
             >
               <Text style={[styles.modalActionText, { color: COLORS.navy }]}>👁  View</Text>
             </TouchableOpacity>
@@ -1264,6 +1375,117 @@ export default function SKPortalScreen() {
       {renderAlertModal()}
       {renderSuccessModal()}
 
+      {/* ── Document Viewer Modal ── */}
+      <Modal
+        visible={viewerModal.visible}
+        animationType="slide"
+        transparent={false}
+        onRequestClose={() => setViewerModal({ visible: false, fileUrl: null, title: '' })}
+      >
+        <SafeAreaView style={{ flex: 1, backgroundColor: COLORS.navy }}>
+          <View style={styles.viewerHeader}>
+            <TouchableOpacity
+              style={styles.viewerBackBtn}
+              onPress={() => setViewerModal({ visible: false, fileUrl: null, title: '' })}
+              activeOpacity={0.8}
+            >
+              <Feather name="arrow-left" size={20} color={COLORS.white} />
+            </TouchableOpacity>
+            <Text style={styles.viewerTitle} numberOfLines={1}>{viewerModal.title}</Text>
+            {viewerModal.fileUrl && (
+              <TouchableOpacity
+                style={styles.viewerOpenBtn}
+                onPress={() => {
+                  setViewerModal({ visible: false, fileUrl: null, title: '' });
+                  setDocumentToDownload({ fileUrl: viewerModal.fileUrl, title: viewerModal.title });
+                  setDownloadModalVisible(true);
+                }}
+                activeOpacity={0.8}
+              >
+                <Feather name="download" size={18} color={COLORS.gold} />
+              </TouchableOpacity>
+            )}
+          </View>
+          <View style={{ flex: 1, backgroundColor: COLORS.offWhite, overflow: 'hidden' }}>
+            {viewerModal.fileUrl && (
+              Platform.OS === 'web' ? (
+                <iframe
+                  src={`https://docs.google.com/gview?embedded=true&url=${encodeURIComponent(viewerModal.fileUrl)}`}
+                  style={{ flex: 1, width: '100%', height: '100%', border: 'none' }}
+                  title={viewerModal.title}
+                />
+              ) : (
+                WebView ? (
+                  <View style={{ flex: 1 }}>
+                    <WebView
+                      source={{ uri: `https://docs.google.com/gview?embedded=true&url=${encodeURIComponent(viewerModal.fileUrl)}` }}
+                      style={{ flex: 1 }}
+                      onLoadStart={() => setWebViewLoading(true)}
+                      onLoadEnd={() => setWebViewLoading(false)}
+                      onError={() => {
+                        setWebViewLoading(false);
+                        Alert.alert('Load Failed', 'Could not load the document.');
+                        setViewerModal({ visible: false, fileUrl: null, title: '' });
+                      }}
+                      startInLoadingState={true}
+                      renderLoading={() => (
+                        <View style={styles.viewerLoading}>
+                          <ActivityIndicator size="large" color={COLORS.navy} />
+                          <Text style={styles.viewerLoadingText}>Loading document…</Text>
+                        </View>
+                      )}
+                    />
+                    {webViewLoading && (
+                      <View style={styles.viewerLoading}>
+                        <ActivityIndicator size="large" color={COLORS.navy} />
+                        <Text style={styles.viewerLoadingText}>Loading document…</Text>
+                      </View>
+                    )}
+                  </View>
+                ) : null
+              )
+            )}
+          </View>
+        </SafeAreaView>
+      </Modal>
+
+      {/* ── Download Confirmation Modal ── */}
+      <Modal
+        visible={downloadModalVisible}
+        animationType="fade"
+        transparent={true}
+        onRequestClose={() => { setDownloadModalVisible(false); setDocumentToDownload(null); }}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.dlModalCard}>
+            <View style={styles.dlModalIconWrap}>
+              <Feather name="download" size={28} color={COLORS.navy} />
+            </View>
+            <Text style={styles.dlModalTitle}>Download Document</Text>
+            <Text style={styles.dlModalBody}>
+              Do you want to download{' '}
+              <Text style={{ fontWeight: '700', color: COLORS.navy }}>"{documentToDownload?.title}"</Text>?
+            </Text>
+            <View style={styles.dlModalFooter}>
+              <TouchableOpacity
+                style={styles.dlCancelBtn}
+                onPress={() => { setDownloadModalVisible(false); setDocumentToDownload(null); }}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.dlCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.dlConfirmBtn}
+                onPress={handleDownloadConfirm}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.dlConfirmText}>Download</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
       {/* Floating dropdowns — always on top */}
       {renderFloatingDropdown(showDocDropdown, setShowDocDropdown, docDropdownPos, DOCUMENT_FILTERS, docFilter, setDocFilter, 220)}
       {renderFloatingDropdown(showYearDropdown, setShowYearDropdown, yearDropdownPos, YEAR_FILTERS, yearFilter, setYearFilter, 100)}
@@ -1319,8 +1541,8 @@ const styles = StyleSheet.create({
     borderRadius: 24, marginBottom: 8, alignItems: 'center',
     borderWidth: 1.5, borderColor: COLORS.white,
     backgroundColor: COLORS.navy,
-    flexDirection: 'row', justifyContent: 'center', gap: 6,
   },
+  navItemInner: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   navItemActive: { backgroundColor: COLORS.white, borderColor: COLORS.white },
   navLabel:      { fontSize: 13, fontWeight: '600', color: 'rgba(255,255,255,0.85)', letterSpacing: 0.3 },
   navLabelActive:{ color: '#000', fontWeight: '800' },
@@ -1846,6 +2068,63 @@ const styles = StyleSheet.create({
     color: COLORS.subText,
     fontWeight: '500',
   },
+
+  // ── Document Viewer ──
+  viewerHeader: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: COLORS.navy,
+    paddingHorizontal: 12, paddingVertical: 12, gap: 10,
+  },
+  viewerBackBtn: {
+    padding: 6, borderRadius: 8,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+  },
+  viewerTitle: {
+    flex: 1, fontSize: 14, fontWeight: '700', color: COLORS.white,
+  },
+  viewerOpenBtn: {
+    padding: 6, borderRadius: 8,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+  },
+  viewerLoading: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center', justifyContent: 'center',
+    backgroundColor: COLORS.offWhite, gap: 12,
+  },
+  viewerLoadingText: { fontSize: 13, color: COLORS.subText },
+
+  // ── Download Confirmation Modal ──
+  dlModalCard: {
+    backgroundColor: COLORS.white, borderRadius: 16,
+    padding: 24, width: '85%', maxWidth: 340,
+    alignItems: 'center',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.18, shadowRadius: 24, elevation: 16,
+  },
+  dlModalIconWrap: {
+    width: 64, height: 64, borderRadius: 32,
+    backgroundColor: '#DBEAFE',
+    alignItems: 'center', justifyContent: 'center', marginBottom: 14,
+  },
+  dlModalTitle: {
+    fontSize: 17, fontWeight: '800', color: COLORS.darkText,
+    marginBottom: 8, textAlign: 'center',
+  },
+  dlModalBody: {
+    fontSize: 13, color: COLORS.subText, textAlign: 'center',
+    lineHeight: 20, marginBottom: 20,
+  },
+  dlModalFooter: { flexDirection: 'row', gap: 10, width: '100%' },
+  dlCancelBtn: {
+    flex: 1, paddingVertical: 12, borderRadius: 10,
+    backgroundColor: COLORS.lightGray, alignItems: 'center',
+  },
+  dlCancelText: { fontSize: 14, fontWeight: '600', color: COLORS.subText },
+  dlConfirmBtn: {
+    flex: 1, paddingVertical: 12, borderRadius: 10,
+    backgroundColor: COLORS.navy, alignItems: 'center',
+  },
+  dlConfirmText: { fontSize: 14, fontWeight: '700', color: COLORS.white },
 });
 
 // ─── ALERT MODAL STYLES ───────────────────────────────────────────────────────
