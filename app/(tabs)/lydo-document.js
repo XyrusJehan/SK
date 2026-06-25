@@ -357,7 +357,7 @@ const DocumentCard = ({ group, onItemPress }) => {
 export default function LYDODocumentsScreen({ navigation }) {
   const router = useRouter();
   const { activeTab, setActiveTab } = useNav();
-  const { logout } = useAuth();
+  const { logout, user } = useAuth();
 
   const [view, setView]                           = useState('folders'); // 'folders' | 'years' | 'doctypes'
   const [selectedBarangay, setSelectedBarangay]   = useState(null);
@@ -376,6 +376,11 @@ export default function LYDODocumentsScreen({ navigation }) {
   // Viewer state
   const [viewerModal, setViewerModal] = useState({ visible: false, fileUrl: null, title: '' });
   const [webViewLoading, setWebViewLoading] = useState(false);
+
+  // Add Folder modal state
+  const [addFolderVisible, setAddFolderVisible] = useState(false);
+  const [newFolderYear, setNewFolderYear] = useState('');
+  const [addFolderError, setAddFolderError] = useState('');
 
   // Handle view press - open document viewer
   const handleViewPress = (doc) => {
@@ -425,17 +430,17 @@ export default function LYDODocumentsScreen({ navigation }) {
           setBarangays(barangayData || []);
         }
 
-        // Fetch all distinct years from documents with approved status
+        // Fetch all distinct years — approved docs + 'Year Folder' saved sentinels
         const { data: yearData, error: yearError } = await supabase
           .from('documents')
           .select('year')
-          .eq('status', 'approved')
-          .order('year', { ascending: false });
+          .or('status.eq.approved,and(status.eq.saved,document_type.eq.Year Folder)')
+          .order('year', { ascending: true });
 
         if (yearError) {
           console.error('Error fetching years:', yearError);
         } else {
-          const years = [...new Set(yearData?.map(d => d.year).filter(Boolean))];
+          const years = [...new Set(yearData?.map(d => d.year).filter(Boolean))].sort((a, b) => a - b);
           setDocumentYears(years);
         }
       } catch (error) {
@@ -542,6 +547,66 @@ export default function LYDODocumentsScreen({ navigation }) {
     if (tab === 'Templates') { router.push('/(tabs)/lydo-document-templates'); return; }
     if (tab === 'Reports') { router.push('/(tabs)/lydo-document-reports'); return; }
     setActiveDocumentTab(tab);
+  };
+
+  const handleAddFolder = async () => {
+    const trimmed = newFolderYear.trim();
+
+    // Validate: 4-digit year, reasonable range
+    if (!/^\d{4}$/.test(trimmed)) {
+      setAddFolderError('Please enter a valid 4-digit year (e.g. 2026).');
+      return;
+    }
+    const yearNum = parseInt(trimmed, 10);
+    if (yearNum < 2000 || yearNum > 2100) {
+      setAddFolderError('Year must be between 2000 and 2100.');
+      return;
+    }
+    if (documentYears.includes(yearNum) || documentYears.includes(trimmed)) {
+      setAddFolderError(`Folder for ${trimmed} already exists.`);
+      return;
+    }
+
+    try {
+      // Insert a sentinel row into documents to anchor this year folder.
+      // Uses status:'saved' to satisfy any check constraint on the status column.
+      const insertPayload = {
+        title:           `Year Folder ${yearNum}`,
+        year:            yearNum,
+        status:          'saved',
+        folder_category: 'planning',
+        document_type:   'Year Folder',
+        current_version: 1,
+        created_at:      new Date().toISOString(),
+        saved_at:        new Date().toISOString(),
+      };
+
+      // Only include submitted_by if we have a valid user id
+      if (user?.id) insertPayload.submitted_by = user.id;
+
+      const { data: inserted, error } = await supabase
+        .from('documents')
+        .insert(insertPayload)
+        .select('year')
+        .single();
+
+      if (error) {
+        setAddFolderError(`Error: ${error.message}`);
+        console.error('Insert year folder error:', error);
+        return;
+      }
+
+      // Update local state sorted ascending
+      const updated = [yearNum, ...documentYears].sort((a, b) => a - b);
+      setDocumentYears(updated);
+
+      setAddFolderVisible(false);
+      setNewFolderYear('');
+      setAddFolderError('');
+    } catch (err) {
+      setAddFolderError(`Unexpected error: ${err.message}`);
+      console.error(err);
+    }
   };
 
   // ── Filtered data ──
@@ -688,8 +753,8 @@ export default function LYDODocumentsScreen({ navigation }) {
       {/* ── VIEW: ROOT FOLDERS (years) ── */}
       {view === 'folders' && (
         <>
-          {/* Search */}
-          <View style={styles.searchRow}>
+          {/* Search + Add Folder button row */}
+          <View style={[styles.searchRow, { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 }]}>
             <View style={styles.searchBox}>
               <Text style={{ fontSize: 13, marginRight: 6 }}>🔍</Text>
               <TextInput
@@ -705,26 +770,131 @@ export default function LYDODocumentsScreen({ navigation }) {
                 </TouchableOpacity>
               )}
             </View>
+            <TouchableOpacity
+              style={styles.addFolderBtn}
+              onPress={() => {
+                setNewFolderYear('');
+                setAddFolderError('');
+                setAddFolderVisible(true);
+              }}
+              activeOpacity={0.8}
+            >
+              {/* Mini folder icon */}
+              <View style={styles.addFolderBtnIconWrap}>
+                <View style={styles.addFolderBtnFolderTab} />
+                <View style={styles.addFolderBtnFolderBody}>
+                  <Text style={styles.addFolderBtnPlus}>+</Text>
+                </View>
+              </View>
+              <Text style={styles.addFolderBtnText}>Add Folder</Text>
+            </TouchableOpacity>
           </View>
 
           {/* Container box for year folders */}
           <View style={styles.folderContainer}>
             <Text style={styles.allDocsLabel}>All Documents</Text>
 
-            <View style={isMobile ? styles.folderGridMobile : styles.folderGrid}>
-              {filteredYears.map((year, idx) => (
-                <TouchableOpacity
-                  key={idx}
-                  style={styles.folderCard}
-                  onPress={() => goToYears(year)}
-                  activeOpacity={0.75}
-                >
-                  <YearFolderIcon size={isMobile ? 60 : 68} />
-                  <Text style={styles.folderName}>{year}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
+            {filteredYears.length === 0 ? (
+              <View style={styles.emptyState}>
+                <Text style={{ fontSize: 32, marginBottom: 8 }}>📁</Text>
+                <Text style={styles.emptyText}>No year folders yet.</Text>
+                <Text style={{ fontSize: 12, color: COLORS.midGray, marginTop: 4 }}>
+                  Tap "+ Add Folder" to create one.
+                </Text>
+              </View>
+            ) : (
+              <View style={isMobile ? styles.folderGridMobile : styles.folderGrid}>
+                {filteredYears.map((year, idx) => (
+                  <TouchableOpacity
+                    key={idx}
+                    style={styles.folderCard}
+                    onPress={() => goToYears(year)}
+                    activeOpacity={0.75}
+                  >
+                    <YearFolderIcon size={isMobile ? 60 : 68} />
+                    <Text style={styles.folderName}>{year}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
           </View>
+
+          {/* ── ADD FOLDER MODAL ── */}
+          <Modal
+            visible={addFolderVisible}
+            transparent
+            animationType="fade"
+            onRequestClose={() => setAddFolderVisible(false)}
+          >
+            <TouchableOpacity
+              style={styles.addFolderOverlay}
+              activeOpacity={1}
+              onPress={() => setAddFolderVisible(false)}
+            />
+            <View style={styles.addFolderModalWrap} pointerEvents="box-none">
+              <View style={styles.addFolderModal}>
+                {/* Header */}
+                <View style={styles.addFolderModalHeader}>
+                  <View style={styles.addFolderModalHeaderLeft}>
+                    <View style={styles.addFolderModalIconWrap}>
+                      <Text style={{ fontSize: 20 }}>📁</Text>
+                    </View>
+                    <Text style={styles.addFolderModalTitle}>New Year Folder</Text>
+                  </View>
+                  <TouchableOpacity
+                    onPress={() => setAddFolderVisible(false)}
+                    style={styles.addFolderCloseBtn}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={styles.addFolderCloseBtnText}>✕</Text>
+                  </TouchableOpacity>
+                </View>
+
+                <View style={styles.addFolderModalDivider} />
+
+                {/* Body */}
+                <View style={styles.addFolderModalBody}>
+                  <Text style={styles.addFolderModalLabel}>Year</Text>
+                  <TextInput
+                    style={[styles.addFolderInput, addFolderError ? styles.addFolderInputError : null]}
+                    placeholder={`e.g. ${new Date().getFullYear()}`}
+                    placeholderTextColor={COLORS.midGray}
+                    value={newFolderYear}
+                    onChangeText={t => { setNewFolderYear(t.replace(/[^0-9]/g, '')); setAddFolderError(''); }}
+                    keyboardType="number-pad"
+                    maxLength={4}
+                    autoFocus
+                  />
+                  {addFolderError ? (
+                    <Text style={styles.addFolderErrorText}>{addFolderError}</Text>
+                  ) : (
+                    <Text style={styles.addFolderHint}>
+                      A new folder will be created for this fiscal year.
+                    </Text>
+                  )}
+                </View>
+
+                {/* Footer buttons */}
+                <View style={styles.addFolderModalFooter}>
+                  <TouchableOpacity
+                    style={styles.addFolderCancelBtn}
+                    onPress={() => setAddFolderVisible(false)}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={styles.addFolderCancelText}>Cancel</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.addFolderConfirmBtn, !newFolderYear.trim() && styles.addFolderConfirmBtnDisabled]}
+                    onPress={handleAddFolder}
+                    activeOpacity={0.8}
+                    disabled={!newFolderYear.trim()}
+                  >
+                    <Text style={styles.addFolderConfirmText}>Create Folder</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </View>
+          </Modal>
         </>
       )}
 
@@ -1427,6 +1597,104 @@ const styles = StyleSheet.create({
 
   emptyState: { flex: 1, alignItems: 'center', marginTop: 60 },
   emptyText: { fontSize: 14, color: COLORS.midGray },
+
+  // ── Add Folder Button ──
+  addFolderBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    backgroundColor: COLORS.navy,
+    paddingVertical: 8, paddingHorizontal: 14,
+    borderRadius: 20,
+    shadowColor: COLORS.navy,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.3, shadowRadius: 6, elevation: 4,
+  },
+  addFolderBtnIconWrap: {
+    width: 22, height: 18,
+    justifyContent: 'flex-end',
+  },
+  addFolderBtnFolderTab: {
+    position: 'absolute', top: 0, left: 0,
+    width: 9, height: 5,
+    backgroundColor: 'rgba(255,255,255,0.5)',
+    borderTopLeftRadius: 2, borderTopRightRadius: 3,
+  },
+  addFolderBtnFolderBody: {
+    position: 'absolute', top: 3, left: 0,
+    width: 22, height: 15,
+    backgroundColor: 'rgba(255,255,255,0.25)',
+    borderRadius: 3, borderTopRightRadius: 3, borderTopLeftRadius: 1,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  addFolderBtnPlus: {
+    fontSize: 12, fontWeight: '900', color: COLORS.white, lineHeight: 14,
+  },
+  addFolderBtnText: { fontSize: 13, fontWeight: '700', color: COLORS.white, letterSpacing: 0.2 },
+
+  // ── Add Folder Modal ──
+  addFolderOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+  },
+  addFolderModalWrap: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: 'center', alignItems: 'center',
+  },
+  addFolderModal: {
+    width: isMobile ? '88%' : 400,
+    backgroundColor: COLORS.white,
+    borderRadius: 16,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.18, shadowRadius: 24, elevation: 12,
+  },
+  addFolderModalHeader: {
+    flexDirection: 'row', alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20, paddingVertical: 16,
+  },
+  addFolderModalHeaderLeft: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  addFolderModalIconWrap: {
+    width: 38, height: 38, borderRadius: 10,
+    backgroundColor: '#EFF6FF',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  addFolderModalTitle: { fontSize: 16, fontWeight: '800', color: COLORS.darkText },
+  addFolderCloseBtn: {
+    width: 30, height: 30, borderRadius: 15,
+    backgroundColor: COLORS.lightGray,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  addFolderCloseBtnText: { fontSize: 13, color: COLORS.subText, fontWeight: '700' },
+  addFolderModalDivider: { height: 1, backgroundColor: COLORS.lightGray },
+  addFolderModalBody: { paddingHorizontal: 20, paddingVertical: 20, gap: 6 },
+  addFolderModalLabel: { fontSize: 13, fontWeight: '700', color: COLORS.darkText, marginBottom: 4 },
+  addFolderInput: {
+    borderWidth: 1.5, borderColor: COLORS.lightGray,
+    borderRadius: 10, paddingHorizontal: 14, paddingVertical: 11,
+    fontSize: 15, fontWeight: '700', color: COLORS.darkText,
+    backgroundColor: COLORS.offWhite,
+    letterSpacing: 2,
+  },
+  addFolderInputError: { borderColor: '#EF4444' },
+  addFolderErrorText: { fontSize: 12, color: '#EF4444', fontWeight: '500', marginTop: 4 },
+  addFolderHint: { fontSize: 12, color: COLORS.subText, marginTop: 4, lineHeight: 17 },
+  addFolderModalFooter: {
+    flexDirection: 'row', gap: 10,
+    paddingHorizontal: 20, paddingBottom: 20, paddingTop: 4,
+  },
+  addFolderCancelBtn: {
+    flex: 1, paddingVertical: 12, borderRadius: 10,
+    borderWidth: 1.5, borderColor: COLORS.lightGray,
+    alignItems: 'center',
+  },
+  addFolderCancelText: { fontSize: 14, fontWeight: '700', color: COLORS.subText },
+  addFolderConfirmBtn: {
+    flex: 2, paddingVertical: 12, borderRadius: 10,
+    backgroundColor: COLORS.navy, alignItems: 'center',
+  },
+  addFolderConfirmBtnDisabled: { backgroundColor: COLORS.midGray },
+  addFolderConfirmText: { fontSize: 14, fontWeight: '700', color: COLORS.white },
 
   // ── Barangay-by-year table ──
   tableTopRow: {

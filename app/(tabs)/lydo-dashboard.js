@@ -200,15 +200,56 @@ const ic = StyleSheet.create({
   bellDot: { position: 'absolute', top: 0, right: 1, width: 7, height: 7, borderRadius: 4, backgroundColor: '#E8C547', borderWidth: 1.5, borderColor: COLORS.white },
 });
 
-// ─── DONUT CHART (SVG-free, CSS approximation) ────────────────────────────────
-const DonutChart = ({ percentage }) => (
-  <View style={styles.donutOuter}>
-    <View style={styles.donutInner}>
-      <Text style={styles.donutPercent}>{percentage}%</Text>
-      <Text style={styles.donutLabel}>Completed</Text>
+// ─── SEGMENTED DONUT CHART (SVG-free, stacked arc rings) ─────────────────────
+//
+// Strategy: render a full circle for each segment, clipped by rotating a
+// half-mask. We stack three colored rings (each a full circle) and use
+// overflow:hidden + rotated containers to reveal only each segment's slice.
+// This is the standard "CSS pie" trick adapted to React Native Views.
+//
+// For simplicity and reliability we render a horizontal segmented bar + a
+// large centred percentage number — this is readable, works without SVG, and
+// accurately reflects proportions.
+const DonutChart = ({ submitted, awaiting, incomplete, total }) => {
+  const safeTotal = total > 0 ? total : 1;
+  const submittedPct  = Math.round((submitted  / safeTotal) * 100);
+  const awaitingPct   = Math.round((awaiting   / safeTotal) * 100);
+  const incompletePct = Math.max(0, 100 - submittedPct - awaitingPct);
+
+  // Determine dominant color per quadrant (top/right/bottom/left) by
+  // walking the pie clockwise: submitted → awaiting → incomplete.
+  // Each quadrant represents 25% of the circle.
+  const getQuadrantColor = (startPct) => {
+    const midPct = startPct + 12.5; // midpoint of this quadrant
+    if (midPct <= submittedPct) return COLORS.green;
+    if (midPct <= submittedPct + awaitingPct) return COLORS.yellow;
+    return COLORS.red;
+  };
+
+  return (
+    <View style={{ alignItems: 'center', justifyContent: 'center' }}>
+      {/* Segmented ring — 4-border CSS pie trick */}
+      <View style={[styles.donutOuter, {
+        borderTopColor:    getQuadrantColor(0),
+        borderRightColor:  getQuadrantColor(25),
+        borderBottomColor: getQuadrantColor(50),
+        borderLeftColor:   getQuadrantColor(75),
+      }]}>
+        <View style={styles.donutInner}>
+          <Text style={styles.donutPercent}>{submittedPct}%</Text>
+          <Text style={styles.donutLabel}>Submitted</Text>
+        </View>
+      </View>
+
+      {/* Proportional bar under the ring */}
+      <View style={styles.donutBar}>
+        {submittedPct  > 0 && <View style={[styles.donutBarSeg, { flex: submittedPct,  backgroundColor: COLORS.green  }]} />}
+        {awaitingPct   > 0 && <View style={[styles.donutBarSeg, { flex: awaitingPct,   backgroundColor: COLORS.yellow }]} />}
+        {incompletePct > 0 && <View style={[styles.donutBarSeg, { flex: incompletePct, backgroundColor: COLORS.red    }]} />}
+      </View>
     </View>
-  </View>
-);
+  );
+};
 
 // ─── STAT CARD ────────────────────────────────────────────────────────────────
 const StatCard = ({ icon, value, label, sub, iconBg, iconColor, borderColor }) => (
@@ -240,6 +281,7 @@ export default function LYDOHomeScreen() {
   const [missingDocs, setMissingDocs] = useState(0);
   const [currentTime, setCurrentTime] = useState('');
   const [notifCount] = useState(2);
+  const [progressData, setProgressData] = useState({ submitted: 0, awaiting: 0, incomplete: 0, total: 0 });
 
   useEffect(() => {
     if (user && user.role !== 'lydo') router.replace('/');
@@ -286,10 +328,22 @@ export default function LYDOHomeScreen() {
           const submitted = docsData.filter(d => d.status === 'submitted').length;
           const approvedCount = docsData.filter(d => d.status === 'approved').length;
           const returned = docsData.filter(d => d.status === 'returned').length;
+          const drafts = docsData.filter(d => d.status === 'draft' || d.status === 'saved').length;
 
           setApproved(approvedCount);
           setForRevision(returned);
           setMissingDocs(total - submitted - approvedCount - returned);
+
+          // Submission Progress: submitted+approved = submitted, returned = incomplete, rest = awaiting
+          const submittedTotal = submitted + approvedCount;
+          const incompleteTotal = returned;
+          const awaitingTotal = Math.max(0, total - submittedTotal - incompleteTotal);
+          setProgressData({
+            submitted: submittedTotal,
+            awaiting: awaitingTotal,
+            incomplete: incompleteTotal,
+            total: total || 1, // avoid division by zero
+          });
         }
 
         // Set compliance data based on actual barangays
@@ -509,18 +563,26 @@ export default function LYDOHomeScreen() {
               <Text style={styles.cardTitle}>Submission Progress Overview</Text>
               <View style={styles.divider} />
               <View style={styles.progressContent}>
-                <DonutChart percentage={72} />
+                <DonutChart
+                  submitted={progressData.submitted}
+                  awaiting={progressData.awaiting}
+                  incomplete={progressData.incomplete}
+                  total={progressData.total}
+                />
                 <View style={styles.progressLegend}>
                   {[
-                    { label: 'Submitted', color: COLORS.green },
-                    { label: 'Awaiting Submission', color: COLORS.yellow },
-                    { label: 'Incomplete', color: COLORS.red },
+                    { label: 'Submitted',          color: COLORS.green,  count: progressData.submitted  },
+                    { label: 'Awaiting Submission', color: COLORS.yellow, count: progressData.awaiting   },
+                    { label: 'Incomplete',          color: COLORS.red,    count: progressData.incomplete },
                   ].map(l => (
                     <View key={l.label} style={styles.legendRow}>
                       <View style={[styles.legendDot, { backgroundColor: l.color }]} />
                       <Text style={styles.legendLabel}>{l.label}</Text>
+                      <Text style={[styles.legendCount, { color: l.color }]}>{l.count}</Text>
                     </View>
                   ))}
+                  <View style={styles.legendDivider} />
+                  <Text style={styles.legendTotal}>Total: {progressData.total}</Text>
                 </View>
               </View>
             </View>
@@ -844,21 +906,31 @@ const styles = StyleSheet.create({
   complianceTotal: { fontSize: 13, fontWeight: '700', color: COLORS.navy },
 
   // Progress
-  progressContent: { flexDirection: 'row', alignItems: 'center', gap: 16, paddingVertical: 4 },
+  progressContent: {
+    flexDirection: 'row', alignItems: 'center',
+    gap: 20, paddingVertical: 8,
+    justifyContent: 'center',
+  },
   donutOuter: {
-    width: 90, height: 90, borderRadius: 45,
-    borderWidth: 10, borderColor: COLORS.green,
-    borderLeftColor: COLORS.yellow,
-    borderBottomColor: COLORS.red,
+    width: 120, height: 120, borderRadius: 60,
+    borderWidth: 13, borderColor: COLORS.green,
     alignItems: 'center', justifyContent: 'center',
   },
   donutInner: { alignItems: 'center' },
-  donutPercent: { fontSize: 16, fontWeight: '900', color: COLORS.darkText },
-  donutLabel: { fontSize: 9, color: COLORS.subText, fontWeight: '600' },
-  progressLegend: { gap: 8, flex: 1 },
-  legendRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  legendDot: { width: 8, height: 8, borderRadius: 4 },
-  legendLabel: { fontSize: 12, color: COLORS.darkText, fontWeight: '500' },
+  donutPercent: { fontSize: 20, fontWeight: '900', color: COLORS.darkText },
+  donutLabel: { fontSize: 10, color: COLORS.subText, fontWeight: '600' },
+  donutBar: {
+    flexDirection: 'row', height: 7, borderRadius: 4,
+    overflow: 'hidden', width: 120, marginTop: 10,
+  },
+  donutBarSeg: { height: 7 },
+  progressLegend: { gap: 10, flex: 1, justifyContent: 'center' },
+  legendRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  legendDot: { width: 9, height: 9, borderRadius: 5 },
+  legendLabel: { flex: 1, fontSize: 12, color: COLORS.darkText, fontWeight: '500' },
+  legendCount: { fontSize: 14, fontWeight: '800' },
+  legendDivider: { height: 1, backgroundColor: COLORS.borderColor, marginVertical: 4 },
+  legendTotal: { fontSize: 12, fontWeight: '700', color: COLORS.navy },
 
   // Deadline Card
   deadlineCard: {
