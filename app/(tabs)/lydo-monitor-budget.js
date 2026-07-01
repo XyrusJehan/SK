@@ -27,7 +27,7 @@ const COLORS = {
 };
 
 const NAV_TABS     = ['Dashboard', 'Documents', 'Monitor', 'Barangay', 'Logs'];
-const MONITOR_TABS = ['Consultation', 'Budget', 'Report'];
+const MONITOR_TABS = ['Consultation', 'Budget', 'Report', 'Deadlines'];
 
 // ─── SIDEBAR NAV ICONS (pure React Native Views — no react-native-svg) ────────
 
@@ -405,6 +405,7 @@ export default function LYDOMonitorBudgetScreen() {
     if (tab === 'Report') { router.push('/(tabs)/lydo-monitor-report'); return; }
     if (tab === 'Consultation') { router.push('/(tabs)/lydo-monitor'); return; }
     if (tab !== 'Budget') { handleNavPress('Monitor'); return; }
+    if (tab === 'Deadlines') { router.push('/(tabs)/lydo-monitor-deadlines'); return; }
     setActiveMonitorTab(tab);
     setCurrentStep(1);
     setSearchText('');

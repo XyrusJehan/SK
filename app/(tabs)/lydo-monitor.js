@@ -23,6 +23,48 @@ import { supabase } from '../../utils/supabase';
 import { useAuth } from './authContext';
 import { useNav } from './navContext';
 
+// ─── Mark matching deadline(s) as met when a document is approved ─────────────
+// `documents.document_type` is a full title like
+// "Annual Barangay Youth Investment Program (ABYIP)" — the short code is
+// extracted from the trailing "(...)" and compared against
+// `submission_deadlines.document_type`, which stores just the short code.
+function extractDocCode(fullDocumentType) {
+  if (!fullDocumentType) return null;
+  const match = fullDocumentType.match(/\(([^)]+)\)\s*$/);
+  return match ? match[1].trim() : fullDocumentType.trim();
+}
+
+async function markDeadlineMetForApprovedDocument({ barangayId, documentType, year }) {
+  const code = extractDocCode(documentType);
+  if (!code || !barangayId || !year) return;
+
+  const from = `${year}-01-01`;
+  const to   = `${year}-12-31`;
+
+  try {
+    const { data: matches, error: findError } = await supabase
+      .from('submission_deadlines')
+      .select('deadline_id')
+      .eq('barangay_id', barangayId)
+      .eq('document_type', code)
+      .eq('is_met', false)
+      .gte('deadline_date', from)
+      .lte('deadline_date', to);
+
+    if (findError) { console.error('Error finding matching deadlines:', findError); return; }
+    if (!matches || matches.length === 0) return;
+
+    const { error: updateError } = await supabase
+      .from('submission_deadlines')
+      .update({ is_met: true, met_at: new Date().toISOString() })
+      .in('deadline_id', matches.map((m) => m.deadline_id));
+
+    if (updateError) console.error('Error marking deadline(s) met:', updateError);
+  } catch (e) {
+    console.error('markDeadlineMetForApprovedDocument unexpected:', e);
+  }
+}
+
 // Supabase timestamps have no 'Z' suffix — JS mis-parses them as local time.
 // toUtcDate forces correct UTC parsing before PHT display.
 const toUtcDate = (dateStr) => {
@@ -76,7 +118,7 @@ const COLORS = {
 };
 
 const NAV_TABS     = ['Dashboard', 'Documents', 'Monitor', 'Barangay', 'Logs'];
-const MONITOR_TABS = ['Consultation', 'Budget', 'Report'];
+const MONITOR_TABS = ['Consultation', 'Budget', 'Report', 'Deadlines'];
 
 // ─── SIDEBAR NAV ICONS (pure React Native Views — no react-native-svg) ────────
 
@@ -457,6 +499,12 @@ const DocumentViewer = ({ item, onClose, onApproved, onRefreshDocs }) => {
         status: 'approved', reviewed_at: new Date().toISOString(), reviewed_by: user?.userId || null,
       }).eq('document_id', item.id);
       if (docError) { setApproveModalVisible(false); Alert.alert('Error', 'Failed to approve document.'); setApproving(false); return; }
+      // Mark any matching, still-unmet submission deadline as met
+      await markDeadlineMetForApprovedDocument({
+        barangayId:   item.barangayId,
+        documentType: item.documentType,
+        year:         item.year,
+      });
       // Log the approval activity
       await logActivity('Approve proposal', `Approved "${item.document}" from ${item.barangay}`);
       setApproveModalVisible(false);
@@ -1135,7 +1183,10 @@ export default function LYDOMonitorScreen() {
         return {
           id:            doc.document_id.toString(),
           barangay:      doc.barangay?.barangay_name || 'Unknown Barangay',
+          barangayId:    doc.barangay?.barangay_id ?? null,
           document:      doc.title || 'Untitled Document',
+          documentType:  doc.document_type || null,
+          year:          doc.year || null,
           time:          toPhilippineTime(date, { hour: '2-digit', minute: '2-digit' }),
           submittedDate: doc.submitted_at ? toPhilippineDate(doc.submitted_at, { month: '2-digit', day: '2-digit', year: '2-digit' }) : null,
           feedbackDate:  doc.submitted_at ? toPhilippineDate(doc.submitted_at, { month: '2-digit', day: '2-digit', year: '2-digit' }) : null,
@@ -1376,6 +1427,7 @@ export default function LYDOMonitorScreen() {
               onPress={() =>
                 tab === 'Budget' ? router.push('/(tabs)/lydo-monitor-budget')
                 : tab === 'Report' ? router.push('/(tabs)/lydo-monitor-report')
+                : tab === 'Deadlines' ? router.push('/(tabs)/lydo-monitor-deadlines')
                 : setActiveMonitorTab(tab)
               }
               activeOpacity={0.8}>
