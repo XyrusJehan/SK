@@ -10,6 +10,8 @@ import {
   Alert,
   Dimensions,
   Image,
+  Modal,
+  ActivityIndicator,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useNav } from './navContext';
@@ -44,6 +46,9 @@ const toPhilippineTime = (dateStr, options) => {
 
 // ─── NAV TABS ─────────────────────────────────────────────────────────────────
 const NAV_TABS = ['Dashboard', 'Documents', 'Monitor', 'Barangay', 'Logs'];
+
+const CAL_MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+const CAL_DOWS = ['SUN','MON','TUE','WED','THU','FRI','SAT'];
 
 // ─── SIDEBAR NAV ICONS (pure React Native Views — no react-native-svg) ────────
 
@@ -159,11 +164,6 @@ const MONITORING_TASKS = [
   { id: '4', description: 'Review returned proposals of SK', action: 'Review Now', actionType: 'review' },
 ];
 
-const APPROACHING_DEADLINES = [
-  { id: '1', title: 'Approved Annual Budget', deadline: 'January 6, 2026', daysLeft: 1, submitted: 7, total: 11, pending: 4, urgent: true },
-  { id: '2', title: 'Annual Budget Youth Investment Program', deadline: 'January 6, 2026', daysLeft: 10, submitted: 7, total: 11, pending: 4, urgent: false },
-];
-
 const QUICK_ACTIONS = [
   { id: 'consultation', label: 'Consultation', badge: 5, color: COLORS.navy, icon: '💬', route: '/(tabs)/lydo-monitor' },
   { id: 'budget', label: 'View Budget', color: '#1A2332', icon: '📊', route: '/(tabs)/lydo-monitor-budget' },
@@ -251,6 +251,330 @@ const DonutChart = ({ submitted, awaiting, incomplete, total }) => {
   );
 };
 
+// ─── CALENDAR MODAL (view-only — no editing, org-wide across all barangays) ──
+function CalendarModal({ visible, onClose }) {
+  const now = new Date();
+  const todayY = now.getFullYear();
+  const todayM = now.getMonth();
+  const todayD = now.getDate();
+
+  const [cur, setCur] = useState({ y: todayY, m: todayM });
+  const [tooltip, setTooltip] = useState(null); // { day, items }
+  const [yearDeadlines, setYearDeadlines] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState(null);
+
+  // Parse a Postgres `date` (YYYY-MM-DD) without timezone drift.
+  const parseIsoDate = (isoDateString) => {
+    const [y, m, d] = isoDateString.slice(0, 10).split('-').map(Number);
+    return { y, m: m - 1, d };
+  };
+
+  const labelFor = (row) => {
+    const base = row.description || row.document_type;
+    const brgy = row.barangay?.barangay_name;
+    return brgy ? `${base} — ${brgy}` : base;
+  };
+
+  // ── Fetch every deadline (across all barangays) for the displayed year ──
+  useEffect(() => {
+    if (!visible) return;
+    let cancelled = false;
+
+    const fetchYearDeadlines = async () => {
+      setLoading(true);
+      setLoadError(null);
+      try {
+        const from = `${cur.y}-01-01`;
+        const to = `${cur.y}-12-31`;
+        const { data, error } = await supabase
+          .from('submission_deadlines')
+          .select('deadline_id, document_type, description, deadline_date, is_met, barangay:barangays(barangay_name)')
+          .gte('deadline_date', from)
+          .lte('deadline_date', to)
+          .order('deadline_date', { ascending: true });
+
+        if (error) throw error;
+        if (!cancelled) setYearDeadlines(data || []);
+      } catch (err) {
+        console.error('Error fetching deadlines:', err);
+        if (!cancelled) setLoadError('Could not load deadlines.');
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+
+    fetchYearDeadlines();
+    return () => { cancelled = true; };
+  }, [visible, cur.y]);
+
+  // ── Deadlines that fall in the month currently on screen, keyed by day ──
+  const monthDeadlines = React.useMemo(() => {
+    const map = {};
+    yearDeadlines.forEach((row) => {
+      const { y, m, d } = parseIsoDate(row.deadline_date);
+      if (y === cur.y && m === cur.m) {
+        if (!map[d]) map[d] = [];
+        map[d].push(row);
+      }
+    });
+    return map;
+  }, [yearDeadlines, cur.y, cur.m]);
+
+  const isDeadline = (d) => !!monthDeadlines[d];
+  const isToday = (y, m, d) => y === todayY && m === todayM && d === todayD;
+
+  const shiftMonth = (dir) => {
+    setTooltip(null);
+    setCur((prev) => {
+      let m = prev.m + dir;
+      let y = prev.y;
+      if (m < 0) { m = 11; y--; }
+      if (m > 11) { m = 0; y++; }
+      return { y, m };
+    });
+  };
+
+  const pickDay = (d) => {
+    if (monthDeadlines[d]) {
+      const items = monthDeadlines[d].map((row) => ({ label: labelFor(row), isMet: !!row.is_met }));
+      setTooltip(tooltip?.day === d ? null : { day: d, items });
+    } else {
+      setTooltip(null);
+    }
+  };
+
+  const buildCells = () => {
+    const { y, m } = cur;
+    const firstDow = new Date(y, m, 1).getDay();
+    const dim = new Date(y, m + 1, 0).getDate();
+    const prevDim = new Date(y, m, 0).getDate();
+    const cells = [];
+    for (let i = 0; i < firstDow; i++) cells.push({ day: prevDim - firstDow + 1 + i, ghost: true });
+    for (let d = 1; d <= dim; d++) {
+      const dayDeadlines = monthDeadlines[d];
+      const total = dayDeadlines ? dayDeadlines.length : 0;
+      const metCount = dayDeadlines ? dayDeadlines.filter((r) => r.is_met).length : 0;
+      const deadlineStatus = total === 0 ? null : metCount === total ? 'met' : metCount === 0 ? 'pending' : 'partial';
+      cells.push({
+        day: d, ghost: false,
+        deadline: isDeadline(d),
+        deadlineStatus,
+        items: dayDeadlines ? dayDeadlines.map((r) => ({ isMet: !!r.is_met })) : [],
+        caption: total === 1 ? dayDeadlines[0].document_type : total > 1 ? `${total} deadlines` : null,
+        today: isToday(cur.y, cur.m, d),
+      });
+    }
+    const tail = (firstDow + dim) % 7;
+    if (tail > 0) for (let i = 1; i <= 7 - tail; i++) cells.push({ day: i, ghost: true });
+    return cells;
+  };
+
+  const cells = buildCells();
+
+  // ── Annual Compliance Timeline (right panel) — every deadline this year ──
+  const todayIso = `${todayY}-${String(todayM + 1).padStart(2, '0')}-${String(todayD).padStart(2, '0')}`;
+  const nextUpcomingId = React.useMemo(() => {
+    const upcoming = yearDeadlines.filter((r) => r.deadline_date >= todayIso);
+    return upcoming.length > 0 ? upcoming[0].deadline_id : null;
+  }, [yearDeadlines, todayIso]);
+
+  const timelineRows = yearDeadlines.map((row) => {
+    const { m, d } = parseIsoDate(row.deadline_date);
+    return {
+      id: row.deadline_id,
+      month: `${CAL_MONTHS[m].slice(0, 3)} ${d}`,
+      label: labelFor(row),
+      highlight: row.deadline_id === nextUpcomingId,
+      isMet: !!row.is_met,
+    };
+  });
+
+  const timelineGroups = React.useMemo(() => {
+    const groups = [];
+    timelineRows.forEach((row) => {
+      const last = groups[groups.length - 1];
+      if (last && last.month === row.month) {
+        last.items.push(row);
+        if (row.highlight) last.highlight = true;
+      } else {
+        groups.push({ month: row.month, items: [row], highlight: row.highlight });
+      }
+    });
+    return groups;
+  }, [timelineRows]);
+
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <View style={calStyles.backdrop}>
+        <View style={calStyles.modal}>
+          <View style={calStyles.body}>
+
+            {/* ── Left: Calendar Panel ── */}
+            <View style={calStyles.calPanel}>
+              <View style={calStyles.calNav}>
+                <TouchableOpacity style={calStyles.navBtn} onPress={() => shiftMonth(-1)} activeOpacity={0.8}>
+                  <Text style={calStyles.navArrow}>‹</Text>
+                </TouchableOpacity>
+                <Text style={calStyles.monthLabel}>{CAL_MONTHS[cur.m].toUpperCase()} {cur.y}</Text>
+                <TouchableOpacity style={calStyles.navBtn} onPress={() => shiftMonth(1)} activeOpacity={0.8}>
+                  <Text style={calStyles.navArrow}>›</Text>
+                </TouchableOpacity>
+              </View>
+
+              <View style={calStyles.legendRow}>
+                <View style={calStyles.legendItem}>
+                  <View style={[calStyles.legendDot, { backgroundColor: '#22C55E' }]} />
+                  <Text style={calStyles.legendText}>Met</Text>
+                </View>
+                <View style={calStyles.legendItem}>
+                  <View style={[calStyles.legendDot, { backgroundColor: '#E8A020' }]} />
+                  <Text style={calStyles.legendText}>Pending</Text>
+                </View>
+                <View style={calStyles.legendItem}>
+                  <View style={calStyles.legendSplitDot}>
+                    <View style={calStyles.legendSplitTop} />
+                    <View style={calStyles.legendSplitBottom} />
+                  </View>
+                  <Text style={calStyles.legendText}>Partially met</Text>
+                </View>
+              </View>
+
+              <View style={calStyles.grid}>
+                {CAL_DOWS.map((d) => (
+                  <View key={d} style={calStyles.dowCell}>
+                    <Text style={calStyles.dowText}>{d}</Text>
+                  </View>
+                ))}
+
+                {cells.map((cell, idx) => {
+                  const showTooltip = tooltip?.day === cell.day && !cell.ghost;
+                  const weekend = idx % 7 === 0 || idx % 7 === 6;
+                  const visibleDots = cell.items ? cell.items.slice(0, 4) : [];
+                  const extraDots = (cell.items ? cell.items.length : 0) - visibleDots.length;
+                  return (
+                    <View
+                      key={idx}
+                      style={[calStyles.dayCellWrap, showTooltip && calStyles.dayCellWrapActive]}
+                    >
+                      <TouchableOpacity
+                        style={[
+                          calStyles.dayCell,
+                          !cell.ghost && weekend && calStyles.dayCellWeekend,
+                          cell.ghost && calStyles.dayCellGhost,
+                          !cell.ghost && cell.deadlineStatus === 'pending' && calStyles.dayCellTintPending,
+                          !cell.ghost && cell.deadlineStatus === 'met' && calStyles.dayCellTintMet,
+                          !cell.ghost && cell.deadlineStatus === 'partial' && calStyles.dayCellTintPartial,
+                          !cell.ghost && cell.today && calStyles.dayCellToday,
+                        ]}
+                        onPress={() => !cell.ghost && pickDay(cell.day)}
+                        activeOpacity={cell.ghost ? 1 : 0.75}
+                        disabled={cell.ghost}
+                      >
+                        {!cell.ghost && cell.deadlineStatus === 'met' && <View style={calStyles.dayCellAccentMet} />}
+                        {!cell.ghost && cell.deadlineStatus === 'pending' && <View style={calStyles.dayCellAccentPending} />}
+                        {!cell.ghost && cell.deadlineStatus === 'partial' && (
+                          <>
+                            <View style={calStyles.dayCellAccentPartialTop} />
+                            <View style={calStyles.dayCellAccentPartialBottom} />
+                          </>
+                        )}
+
+                        <Text style={[calStyles.dayText, cell.ghost && calStyles.dayTextGhost]}>
+                          {cell.day}
+                        </Text>
+
+                        {!cell.ghost && cell.deadline && (
+                          <>
+                            <View style={calStyles.dotCluster}>
+                              {visibleDots.map((it, i) => (
+                                <View key={i} style={[calStyles.dot, it.isMet ? calStyles.dotMet : calStyles.dotPending]} />
+                              ))}
+                              {extraDots > 0 && <Text style={calStyles.dotExtra}>+{extraDots}</Text>}
+                            </View>
+                            <Text style={calStyles.dayCellCaption} numberOfLines={1}>{cell.caption}</Text>
+                          </>
+                        )}
+                        {!cell.ghost && cell.today && (
+                          <Text style={calStyles.todayTag}>TODAY</Text>
+                        )}
+                      </TouchableOpacity>
+
+                      {showTooltip && (
+                        <View style={calStyles.tooltip}>
+                          <Text style={calStyles.tooltipDate}>
+                            {CAL_MONTHS[cur.m]} {cell.day}
+                          </Text>
+                          {tooltip.items.map((it, i) => (
+                            <View key={i} style={calStyles.tooltipItemRow}>
+                              <View style={[calStyles.tooltipDot, it.isMet ? calStyles.tooltipDotMet : calStyles.tooltipDotPending]} />
+                              <Text style={calStyles.tooltipItemText}>{it.label}</Text>
+                              <Text style={[calStyles.tooltipStatusText, it.isMet ? calStyles.tooltipStatusMetText : calStyles.tooltipStatusPendingText]}>
+                                {it.isMet ? 'Met' : 'Pending'}
+                              </Text>
+                            </View>
+                          ))}
+                        </View>
+                      )}
+                    </View>
+                  );
+                })}
+              </View>
+            </View>
+
+            {/* ── Right: Annual Compliance Timeline ── */}
+            <View style={calStyles.sidePanel}>
+              <View style={calStyles.sidePanelHeader}>
+                <Text style={calStyles.sidePanelTitle}>Annual Compliance Timeline</Text>
+                <Text style={calStyles.sidePanelYear}>{cur.y} · All Barangays</Text>
+              </View>
+
+              {loading ? (
+                <View style={calStyles.sideEmptyState}>
+                  <ActivityIndicator color={COLORS.navy} />
+                </View>
+              ) : loadError ? (
+                <View style={calStyles.sideEmptyState}>
+                  <Text style={calStyles.sideEmptyText}>{loadError}</Text>
+                </View>
+              ) : timelineGroups.length === 0 ? (
+                <View style={calStyles.sideEmptyState}>
+                  <Text style={calStyles.sideEmptyText}>No deadlines set for {cur.y} yet.</Text>
+                </View>
+              ) : (
+                <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
+                  {timelineGroups.map((group, gi) => (
+                    <View key={gi} style={[calStyles.timelineGroup, group.highlight && calStyles.timelineGroupHighlight]}>
+                      <View style={calStyles.timelineGroupHeader}>
+                        <Text style={[calStyles.timelineMonth, group.highlight && calStyles.timelineMonthHighlight]}>
+                          {group.month}
+                        </Text>
+                        {group.highlight && <Text style={calStyles.nextBadge}>NEXT</Text>}
+                      </View>
+                      {group.items.map((item) => (
+                        <View key={item.id} style={calStyles.timelineItemRow}>
+                          <View style={[calStyles.timelineStatusIcon, item.isMet ? calStyles.timelineStatusIconMet : calStyles.timelineStatusIconPending]}>
+                            <Text style={calStyles.timelineStatusIconText}>{item.isMet ? '✓' : '•'}</Text>
+                          </View>
+                          <Text style={calStyles.timelineLabel} numberOfLines={2}>{item.label}</Text>
+                        </View>
+                      ))}
+                    </View>
+                  ))}
+                </ScrollView>
+              )}
+            </View>
+
+          </View>
+          <TouchableOpacity style={calStyles.closeBtn} onPress={onClose} activeOpacity={0.8}>
+            <Text style={calStyles.closeBtnText}>✕</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
 // ─── STAT CARD ────────────────────────────────────────────────────────────────
 const StatCard = ({ icon, value, label, sub, iconBg, iconColor, borderColor }) => (
   <View style={[styles.statCard, borderColor ? { borderTopWidth: 3, borderTopColor: borderColor } : {}]}>
@@ -272,6 +596,7 @@ export default function LYDOHomeScreen() {
   const { logout, user } = useAuth();
 
   const [sidebarVisible, setSidebarVisible] = useState(false);
+  const [calendarVisible, setCalendarVisible] = useState(false);
   const [activities, setActivities] = useState([]);
   const [totalBarangays, setTotalBarangays] = useState(0);
   const [complianceData, setComplianceData] = useState([]);
@@ -282,6 +607,7 @@ export default function LYDOHomeScreen() {
   const [currentTime, setCurrentTime] = useState('');
   const [notifCount] = useState(2);
   const [progressData, setProgressData] = useState({ submitted: 0, awaiting: 0, incomplete: 0, total: 0 });
+  const [approachingDeadlines, setApproachingDeadlines] = useState([]);
 
   useEffect(() => {
     if (user && user.role !== 'lydo') router.replace('/');
@@ -395,6 +721,73 @@ export default function LYDOHomeScreen() {
     fetchData();
   }, []);
 
+  // ── Approaching Deadline card — org-wide, grouped across all barangays ──
+  // Each submission_deadlines row is per-barangay, so a single logical
+  // deadline (e.g. "ABYIP due Jan 6") appears as one row per barangay. We
+  // group those rows by document_type + description + deadline_date and
+  // roll them up into submitted/pending counts, matching how the card is
+  // meant to be read (e.g. "Submitted: 7/11").
+  useEffect(() => {
+    // Parse a Postgres `date` (YYYY-MM-DD) as a UTC midnight instant, to
+    // avoid local-timezone drift shifting the day by ±1.
+    const parseDateOnly = (dateStr) => {
+      const [y, m, d] = dateStr.toString().slice(0, 10).split('-').map(Number);
+      return Date.UTC(y, m - 1, d);
+    };
+
+    const fetchApproachingDeadlines = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('submission_deadlines')
+          .select('deadline_id, document_type, description, deadline_date, is_met')
+          .order('deadline_date', { ascending: true });
+
+        if (error) throw error;
+
+        const groups = {};
+        (data || []).forEach((row) => {
+          const key = `${row.document_type}|${row.description}|${row.deadline_date}`;
+          if (!groups[key]) {
+            groups[key] = {
+              id: key,
+              title: row.description || row.document_type,
+              deadline_date: row.deadline_date,
+              total: 0,
+              submitted: 0,
+            };
+          }
+          groups[key].total += 1;
+          if (row.is_met) groups[key].submitted += 1;
+        });
+
+        const todayUtc = Date.UTC(new Date().getFullYear(), new Date().getMonth(), new Date().getDate());
+        const approaching = Object.values(groups)
+          .filter((g) => g.submitted < g.total) // only deadlines still pending somewhere
+          .map((g) => {
+            const deadlineUtc = parseDateOnly(g.deadline_date);
+            const daysLeft = Math.round((deadlineUtc - todayUtc) / (24 * 60 * 60 * 1000));
+            return {
+              id: g.id,
+              title: g.title,
+              deadline: new Date(deadlineUtc).toLocaleDateString('en-PH', { timeZone: 'UTC', month: 'long', day: 'numeric', year: 'numeric' }),
+              daysLeft,
+              submitted: g.submitted,
+              total: g.total,
+              pending: g.total - g.submitted,
+              urgent: daysLeft <= 3,
+            };
+          })
+          .sort((a, b) => a.daysLeft - b.daysLeft);
+
+        setApproachingDeadlines(approaching);
+      } catch (err) {
+        console.error('Error fetching approaching deadlines:', err);
+      }
+    };
+
+    fetchApproachingDeadlines();
+  }, []);
+
   const today = toPhilippineDate(new Date(), { weekday: undefined, month: 'long', day: 'numeric', year: 'numeric' });
 
   const handleNav = (tab) => {
@@ -466,6 +859,7 @@ export default function LYDOHomeScreen() {
   return (
     <SafeAreaView style={styles.safe}>
       <StatusBar barStyle="light-content" backgroundColor={COLORS.navy} />
+      <CalendarModal visible={calendarVisible} onClose={() => setCalendarVisible(false)} />
       <View style={styles.layout}>
         {/* Sidebar overlay (mobile) */}
         {isMobile && sidebarVisible && (
@@ -599,26 +993,34 @@ export default function LYDOHomeScreen() {
                 <Text style={styles.viewAll}>View All</Text>
               </TouchableOpacity>
             </View>
-            {APPROACHING_DEADLINES.map((item) => (
-              <View key={item.id} style={styles.deadlineRow}>
-                <Text style={styles.deadlineDocTitle}>{item.title}</Text>
-                <Text style={styles.deadlineDate}>
-                  <Text style={styles.deadlineDateLabel}>Deadline: </Text>
-                  {item.deadline}
-                </Text>
-                <Text style={[styles.daysLeft, item.urgent ? styles.daysLeftUrgent : styles.daysLeftNormal]}>
-                  {item.daysLeft} Day{item.daysLeft !== 1 ? 's' : ''} Left
-                </Text>
-                <Text style={styles.deadlineStats}>
-                  <Text style={styles.deadlineStatLabel}>Submitted: </Text>
-                  <Text style={styles.deadlineStatValue}>{item.submitted}/{item.total}</Text>
-                </Text>
-                <Text style={styles.deadlineStats}>
-                  <Text style={styles.deadlineStatLabel}>Pending: </Text>
-                  <Text style={styles.deadlineStatValue}>{item.pending}/{item.total}</Text>
-                </Text>
-              </View>
-            ))}
+            {approachingDeadlines.length > 0 ? (
+              approachingDeadlines.slice(0, 5).map((item) => (
+                <View key={item.id} style={styles.deadlineRow}>
+                  <Text style={styles.deadlineDocTitle}>{item.title}</Text>
+                  <Text style={styles.deadlineDate}>
+                    <Text style={styles.deadlineDateLabel}>Deadline: </Text>
+                    {item.deadline}
+                  </Text>
+                  <Text style={[styles.daysLeft, item.urgent ? styles.daysLeftUrgent : styles.daysLeftNormal]}>
+                    {item.daysLeft < 0
+                      ? `${Math.abs(item.daysLeft)} Day${Math.abs(item.daysLeft) !== 1 ? 's' : ''} Overdue`
+                      : item.daysLeft === 0
+                        ? 'Due Today'
+                        : `${item.daysLeft} Day${item.daysLeft !== 1 ? 's' : ''} Left`}
+                  </Text>
+                  <Text style={styles.deadlineStats}>
+                    <Text style={styles.deadlineStatLabel}>Submitted: </Text>
+                    <Text style={styles.deadlineStatValue}>{item.submitted}/{item.total}</Text>
+                  </Text>
+                  <Text style={styles.deadlineStats}>
+                    <Text style={styles.deadlineStatLabel}>Pending: </Text>
+                    <Text style={styles.deadlineStatValue}>{item.pending}/{item.total}</Text>
+                  </Text>
+                </View>
+              ))
+            ) : (
+              <Text style={styles.deadlineEmptyText}>No upcoming deadlines — all barangays are caught up.</Text>
+            )}
           </View>
 
           {/* ── BOTTOM TWO COLUMNS ── */}
@@ -691,7 +1093,10 @@ export default function LYDOHomeScreen() {
                     key={action.id}
                     style={styles.quickBtn}
                     activeOpacity={0.8}
-                    onPress={() => action.route && router.push(action.route)}
+                    onPress={() => {
+                      if (action.id === 'calendar') setCalendarVisible(true);
+                      else if (action.route) router.push(action.route);
+                    }}
                   >
                     <View style={[styles.quickIconBox, { backgroundColor: action.color + '18' }]}>
                       <Text style={styles.quickIcon}>{action.icon}</Text>
@@ -945,6 +1350,7 @@ const styles = StyleSheet.create({
   deadlineHeaderLeft: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   deadlineIcon: { fontSize: 16 },
   deadlineTitle: { fontSize: 15, fontWeight: '800', color: COLORS.navy },
+  deadlineEmptyText: { fontSize: 13, color: COLORS.darkText, paddingVertical: 8 },
   viewAll: { fontSize: 13, fontWeight: '700', color: COLORS.navy },
   deadlineRow: {
     flexDirection: isMobile ? 'column' : 'row',
@@ -1024,4 +1430,163 @@ const styles = StyleSheet.create({
     alignItems: 'center', borderWidth: 1.5, borderColor: COLORS.borderColor, marginTop: 4,
   },
   createTaskText: { fontSize: 14, fontWeight: '700', color: COLORS.darkText },
+});
+
+// ─── CALENDAR STYLES ──────────────────────────────────────────────────────────
+const calStyles = StyleSheet.create({
+  backdrop: {
+    flex: 1, backgroundColor: 'rgba(0,0,0,0.65)',
+    justifyContent: 'center', alignItems: 'center', padding: 24,
+  },
+  modal: {
+    backgroundColor: COLORS.navy, borderRadius: 20,
+    width: isMobile ? '100%' : 940, maxWidth: 940, padding: 16,
+    position: 'relative',
+  },
+  closeBtn: {
+    position: 'absolute', top: -14, right: -14,
+    width: 32, height: 32, borderRadius: 16,
+    backgroundColor: COLORS.white,
+    alignItems: 'center', justifyContent: 'center',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.25, shadowRadius: 4, elevation: 6,
+  },
+  closeBtnText: { color: COLORS.navy, fontSize: 14, fontWeight: '800' },
+  body: { flexDirection: isMobile ? 'column' : 'row', gap: 14 },
+
+  /* ── Left: Calendar panel ── */
+  calPanel: {
+    flex: isMobile ? undefined : 1,
+    backgroundColor: COLORS.white, borderRadius: 16,
+    padding: isMobile ? 14 : 18,
+  },
+  calNav: {
+    flexDirection: 'row', alignItems: 'center',
+    justifyContent: 'space-between', marginBottom: 12,
+  },
+  navBtn: {
+    width: 32, height: 32, borderRadius: 16,
+    backgroundColor: COLORS.offWhite,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  navArrow: { fontSize: 18, color: COLORS.navy, lineHeight: 20, fontWeight: '800' },
+  monthLabel: {
+    fontSize: isMobile ? 14 : 16, fontWeight: '800',
+    color: COLORS.navy, letterSpacing: 1,
+  },
+
+  /* Legend */
+  legendRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 16,
+    marginBottom: 12, paddingBottom: 12,
+    borderBottomWidth: 1, borderBottomColor: COLORS.lightGray,
+  },
+  legendItem: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  legendDot: { width: 8, height: 8, borderRadius: 4 },
+  legendSplitDot: { width: 8, height: 8, borderRadius: 4, overflow: 'hidden' },
+  legendSplitTop: { height: '50%', backgroundColor: '#22C55E' },
+  legendSplitBottom: { height: '50%', backgroundColor: '#E8A020' },
+  legendText: { fontSize: 11, fontWeight: '600', color: COLORS.subText },
+
+  grid: { flexDirection: 'row', flexWrap: 'wrap' },
+  dowCell: { width: `${100 / 7}%`, alignItems: 'center', paddingBottom: 8 },
+  dowText: { fontSize: 10.5, fontWeight: '700', color: '#999', letterSpacing: 0.5 },
+
+  dayCellWrap: { width: `${100 / 7}%`, position: 'relative', marginBottom: 5, zIndex: 1 },
+  dayCellWrapActive: { zIndex: 999, elevation: 999 },
+  dayCell: {
+    flex: 1, minHeight: isMobile ? 54 : 64,
+    alignItems: 'center', justifyContent: 'flex-start', paddingTop: 6,
+    borderRadius: 9, backgroundColor: COLORS.white,
+    borderWidth: 1, borderColor: '#F0F0F0',
+    marginHorizontal: 1.5,
+    position: 'relative', overflow: 'hidden',
+  },
+  dayCellWeekend: { backgroundColor: '#FBFBFD' },
+  dayCellGhost: { backgroundColor: 'transparent', borderColor: 'transparent' },
+  dayCellToday: { borderWidth: 1.5, borderColor: COLORS.navy },
+  dayCellTintPending: { backgroundColor: '#FFFBEB', borderColor: '#FDECC8' },
+  dayCellTintMet: { backgroundColor: '#F0FDF4', borderColor: '#CFF3DA' },
+  dayCellTintPartial: { backgroundColor: '#FAFAFC', borderColor: '#EDEDF2' },
+
+  dayCellAccentMet: { position: 'absolute', top: 0, left: 0, bottom: 0, width: 3, backgroundColor: '#22C55E' },
+  dayCellAccentPending: { position: 'absolute', top: 0, left: 0, bottom: 0, width: 3, backgroundColor: '#E8A020' },
+  dayCellAccentPartialTop: { position: 'absolute', top: 0, left: 0, height: '50%', width: 3, backgroundColor: '#22C55E' },
+  dayCellAccentPartialBottom: { position: 'absolute', bottom: 0, left: 0, height: '50%', width: 3, backgroundColor: '#E8A020' },
+
+  dayText: { fontSize: isMobile ? 13 : 14, fontWeight: '700', color: COLORS.navy },
+  dayTextGhost: { color: '#ddd' },
+
+  todayTag: { fontSize: 7, fontWeight: '800', color: COLORS.navy, letterSpacing: 0.5, marginTop: 2 },
+
+  dotCluster: { flexDirection: 'row', alignItems: 'center', gap: 3, marginTop: 4 },
+  dot: { width: 5, height: 5, borderRadius: 2.5 },
+  dotMet: { backgroundColor: '#22C55E' },
+  dotPending: { backgroundColor: '#E8A020' },
+  dotExtra: { fontSize: 8, fontWeight: '800', color: COLORS.subText, marginLeft: 1 },
+
+  dayCellCaption: {
+    fontSize: 8, fontWeight: '700', color: COLORS.subText,
+    textAlign: 'center', marginTop: 2, paddingHorizontal: 3,
+  },
+
+  /* Tooltip popover */
+  tooltip: {
+    position: 'absolute', top: '108%', left: '-20%', right: '-120%',
+    zIndex: 99, backgroundColor: COLORS.white, borderRadius: 10,
+    padding: 12, elevation: 10,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.2, shadowRadius: 6,
+  },
+  tooltipDate: { fontSize: 12.5, fontWeight: '800', color: COLORS.navy, marginBottom: 6 },
+  tooltipItemRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 },
+  tooltipDot: { width: 7, height: 7, borderRadius: 3.5, flexShrink: 0 },
+  tooltipDotMet: { backgroundColor: '#22C55E' },
+  tooltipDotPending: { backgroundColor: '#E8A020' },
+  tooltipItemText: { flex: 1, fontSize: 12, color: '#333', lineHeight: 16 },
+  tooltipStatusText: { fontSize: 10, fontWeight: '800', letterSpacing: 0.3 },
+  tooltipStatusMetText: { color: '#22C55E' },
+  tooltipStatusPendingText: { color: '#B45309' },
+
+  /* ── Right: Annual Compliance Timeline panel ── */
+  sidePanel: {
+    width: isMobile ? '100%' : 260,
+    backgroundColor: COLORS.white, borderRadius: 16,
+    overflow: 'hidden',
+    maxHeight: isMobile ? 320 : 500,
+  },
+  sidePanelHeader: {
+    backgroundColor: COLORS.navy, paddingHorizontal: 16, paddingVertical: 14,
+  },
+  sidePanelTitle: { fontSize: 12.5, fontWeight: '800', color: COLORS.white, letterSpacing: 0.6, lineHeight: 16 },
+  sidePanelYear: { fontSize: 10.5, fontWeight: '600', color: 'rgba(255,255,255,0.65)', marginTop: 2, letterSpacing: 0.5 },
+
+  sideEmptyState: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
+  sideEmptyText: { fontSize: 13, color: '#888', textAlign: 'center', lineHeight: 18 },
+
+  /* Timeline groups */
+  timelineGroup: {
+    paddingHorizontal: 14, paddingVertical: 10,
+    borderBottomWidth: 1, borderBottomColor: '#F0F1F5',
+  },
+  timelineGroupHighlight: { backgroundColor: '#FFFBEB' },
+  timelineGroupHeader: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    marginBottom: 6,
+  },
+  timelineMonth: { fontSize: 11.5, fontWeight: '800', color: COLORS.navy, letterSpacing: 0.4 },
+  timelineMonthHighlight: { color: '#B45309' },
+  nextBadge: {
+    fontSize: 8.5, fontWeight: '800', color: '#B45309',
+    backgroundColor: '#FEF3C7', borderRadius: 6,
+    paddingHorizontal: 6, paddingVertical: 2, letterSpacing: 0.5,
+  },
+  timelineItemRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, marginBottom: 4 },
+  timelineStatusIcon: {
+    width: 15, height: 15, borderRadius: 7.5, flexShrink: 0,
+    alignItems: 'center', justifyContent: 'center', marginTop: 1,
+  },
+  timelineStatusIconMet: { backgroundColor: '#22C55E' },
+  timelineStatusIconPending: { backgroundColor: '#F3E8C4' },
+  timelineStatusIconText: { fontSize: 9, fontWeight: '900', color: COLORS.white, lineHeight: 10 },
+  timelineLabel: { flex: 1, fontSize: 12, color: '#444', lineHeight: 16, fontWeight: '500' },
 });
