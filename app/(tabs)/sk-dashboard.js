@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, TextInput, ScrollView, TouchableOpacity,
-  StyleSheet, SafeAreaView, StatusBar, Dimensions, Image, Modal,
+  StyleSheet, SafeAreaView, StatusBar, Dimensions, Image, Modal, ActivityIndicator,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
@@ -24,7 +24,6 @@ const COLORS = {
 const CAL_MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 const CAL_DAY_NAMES = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
 const CAL_DOWS = ['SUN','MON','TUE','WED','THU','FRI','SAT'];
-const CAL_TIMES = ['6:00 AM','6:30 AM','7:00 AM','7:30 AM','8:00 AM','8:30 AM','9:00 AM','9:30 AM','10:00 AM'];
 
 // ─── NAV ICONS (pure React Native Views — no react-native-svg dependency) ─────
 
@@ -168,43 +167,78 @@ const MenuIcon = () => (
   </View>
 );
 
-// ─── ANNUAL COMPLIANCE TIMELINE DATA ─────────────────────────────────────────
-const COMPLIANCE_TIMELINE = [
-  { month: 'Jan 15', label: 'Q4 2025 Vendor Certifications' },
-  { month: 'Feb 25', label: 'Q4 2025 Vendor Allions' },
-  { month: 'Mar 31', label: 'Annual Data Privacy Audit' },
-  { month: 'May 16', label: 'Q2 Tax Compliance (IRS Form 990)', highlight: true },
-  { month: 'Jun 16', label: 'Q2 Tax Compliance Audit' },
-  { month: 'Jul 24', label: 'Q2 Tax Compliance (IRS Form 990)' },
-  { month: 'Aug 24', label: 'Board Resolution Filing' },
-  { month: 'Sep 30', label: 'Board Resolution Filing' },
-  { month: 'Sep 30', label: 'Board Resolution Filing' },
-  { month: 'Dec 31', label: 'Annual Employee Code of Conduct' },
-];
+// ─── ANNUAL COMPLIANCE TIMELINE ──────────────────────────────────────────────
+// Timeline entries are now derived live from submission_deadlines (see
+// CalendarModal below) instead of this static mock list.
 
 // ─── CALENDAR MODAL ───────────────────────────────────────────────────────────
-function CalendarModal({ visible, onClose }) {
+function CalendarModal({ visible, onClose, barangayId }) {
   const now = new Date();
   const todayY = now.getFullYear();
   const todayM = now.getMonth();
   const todayD = now.getDate();
 
   const [cur, setCur] = useState({ y: todayY, m: todayM });
-  const [selD, setSelD] = useState(todayD);
-  const [selMonth, setSelMonth] = useState(todayM);
-  const [selYear, setSelYear] = useState(todayY);
-  const [timeIdx, setTimeIdx] = useState(4);
   const [tooltip, setTooltip] = useState(null); // { day, label }
+  const [yearDeadlines, setYearDeadlines] = useState([]); // raw rows for cur.y
+  const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState(null);
 
-  // Deadline definitions per month (day → label)
-  const deadlines = {
-    4: 'Q2 Tax Compliance (IRS Form 990)',  // May 4 example
-    16: 'Q2 Tax Compliance (IRS Form 990)',
-    24: 'Board Resolution Filing',
+  // Parse a Postgres `date` (YYYY-MM-DD) without timezone drift.
+  const parseIsoDate = (isoDateString) => {
+    const [y, m, d] = isoDateString.slice(0, 10).split('-').map(Number);
+    return { y, m: m - 1, d };
   };
-  const todayKey = `${todayY}-${todayM}-${todayD}`;
 
-  const isDeadline = (y, m, d) => !!(deadlines[d]) && y === cur.y && m === cur.m;
+  const labelFor = (row) => row.description || row.document_type;
+
+  // ── Fetch every deadline that falls within the currently displayed year ──
+  useEffect(() => {
+    if (!visible || !barangayId) return;
+    let cancelled = false;
+
+    const fetchYearDeadlines = async () => {
+      setLoading(true);
+      setLoadError(null);
+      try {
+        const from = `${cur.y}-01-01`;
+        const to = `${cur.y}-12-31`;
+        const { data, error } = await supabase
+          .from('submission_deadlines')
+          .select('deadline_id, document_type, description, deadline_date, is_met')
+          .eq('barangay_id', barangayId)
+          .gte('deadline_date', from)
+          .lte('deadline_date', to)
+          .order('deadline_date', { ascending: true });
+
+        if (error) throw error;
+        if (!cancelled) setYearDeadlines(data || []);
+      } catch (err) {
+        console.error('Error fetching deadlines:', err);
+        if (!cancelled) setLoadError('Could not load deadlines.');
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+
+    fetchYearDeadlines();
+    return () => { cancelled = true; };
+  }, [visible, barangayId, cur.y]);
+
+  // ── Deadlines that fall in the month currently on screen, keyed by day ──
+  const monthDeadlines = React.useMemo(() => {
+    const map = {};
+    yearDeadlines.forEach((row) => {
+      const { y, m, d } = parseIsoDate(row.deadline_date);
+      if (y === cur.y && m === cur.m) {
+        if (!map[d]) map[d] = [];
+        map[d].push(row);
+      }
+    });
+    return map;
+  }, [yearDeadlines, cur.y, cur.m]);
+
+  const isDeadline = (d) => !!monthDeadlines[d];
   const isToday = (y, m, d) => y === todayY && m === todayM && d === todayD;
 
   const shiftMonth = (dir) => {
@@ -219,11 +253,9 @@ function CalendarModal({ visible, onClose }) {
   };
 
   const pickDay = (d) => {
-    setSelD(d);
-    setSelMonth(cur.m);
-    setSelYear(cur.y);
-    if (deadlines[d]) {
-      setTooltip(tooltip?.day === d ? null : { day: d, label: deadlines[d] });
+    if (monthDeadlines[d]) {
+      const items = monthDeadlines[d].map((row) => ({ label: labelFor(row), isMet: !!row.is_met }));
+      setTooltip(tooltip?.day === d ? null : { day: d, items });
     } else {
       setTooltip(null);
     }
@@ -237,9 +269,18 @@ function CalendarModal({ visible, onClose }) {
     const cells = [];
     for (let i = 0; i < firstDow; i++) cells.push({ day: prevDim - firstDow + 1 + i, ghost: true });
     for (let d = 1; d <= dim; d++) {
+      const dayDeadlines = monthDeadlines[d];
+      const total = dayDeadlines ? dayDeadlines.length : 0;
+      const metCount = dayDeadlines ? dayDeadlines.filter((r) => r.is_met).length : 0;
+      const deadlineStatus = total === 0 ? null : metCount === total ? 'met' : metCount === 0 ? 'pending' : 'partial';
       cells.push({
         day: d, ghost: false,
-        deadline: isDeadline(cur.y, cur.m, d),
+        deadline: isDeadline(d),
+        deadlineStatus,
+        metCount,
+        totalCount: total,
+        items: dayDeadlines ? dayDeadlines.map((r) => ({ isMet: !!r.is_met })) : [],
+        caption: total === 1 ? dayDeadlines[0].document_type : total > 1 ? `${total} deadlines` : null,
         today: isToday(cur.y, cur.m, d),
       });
     }
@@ -250,14 +291,42 @@ function CalendarModal({ visible, onClose }) {
 
   const cells = buildCells();
 
+  // ── Annual Compliance Timeline (right panel) — every deadline this year ──
+  const todayIso = `${todayY}-${String(todayM + 1).padStart(2, '0')}-${String(todayD).padStart(2, '0')}`;
+  const nextUpcomingId = React.useMemo(() => {
+    const upcoming = yearDeadlines.filter((r) => r.deadline_date >= todayIso);
+    return upcoming.length > 0 ? upcoming[0].deadline_id : null;
+  }, [yearDeadlines, todayIso]);
+
+  const timelineRows = yearDeadlines.map((row) => {
+    const { m, d } = parseIsoDate(row.deadline_date);
+    return {
+      id: row.deadline_id,
+      month: `${CAL_MONTHS[m].slice(0, 3)} ${d}`,
+      label: labelFor(row),
+      highlight: row.deadline_id === nextUpcomingId,
+      isMet: !!row.is_met,
+    };
+  });
+
+  const timelineGroups = React.useMemo(() => {
+    const groups = [];
+    timelineRows.forEach((row) => {
+      const last = groups[groups.length - 1];
+      if (last && last.month === row.month) {
+        last.items.push(row);
+        if (row.highlight) last.highlight = true;
+      } else {
+        groups.push({ month: row.month, items: [row], highlight: row.highlight });
+      }
+    });
+    return groups;
+  }, [timelineRows]);
+
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <View style={calStyles.backdrop}>
         <View style={calStyles.modal}>
-          <TouchableOpacity style={calStyles.closeBtn} onPress={onClose} activeOpacity={0.8}>
-            <Text style={calStyles.closeBtnText}>✕</Text>
-          </TouchableOpacity>
-
           <View style={calStyles.body}>
 
             {/* ── Left: Calendar Panel ── */}
@@ -267,10 +336,29 @@ function CalendarModal({ visible, onClose }) {
                 <TouchableOpacity style={calStyles.navBtn} onPress={() => shiftMonth(-1)} activeOpacity={0.8}>
                   <Text style={calStyles.navArrow}>‹</Text>
                 </TouchableOpacity>
-                <Text style={calStyles.monthLabel}>{CAL_MONTHS[cur.m].toUpperCase()} {cur.y} DEADLINES</Text>
+                <Text style={calStyles.monthLabel}>{CAL_MONTHS[cur.m].toUpperCase()} {cur.y}</Text>
                 <TouchableOpacity style={calStyles.navBtn} onPress={() => shiftMonth(1)} activeOpacity={0.8}>
                   <Text style={calStyles.navArrow}>›</Text>
                 </TouchableOpacity>
+              </View>
+
+              {/* Legend */}
+              <View style={calStyles.legendRow}>
+                <View style={calStyles.legendItem}>
+                  <View style={[calStyles.legendDot, { backgroundColor: '#22C55E' }]} />
+                  <Text style={calStyles.legendText}>Met</Text>
+                </View>
+                <View style={calStyles.legendItem}>
+                  <View style={[calStyles.legendDot, { backgroundColor: COLORS.calGold }]} />
+                  <Text style={calStyles.legendText}>Pending</Text>
+                </View>
+                <View style={calStyles.legendItem}>
+                  <View style={calStyles.legendSplitDot}>
+                    <View style={calStyles.legendSplitTop} />
+                    <View style={calStyles.legendSplitBottom} />
+                  </View>
+                  <Text style={calStyles.legendText}>Partially met</Text>
+                </View>
               </View>
 
               {/* Day-of-week headers */}
@@ -284,42 +372,74 @@ function CalendarModal({ visible, onClose }) {
                 {/* Day cells */}
                 {cells.map((cell, idx) => {
                   const showTooltip = tooltip?.day === cell.day && !cell.ghost;
+                  const weekend = idx % 7 === 0 || idx % 7 === 6;
+                  const visibleDots = cell.items ? cell.items.slice(0, 4) : [];
+                  const extraDots = (cell.items ? cell.items.length : 0) - visibleDots.length;
                   return (
-                    <View key={idx} style={calStyles.dayCellWrap}>
+                    <View
+                      key={idx}
+                      style={[calStyles.dayCellWrap, showTooltip && calStyles.dayCellWrapActive]}
+                    >
                       <TouchableOpacity
                         style={[
                           calStyles.dayCell,
+                          !cell.ghost && weekend && calStyles.dayCellWeekend,
                           cell.ghost && calStyles.dayCellGhost,
+                          !cell.ghost && cell.deadlineStatus === 'pending' && calStyles.dayCellTintPending,
+                          !cell.ghost && cell.deadlineStatus === 'met' && calStyles.dayCellTintMet,
+                          !cell.ghost && cell.deadlineStatus === 'partial' && calStyles.dayCellTintPartial,
                           !cell.ghost && cell.today && calStyles.dayCellToday,
-                          !cell.ghost && cell.deadline && calStyles.dayCellDeadline,
                         ]}
                         onPress={() => !cell.ghost && pickDay(cell.day)}
                         activeOpacity={cell.ghost ? 1 : 0.75}
                         disabled={cell.ghost}
                       >
+                        {!cell.ghost && cell.deadlineStatus === 'met' && <View style={calStyles.dayCellAccentMet} />}
+                        {!cell.ghost && cell.deadlineStatus === 'pending' && <View style={calStyles.dayCellAccentPending} />}
+                        {!cell.ghost && cell.deadlineStatus === 'partial' && (
+                          <>
+                            <View style={calStyles.dayCellAccentPartialTop} />
+                            <View style={calStyles.dayCellAccentPartialBottom} />
+                          </>
+                        )}
+
                         <Text style={[
                           calStyles.dayText,
                           cell.ghost && calStyles.dayTextGhost,
-                          !cell.ghost && cell.today && calStyles.dayTextToday,
-                          !cell.ghost && cell.deadline && calStyles.dayTextDeadline,
                         ]}>
                           {cell.day}
                         </Text>
-                        {!cell.ghost && (cell.today || cell.deadline) && (
-                          <Text style={calStyles.dayCellSub}>
-                            {cell.today ? 'Deadline' : 'Standard\nWorkday'}
-                          </Text>
+
+                        {!cell.ghost && cell.deadline && (
+                          <>
+                            <View style={calStyles.dotCluster}>
+                              {visibleDots.map((it, i) => (
+                                <View key={i} style={[calStyles.dot, it.isMet ? calStyles.dotMet : calStyles.dotPending]} />
+                              ))}
+                              {extraDots > 0 && <Text style={calStyles.dotExtra}>+{extraDots}</Text>}
+                            </View>
+                            <Text style={calStyles.dayCellCaption} numberOfLines={1}>{cell.caption}</Text>
+                          </>
                         )}
-                        {!cell.ghost && !cell.today && !cell.deadline && (
-                          <Text style={calStyles.dayCellSub}>{'Standard\nWorkday'}</Text>
+                        {!cell.ghost && cell.today && (
+                          <Text style={calStyles.todayTag}>TODAY</Text>
                         )}
                       </TouchableOpacity>
                       {/* Tooltip popover */}
                       {showTooltip && (
                         <View style={calStyles.tooltip}>
-                          <Text style={calStyles.tooltipTitle}>
-                            {CAL_MONTHS[cur.m]} {cell.day} – {deadlines[cell.day]}
+                          <Text style={calStyles.tooltipDate}>
+                            {CAL_MONTHS[cur.m]} {cell.day}
                           </Text>
+                          {tooltip.items.map((it, i) => (
+                            <View key={i} style={calStyles.tooltipItemRow}>
+                              <View style={[calStyles.tooltipDot, it.isMet ? calStyles.tooltipDotMet : calStyles.tooltipDotPending]} />
+                              <Text style={calStyles.tooltipItemText}>{it.label}</Text>
+                              <Text style={[calStyles.tooltipStatusText, it.isMet ? calStyles.tooltipStatusMetText : calStyles.tooltipStatusPendingText]}>
+                                {it.isMet ? 'Met' : 'Pending'}
+                              </Text>
+                            </View>
+                          ))}
                         </View>
                       )}
                     </View>
@@ -331,51 +451,59 @@ function CalendarModal({ visible, onClose }) {
             {/* ── Right: Annual Compliance Timeline ── */}
             <View style={calStyles.sidePanel}>
               <View style={calStyles.sidePanelHeader}>
-                <Text style={calStyles.sidePanelTitle}>ANNUAL COMPLIANCE{'\n'}TIMELINE - {cur.y}</Text>
+                <Text style={calStyles.sidePanelTitle}>Annual Compliance Timeline</Text>
+                <Text style={calStyles.sidePanelYear}>{cur.y}</Text>
               </View>
 
-              <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
-                {COMPLIANCE_TIMELINE.map((item, idx) => (
-                  <View
-                    key={idx}
-                    style={[calStyles.timelineRow, item.highlight && calStyles.timelineRowHighlight]}
-                  >
-                    <View style={[calStyles.timelineDot, item.highlight && calStyles.timelineDotHighlight]} />
-                    <Text style={[calStyles.timelineMonth, item.highlight && calStyles.timelineMonthHighlight]}>
-                      {item.month}
-                    </Text>
-                    <Text style={[calStyles.timelineLabel, item.highlight && calStyles.timelineLabelHighlight]}>
-                      {item.label}
-                    </Text>
-                  </View>
-                ))}
-              </ScrollView>
-
-              {/* Time selector */}
-              <View style={calStyles.timeRow}>
-                <Text style={calStyles.timeLabel}>Time</Text>
-                <TouchableOpacity
-                  style={calStyles.timeBtn}
-                  onPress={() => setTimeIdx((i) => (i + 1) % CAL_TIMES.length)}
-                  activeOpacity={0.8}
-                >
-                  <Text style={calStyles.timeBtnText}>{CAL_TIMES[timeIdx]}</Text>
-                </TouchableOpacity>
-              </View>
+              {loading ? (
+                <View style={calStyles.sideEmptyState}>
+                  <ActivityIndicator color={COLORS.navy} />
+                </View>
+              ) : loadError ? (
+                <View style={calStyles.sideEmptyState}>
+                  <Text style={calStyles.sideEmptyText}>{loadError}</Text>
+                </View>
+              ) : timelineGroups.length === 0 ? (
+                <View style={calStyles.sideEmptyState}>
+                  <Text style={calStyles.sideEmptyText}>No deadlines set for {cur.y} yet.</Text>
+                </View>
+              ) : (
+                <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
+                  {timelineGroups.map((group, gi) => (
+                    <View key={gi} style={[calStyles.timelineGroup, group.highlight && calStyles.timelineGroupHighlight]}>
+                      <View style={calStyles.timelineGroupHeader}>
+                        <Text style={[calStyles.timelineMonth, group.highlight && calStyles.timelineMonthHighlight]}>
+                          {group.month}
+                        </Text>
+                        {group.highlight && <Text style={calStyles.nextBadge}>NEXT</Text>}
+                      </View>
+                      {group.items.map((item) => (
+                        <View key={item.id} style={calStyles.timelineItemRow}>
+                          <View style={[calStyles.timelineStatusIcon, item.isMet ? calStyles.timelineStatusIconMet : calStyles.timelineStatusIconPending]}>
+                            <Text style={calStyles.timelineStatusIconText}>{item.isMet ? '✓' : '•'}</Text>
+                          </View>
+                          <Text style={calStyles.timelineLabel} numberOfLines={2}>{item.label}</Text>
+                        </View>
+                      ))}
+                    </View>
+                  ))}
+                </ScrollView>
+              )}
             </View>
 
           </View>
+          <TouchableOpacity style={calStyles.closeBtn} onPress={onClose} activeOpacity={0.8}>
+            <Text style={calStyles.closeBtnText}>✕</Text>
+          </TouchableOpacity>
         </View>
       </View>
     </Modal>
   );
 }
 
-// ─── APPROACHING DEADLINES DATA ──────────────────────────────────────────────
-const APPROACHING_DEADLINES = [
-  { id: '1', title: 'Approved Annual Budget', deadline: 'January 6, 2026', daysLeft: 1, urgent: true },
-  { id: '2', title: 'Annual Budget Youth Investment Program', deadline: 'January 6, 2026', daysLeft: 10, urgent: false },
-];
+// ─── APPROACHING DEADLINES ────────────────────────────────────────────────────
+// Now derived live from submission_deadlines (see fetchTasks below) instead of
+// this static mock list.
 
 // ─── QUICK ACTIONS DATA ───────────────────────────────────────────────────────
 const SK_QUICK_ACTIONS = [
@@ -400,6 +528,7 @@ export default function HomeScreen({ navigation }) {
   const [docStats, setDocStats] = useState({ total: 0, submitted: 0, forRevision: 0, approved: 0, drafts: 0 });
   const [recentActivities, setRecentActivities] = useState([]);
   const [complianceTasks, setComplianceTasks] = useState([]);
+  const [approachingDeadlines, setApproachingDeadlines] = useState([]);
 
   useEffect(() => {
     if (user && user.role !== 'sk') router.replace('/');
@@ -457,6 +586,13 @@ export default function HomeScreen({ navigation }) {
     } catch (error) { console.error('Error:', error); }
   }, [barangayId]);
 
+  // Parse a Postgres `date` (YYYY-MM-DD) as a UTC midnight instant, avoiding
+  // local-timezone drift that could shift the day by ±1.
+  const parseDateOnly = (dateStr) => {
+    const [y, m, d] = dateStr.toString().slice(0, 10).split('-').map(Number);
+    return Date.UTC(y, m - 1, d);
+  };
+
   // Fetch compliance tasks/deadlines
   const fetchTasks = useCallback(async () => {
     if (!barangayId) return;
@@ -474,8 +610,27 @@ export default function HomeScreen({ navigation }) {
         description: d.title || d.document_type,
         action: d.action_type === 'publish' ? 'Publish' : 'Submit',
         urgent: new Date(d.deadline_date) <= new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+        isMet: !!d.is_met,
       }));
       setComplianceTasks(taskList);
+
+      // Approaching Deadline card: only deadlines not yet met, nearest first.
+      const todayUtc = Date.UTC(new Date().getFullYear(), new Date().getMonth(), new Date().getDate());
+      const approaching = (deadlines || [])
+        .filter((d) => !d.is_met)
+        .map((d) => {
+          const deadlineUtc = parseDateOnly(d.deadline_date);
+          const daysLeft = Math.round((deadlineUtc - todayUtc) / (24 * 60 * 60 * 1000));
+          return {
+            id: d.deadline_id.toString(),
+            title: d.description || d.document_type,
+            deadline: new Date(deadlineUtc).toLocaleDateString('en-PH', { timeZone: 'UTC', month: 'long', day: 'numeric', year: 'numeric' }),
+            daysLeft,
+            urgent: daysLeft <= 3,
+          };
+        })
+        .sort((a, b) => a.daysLeft - b.daysLeft);
+      setApproachingDeadlines(approaching);
     } catch (error) { console.error('Error:', error); }
   }, [barangayId]);
 
@@ -565,7 +720,7 @@ export default function HomeScreen({ navigation }) {
       <StatusBar barStyle="light-content" backgroundColor={COLORS.navy} />
 
       {/* ── Calendar Modal ── */}
-      <CalendarModal visible={calendarVisible} onClose={() => setCalendarVisible(false)} />
+      <CalendarModal visible={calendarVisible} onClose={() => setCalendarVisible(false)} barangayId={barangayId} />
 
       <View style={styles.layout}>
         {isMobile && sidebarVisible && (
@@ -648,17 +803,25 @@ export default function HomeScreen({ navigation }) {
               </View>
               <TouchableOpacity><Text style={styles.viewAll}>View All</Text></TouchableOpacity>
             </View>
-            {APPROACHING_DEADLINES.map((item) => (
-              <View key={item.id} style={styles.deadlineRow}>
-                <Text style={styles.deadlineDocTitle}>{item.title}</Text>
-                <Text style={styles.deadlineDate}>
-                  <Text style={styles.deadlineDateLabel}>Deadline: </Text>{item.deadline}
-                </Text>
-                <Text style={[styles.daysLeft, item.urgent ? styles.daysLeftUrgent : styles.daysLeftNormal]}>
-                  {item.daysLeft} Day{item.daysLeft !== 1 ? 's' : ''} Left
-                </Text>
-              </View>
-            ))}
+            {approachingDeadlines.length > 0 ? (
+              approachingDeadlines.slice(0, 5).map((item) => (
+                <View key={item.id} style={styles.deadlineRow}>
+                  <Text style={styles.deadlineDocTitle}>{item.title}</Text>
+                  <Text style={styles.deadlineDate}>
+                    <Text style={styles.deadlineDateLabel}>Deadline: </Text>{item.deadline}
+                  </Text>
+                  <Text style={[styles.daysLeft, item.urgent ? styles.daysLeftUrgent : styles.daysLeftNormal]}>
+                    {item.daysLeft < 0
+                      ? `${Math.abs(item.daysLeft)} Day${Math.abs(item.daysLeft) !== 1 ? 's' : ''} Overdue`
+                      : item.daysLeft === 0
+                        ? 'Due Today'
+                        : `${item.daysLeft} Day${item.daysLeft !== 1 ? 's' : ''} Left`}
+                  </Text>
+                </View>
+              ))
+            ) : (
+              <Text style={styles.deadlineEmptyText}>No upcoming deadlines — you're all caught up.</Text>
+            )}
           </View>
 
           {/* ── BOTTOM TWO COLUMNS ── */}
@@ -675,15 +838,24 @@ export default function HomeScreen({ navigation }) {
                 </View>
                 <View style={styles.divider} />
                 {(complianceTasks.length > 0 ? complianceTasks : [
-                  { id: '1', description: 'Submit the Approved Annual Budget to LYDO', action: 'Submit' },
-                  { id: '2', description: 'Submit Annual Budget Youth Investment Program proposal', action: 'Submit' },
-                  { id: '3', description: 'Publish the Comprehensive Barangay Youth Development Program to policy board', action: 'Publish' },
-                  { id: '4', description: 'Submit Monthly Report for the month of february', action: 'Submit' },
+                  { id: '1', description: 'Submit the Approved Annual Budget to LYDO', action: 'Submit', isMet: false },
+                  { id: '2', description: 'Submit Annual Budget Youth Investment Program proposal', action: 'Submit', isMet: false },
+                  { id: '3', description: 'Publish the Comprehensive Barangay Youth Development Program to policy board', action: 'Publish', isMet: false },
+                  { id: '4', description: 'Submit Monthly Report for the month of february', action: 'Submit', isMet: false },
                 ]).map((task, idx, arr) => (
                   <View key={task.id} style={[styles.taskRow, idx < arr.length - 1 && styles.taskRowBorder]}>
+                    <View style={[styles.taskStatusDot, task.isMet ? styles.taskStatusDotMet : styles.taskStatusDotPending]} />
                     <Text style={styles.taskDesc}>{task.description}</Text>
-                    <TouchableOpacity style={[styles.taskBtn, task.action === 'Publish' && styles.taskBtnPublish]} activeOpacity={0.8}>
-                      <Text style={[styles.taskBtnText, task.action === 'Publish' && styles.taskBtnPublishText]}>{task.action}</Text>
+                    <TouchableOpacity
+                      style={[
+                        styles.taskBtn,
+                        task.isMet ? styles.taskBtnMet : styles.taskBtnPending,
+                      ]}
+                      activeOpacity={0.8}
+                    >
+                      <Text style={[styles.taskBtnText, task.isMet ? styles.taskBtnMetText : styles.taskBtnPendingText]}>
+                        {task.isMet ? 'Completed' : task.action}
+                      </Text>
                     </TouchableOpacity>
                   </View>
                 ))}
@@ -760,123 +932,170 @@ export default function HomeScreen({ navigation }) {
 const calStyles = StyleSheet.create({
   backdrop: {
     flex: 1, backgroundColor: 'rgba(0,0,0,0.65)',
-    justifyContent: 'center', alignItems: 'center', padding: 16,
+    justifyContent: 'center', alignItems: 'center', padding: 24,
   },
   modal: {
     backgroundColor: COLORS.navy, borderRadius: 20,
-    width: isMobile ? '100%' : 740, maxWidth: 740, padding: 16,
+    width: isMobile ? '100%' : 940, maxWidth: 940, padding: 16,
+    position: 'relative',
   },
   closeBtn: {
-    alignSelf: 'flex-end', width: 28, height: 28, borderRadius: 14,
-    backgroundColor: 'rgba(255,255,255,0.18)',
-    alignItems: 'center', justifyContent: 'center', marginBottom: 10,
+    position: 'absolute', top: -14, right: -14,
+    width: 32, height: 32, borderRadius: 16,
+    backgroundColor: COLORS.white,
+    alignItems: 'center', justifyContent: 'center',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.25, shadowRadius: 4, elevation: 6,
   },
-  closeBtnText: { color: COLORS.white, fontSize: 14, fontWeight: '700' },
-  body: { flexDirection: isMobile ? 'column' : 'row', gap: 12 },
+  closeBtnText: { color: COLORS.navy, fontSize: 14, fontWeight: '800' },
+  body: { flexDirection: isMobile ? 'column' : 'row', gap: 14 },
 
   /* ── Left: Calendar panel ── */
   calPanel: {
     flex: isMobile ? undefined : 1,
-    backgroundColor: COLORS.white, borderRadius: 14,
-    padding: isMobile ? 12 : 16,
+    backgroundColor: COLORS.white, borderRadius: 16,
+    padding: isMobile ? 14 : 18,
   },
   calNav: {
     flexDirection: 'row', alignItems: 'center',
-    justifyContent: 'space-between', marginBottom: 16,
+    justifyContent: 'space-between', marginBottom: 12,
   },
   navBtn: {
     width: 32, height: 32, borderRadius: 16,
-    borderWidth: 1.5, borderColor: '#bbb',
-    backgroundColor: '#f0f0f0',
+    backgroundColor: COLORS.offWhite,
     alignItems: 'center', justifyContent: 'center',
   },
-  navArrow: { fontSize: 20, color: COLORS.navy, lineHeight: 22, marginTop: -2 },
+  navArrow: { fontSize: 18, color: COLORS.navy, lineHeight: 20, fontWeight: '800' },
   monthLabel: {
-    fontSize: isMobile ? 13 : 15, fontWeight: '800',
-    color: COLORS.navy, letterSpacing: 1, textAlign: 'center',
+    fontSize: isMobile ? 14 : 16, fontWeight: '800',
+    color: COLORS.navy, letterSpacing: 1,
   },
-  grid: { flexDirection: 'row', flexWrap: 'wrap' },
-  dowCell: { width: `${100 / 7}%`, alignItems: 'center', paddingBottom: 6 },
-  dowText: { fontSize: 10, fontWeight: '700', color: '#888', letterSpacing: 0.5 },
 
-  dayCellWrap: { width: `${100 / 7}%`, position: 'relative', marginBottom: 4 },
-  dayCell: {
-    flex: 1, minHeight: isMobile ? 40 : 50,
-    alignItems: 'center', justifyContent: 'flex-start', paddingTop: 5,
-    borderRadius: 8, backgroundColor: '#e8eaf0',
-    marginHorizontal: 1,
+  /* Legend */
+  legendRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 16,
+    marginBottom: 12, paddingBottom: 12,
+    borderBottomWidth: 1, borderBottomColor: COLORS.lightGray,
   },
-  dayCellGhost: { backgroundColor: 'transparent' },
-  dayCellToday: { backgroundColor: COLORS.calGold },
-  dayCellDeadline: { backgroundColor: COLORS.calGold },
-  dayText: { fontSize: isMobile ? 12 : 13, fontWeight: '700', color: COLORS.navy },
-  dayTextGhost: { color: '#ccc' },
-  dayTextToday: { color: COLORS.white },
-  dayTextDeadline: { color: COLORS.white },
-  dayCellSub: {
-    fontSize: 7, color: '#666',
-    textAlign: 'center', lineHeight: 9, marginTop: 2,
+  legendItem: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  legendDot: { width: 8, height: 8, borderRadius: 4 },
+  legendSplitDot: {
+    width: 8, height: 8, borderRadius: 4, overflow: 'hidden',
+  },
+  legendSplitTop: { height: '50%', backgroundColor: '#22C55E' },
+  legendSplitBottom: { height: '50%', backgroundColor: COLORS.calGold },
+  legendText: { fontSize: 11, fontWeight: '600', color: COLORS.subText },
+
+  grid: { flexDirection: 'row', flexWrap: 'wrap' },
+  dowCell: { width: `${100 / 7}%`, alignItems: 'center', paddingBottom: 8 },
+  dowText: { fontSize: 10.5, fontWeight: '700', color: '#999', letterSpacing: 0.5 },
+
+  dayCellWrap: { width: `${100 / 7}%`, position: 'relative', marginBottom: 5, zIndex: 1 },
+  dayCellWrapActive: { zIndex: 999, elevation: 999 },
+  dayCell: {
+    flex: 1, minHeight: isMobile ? 54 : 64,
+    alignItems: 'center', justifyContent: 'flex-start', paddingTop: 6,
+    borderRadius: 9, backgroundColor: COLORS.white,
+    borderWidth: 1, borderColor: '#F0F0F0',
+    marginHorizontal: 1.5,
+    position: 'relative', overflow: 'hidden',
+  },
+  dayCellWeekend: { backgroundColor: '#FBFBFD' },
+  dayCellGhost: { backgroundColor: 'transparent', borderColor: 'transparent' },
+  dayCellToday: { borderWidth: 1.5, borderColor: COLORS.navy },
+  dayCellTintPending: { backgroundColor: '#FFFBEB', borderColor: '#FDECC8' },
+  dayCellTintMet: { backgroundColor: '#F0FDF4', borderColor: '#CFF3DA' },
+  dayCellTintPartial: { backgroundColor: '#FAFAFC', borderColor: '#EDEDF2' },
+
+  dayCellAccentMet: { position: 'absolute', top: 0, left: 0, bottom: 0, width: 3, backgroundColor: '#22C55E' },
+  dayCellAccentPending: { position: 'absolute', top: 0, left: 0, bottom: 0, width: 3, backgroundColor: COLORS.calGold },
+  dayCellAccentPartialTop: { position: 'absolute', top: 0, left: 0, height: '50%', width: 3, backgroundColor: '#22C55E' },
+  dayCellAccentPartialBottom: { position: 'absolute', bottom: 0, left: 0, height: '50%', width: 3, backgroundColor: COLORS.calGold },
+
+  dayText: { fontSize: isMobile ? 13 : 14, fontWeight: '700', color: COLORS.navy },
+  dayTextGhost: { color: '#ddd' },
+
+  todayTag: {
+    fontSize: 7, fontWeight: '800', color: COLORS.navy,
+    letterSpacing: 0.5, marginTop: 2,
+  },
+
+  dotCluster: { flexDirection: 'row', alignItems: 'center', gap: 3, marginTop: 4 },
+  dot: { width: 5, height: 5, borderRadius: 2.5 },
+  dotMet: { backgroundColor: '#22C55E' },
+  dotPending: { backgroundColor: COLORS.calGold },
+  dotExtra: { fontSize: 8, fontWeight: '800', color: COLORS.subText, marginLeft: 1 },
+
+  dayCellCaption: {
+    fontSize: 8, fontWeight: '700', color: COLORS.subText,
+    textAlign: 'center', marginTop: 2, paddingHorizontal: 3,
   },
 
   /* Tooltip popover */
   tooltip: {
-    position: 'absolute', top: '110%', left: '-20%', right: '-120%',
-    zIndex: 99, backgroundColor: COLORS.white, borderRadius: 8,
-    padding: 8, elevation: 10,
+    position: 'absolute', top: '108%', left: '-20%', right: '-120%',
+    zIndex: 99, backgroundColor: COLORS.white, borderRadius: 10,
+    padding: 12, elevation: 10,
     shadowColor: '#000', shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.2, shadowRadius: 6,
   },
-  tooltipTitle: { fontSize: 11, fontWeight: '700', color: COLORS.navy, lineHeight: 15 },
+  tooltipDate: { fontSize: 12.5, fontWeight: '800', color: COLORS.navy, marginBottom: 6 },
+  tooltipItemRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 },
+  tooltipDot: { width: 7, height: 7, borderRadius: 3.5, flexShrink: 0 },
+  tooltipDotMet: { backgroundColor: '#22C55E' },
+  tooltipDotPending: { backgroundColor: COLORS.calGold },
+  tooltipItemText: { flex: 1, fontSize: 12, color: '#333', lineHeight: 16 },
+  tooltipStatusText: { fontSize: 10, fontWeight: '800', letterSpacing: 0.3 },
+  tooltipStatusMetText: { color: '#22C55E' },
+  tooltipStatusPendingText: { color: '#B45309' },
 
   /* ── Right: Annual Compliance Timeline panel ── */
   sidePanel: {
-    width: isMobile ? '100%' : 220,
-    backgroundColor: COLORS.white, borderRadius: 14,
+    width: isMobile ? '100%' : 260,
+    backgroundColor: COLORS.white, borderRadius: 16,
     overflow: 'hidden',
-    maxHeight: isMobile ? 300 : 420,
+    maxHeight: isMobile ? 320 : 500,
   },
   sidePanelHeader: {
-    backgroundColor: COLORS.navy, paddingHorizontal: 14, paddingVertical: 12,
-    alignItems: 'center',
+    backgroundColor: COLORS.navy, paddingHorizontal: 16, paddingVertical: 14,
   },
   sidePanelTitle: {
-    fontSize: 12, fontWeight: '800', color: COLORS.white,
-    textAlign: 'center', letterSpacing: 0.8, lineHeight: 17,
+    fontSize: 12.5, fontWeight: '800', color: COLORS.white,
+    letterSpacing: 0.6, lineHeight: 16,
+  },
+  sidePanelYear: {
+    fontSize: 10.5, fontWeight: '600', color: 'rgba(255,255,255,0.65)',
+    marginTop: 2, letterSpacing: 0.5,
   },
 
-  /* Timeline rows */
-  timelineRow: {
-    flexDirection: 'row', alignItems: 'center',
-    paddingHorizontal: 12, paddingVertical: 7,
-    borderBottomWidth: 1, borderBottomColor: '#eef0f5', gap: 8,
-  },
-  timelineRowHighlight: {
-    borderWidth: 1.5, borderColor: COLORS.calGold,
-    borderRadius: 8, marginHorizontal: 6, marginVertical: 2,
-    backgroundColor: '#fffdf6',
-  },
-  timelineDot: {
-    width: 8, height: 8, borderRadius: 4,
-    backgroundColor: COLORS.navy, flexShrink: 0,
-  },
-  timelineDotHighlight: { backgroundColor: COLORS.calGold },
-  timelineMonth: { fontSize: 10, fontWeight: '700', color: COLORS.navy, width: 38, flexShrink: 0 },
-  timelineMonthHighlight: { color: COLORS.calGold },
-  timelineLabel: { flex: 1, fontSize: 10, color: '#444', lineHeight: 14 },
-  timelineLabelHighlight: { fontWeight: '700', color: COLORS.navy },
+  sideEmptyState: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
+  sideEmptyText: { fontSize: 13, color: '#888', textAlign: 'center', lineHeight: 18 },
 
-  /* Time row */
-  timeRow: {
+  /* Timeline groups */
+  timelineGroup: {
+    paddingHorizontal: 14, paddingVertical: 10,
+    borderBottomWidth: 1, borderBottomColor: '#F0F1F5',
+  },
+  timelineGroupHighlight: { backgroundColor: '#FFFBEB' },
+  timelineGroupHeader: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    borderTopWidth: 1, borderTopColor: '#e0e8f0',
-    paddingHorizontal: 12, paddingVertical: 9,
+    marginBottom: 6,
   },
-  timeLabel: { fontSize: 12, fontWeight: '700', color: COLORS.navy },
-  timeBtn: {
-    backgroundColor: '#e8eaf5', borderWidth: 1.5, borderColor: '#c8d0e8',
-    borderRadius: 8, paddingHorizontal: 12, paddingVertical: 5,
+  timelineMonth: { fontSize: 11.5, fontWeight: '800', color: COLORS.navy, letterSpacing: 0.4 },
+  timelineMonthHighlight: { color: '#B45309' },
+  nextBadge: {
+    fontSize: 8.5, fontWeight: '800', color: '#B45309',
+    backgroundColor: '#FEF3C7', borderRadius: 6,
+    paddingHorizontal: 6, paddingVertical: 2, letterSpacing: 0.5,
   },
-  timeBtnText: { fontSize: 12, fontWeight: '700', color: COLORS.navy },
+  timelineItemRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, marginBottom: 4 },
+  timelineStatusIcon: {
+    width: 15, height: 15, borderRadius: 7.5, flexShrink: 0,
+    alignItems: 'center', justifyContent: 'center', marginTop: 1,
+  },
+  timelineStatusIconMet: { backgroundColor: '#22C55E' },
+  timelineStatusIconPending: { backgroundColor: '#F3E8C4' },
+  timelineStatusIconText: { fontSize: 9, fontWeight: '900', color: COLORS.white, lineHeight: 10 },
+  timelineLabel: { flex: 1, fontSize: 12, color: '#444', lineHeight: 16, fontWeight: '500' },
 });
 
 // ─── DASHBOARD STYLES ─────────────────────────────────────────────────────────
@@ -959,6 +1178,7 @@ const styles = StyleSheet.create({
 
   // ── Approaching Deadline Card ──
   deadlineCard: { backgroundColor: '#EFF6FF', borderRadius: 14, padding: 16, marginBottom: 14, borderWidth: 1, borderColor: '#BFDBFE' },
+  deadlineEmptyText: { fontSize: 13, color: COLORS.subText, paddingVertical: 8 },
   deadlineHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
   deadlineHeaderLeft: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   deadlineIcon: { fontSize: 16 },
@@ -996,6 +1216,13 @@ const styles = StyleSheet.create({
   taskBtnText: { fontSize: 12, fontWeight: '700', color: COLORS.navy, letterSpacing: 0.2 },
   taskBtnPublish: { borderColor: '#22C55E', backgroundColor: '#22C55E' },
   taskBtnPublishText: { color: COLORS.white },
+  taskStatusDot: { width: 8, height: 8, borderRadius: 4 },
+  taskStatusDotMet: { backgroundColor: '#22C55E' },
+  taskStatusDotPending: { backgroundColor: '#F59E0B' },
+  taskBtnMet: { borderColor: '#22C55E', backgroundColor: '#22C55E' },
+  taskBtnMetText: { color: COLORS.white },
+  taskBtnPending: { borderColor: '#F59E0B', backgroundColor: '#FEF3C7' },
+  taskBtnPendingText: { color: '#B45309' },
 
   // ── Recent Activity ──
   activityRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, gap: 10 },
