@@ -304,7 +304,7 @@ const CP = StyleSheet.create({
 // ─── ADD DEADLINE MODAL ────────────────────────────────────────────────────────
 const ALL_BARANGAYS_VALUE = '__ALL__';
 
-const AddDeadlineModal = ({ visible, onClose, onSave, barangays, saving }) => {
+const AddDeadlineModal = ({ visible, onClose, onSave, barangays, deadlines, saving }) => {
   const [documentType, setDocumentType] = useState('');
   const [description, setDescription]   = useState('');
   const [deadlineDate, setDeadlineDate] = useState('');
@@ -326,15 +326,39 @@ const AddDeadlineModal = ({ visible, onClose, onSave, barangays, saving }) => {
   const documentOptions = DOCUMENT_OPTIONS.map(opt => ({ value: opt, label: DOC_FULL_NAMES[opt] ?? opt }));
   const documentLabel = (val) => documentOptions.find(o => o.value === val)?.label;
 
-  const barangayOptions = [
-    { value: ALL_BARANGAYS_VALUE, label: 'All Barangays' },
-    ...barangays.map(b => ({ value: b.barangay_id, label: b.barangay_name })),
-  ];
+  // Barangays with an existing UNMET deadline for the currently selected
+  // document type should not be selectable again — a barangay can only have
+  // one open deadline per compliance document. Once a deadline is marked met,
+  // that barangay frees back up for a new one.
+  const takenBarangayIds = new Set(
+    (deadlines || [])
+      .filter(d => d.document_type === documentType && !d.is_met)
+      .map(d => d.barangay_id)
+  );
+  const availableBarangays = barangays.filter(b => !takenBarangayIds.has(b.barangay_id));
+
+  const barangayOptions = documentType
+    ? [
+        // Only offer "All Barangays" as a bulk option when every barangay is
+        // still available; otherwise it would silently skip the ones already
+        // covered, which is confusing — force an explicit per-barangay pick.
+        ...(availableBarangays.length === barangays.length
+          ? [{ value: ALL_BARANGAYS_VALUE, label: 'All Barangays' }]
+          : []),
+        ...availableBarangays.map(b => ({ value: b.barangay_id, label: b.barangay_name })),
+      ]
+    : [
+        { value: ALL_BARANGAYS_VALUE, label: 'All Barangays' },
+        ...barangays.map(b => ({ value: b.barangay_id, label: b.barangay_name })),
+      ];
   const barangayLabel = (val) => barangayOptions.find(o => o.value === val)?.label;
 
   const handleDocSelect = (opt) => {
     setDocumentType(opt);
     setDescription(DOC_FULL_NAMES[opt] ?? opt);
+    // The previously chosen barangay may no longer be valid for this document
+    // type (it might already have a deadline), so make the user re-pick.
+    setBarangayId('');
   };
 
   const handleDateSelect = (iso) => {
@@ -379,7 +403,7 @@ const AddDeadlineModal = ({ visible, onClose, onSave, barangays, saving }) => {
           <View style={AM.divider} />
 
           {/* Body */}
-          <ScrollView style={AM.body} contentContainerStyle={AM.bodyContent}>
+          <ScrollView style={AM.body} contentContainerStyle={AM.bodyContent} showsVerticalScrollIndicator={false}>
             <Text style={AM.fieldLabel}>Compliance Document</Text>
             <Dropdown
               label="Document"
@@ -663,8 +687,16 @@ export default function LYDOMonitorDeadlinesScreen() {
 
     setSaving(true);
     try {
+      const barangaysWithExistingDeadline = new Set(
+        deadlines
+          .filter(d => d.document_type === documentType && !d.is_met)
+          .map(d => d.barangay_id)
+      );
+
       const targetBarangayIds = barangayId === ALL_BARANGAYS_VALUE
-        ? barangays.map(b => b.barangay_id)
+        ? barangays
+            .map(b => b.barangay_id)
+            .filter(id => !barangaysWithExistingDeadline.has(id))
         : [barangayId];
 
       if (targetBarangayIds.length === 0) {
@@ -844,6 +876,7 @@ export default function LYDOMonitorDeadlinesScreen() {
             activeOpacity={0.8}
           >
             <PlusIcon color={COLORS.navy} size={13} />
+            <Text style={dtStyles.addBtnText}>Deadline</Text>
           </TouchableOpacity>
         </View>
 
@@ -924,6 +957,7 @@ export default function LYDOMonitorDeadlinesScreen() {
         onClose={() => setAddModalVisible(false)}
         onSave={handleSaveDeadline}
         barangays={barangays}
+        deadlines={deadlines}
         saving={saving}
       />
     </SafeAreaView>
@@ -1002,12 +1036,13 @@ const dtStyles = StyleSheet.create({
   panelHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 },
   panelTitle: { fontSize: isMobile ? 14 : 16, fontWeight: '800', color: COLORS.navy },
   addBtn: {
-    width: 30, height: 30, borderRadius: 8,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
+    height: 30, borderRadius: 8, paddingHorizontal: 12,
     borderWidth: 1.5, borderColor: COLORS.lightGray,
     backgroundColor: COLORS.white,
-    alignItems: 'center', justifyContent: 'center',
     elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.08, shadowRadius: 4,
   },
+  addBtnText: { fontSize: isMobile ? 11 : 12, fontWeight: '700', color: COLORS.navy },
 
   tableContainer: { backgroundColor: COLORS.white, borderRadius: 12, overflow: 'hidden', borderWidth: 1, borderColor: COLORS.lightGray, elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 6 },
 

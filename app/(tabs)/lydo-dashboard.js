@@ -188,11 +188,11 @@ const MONITORING_TASKS_BASE = [
 ];
 
 const QUICK_ACTIONS = [
-  { id: 'consultation', label: 'Consultation', badgeProp: 'consultationsCount', color: COLORS.navy, icon: '💬', route: '/(tabs)/lydo-monitor' },
+  { id: 'consultation', label: 'Consultation', badgeProp: 'proposalsForReview', color: COLORS.navy, icon: '💬', route: '/(tabs)/lydo-monitor' },
   { id: 'budget', label: 'View Budget', color: '#1A2332', icon: '📊', route: '/(tabs)/lydo-monitor-budget' },
   { id: 'export', label: 'Export  Reports', color: COLORS.navy, icon: '⬇', route: '/(tabs)/lydo-monitor-report' },
   { id: 'calendar', label: 'View Deadline Calendar', color: '#F97316', icon: '📅', route: null },
-  { id: 'missing', label: 'View Missing Documents', color: '#EF4444', icon: '📄', route: null },
+  { id: 'missing', label: 'View Missing Documents', color: '#EF4444', icon: '📄', action: 'showMissingDocs' },
   { id: 'archive', label: 'View Archive', color: '#6B7A8F', icon: '🗃', route: null },
   { id: 'task', label: 'Create Task', color: COLORS.navy, icon: null, route: null, fullWidth: true },
 ];
@@ -634,6 +634,8 @@ export default function LYDOHomeScreen() {
   const [proposalsForReview, setProposalsForReview] = useState(0);
   const [consultationsCount, setConsultationsCount] = useState(0);
   const [lydoActivities, setLydoActivities] = useState([]);
+  const [missingDocsModalVisible, setMissingDocsModalVisible] = useState(false);
+  const [missingDocsList, setMissingDocsList] = useState([]);
 
   useEffect(() => {
     if (user && user.role !== 'lydo') router.replace('/');
@@ -710,12 +712,53 @@ export default function LYDOHomeScreen() {
         // Fetch all documents with barangay info
         const { data: allDocs } = await supabase
           .from('documents')
-          .select('document_id, status, barangay_id');
+          .select('document_id, status, title, document_type, barangay_id, barangays(barangay_name)');
 
-        // Fetch all deadlines
+        // Fetch all deadlines to determine required documents
         const { data: allDeadlines } = await supabase
           .from('submission_deadlines')
-          .select('deadline_id, deadline_date, is_met, barangay_id');
+          .select('deadline_id, document_type, description, deadline_date, barangay_id, is_met, barangays(barangay_name)');
+
+        // Get missing documents: barangays that haven't submitted based on deadlines
+        const missingDocsWithBrgy = [];
+
+        // Group deadlines by document type and barangay
+        const deadlineMap = {};
+        (allDeadlines || []).forEach(d => {
+          const key = `${d.barangay_id}-${d.document_type}`;
+          if (!deadlineMap[key]) {
+            deadlineMap[key] = {
+              barangay_id: d.barangay_id,
+              barangay: d.barangays?.barangay_name || 'Unknown',
+              document_type: d.document_type,
+              description: d.description,
+              is_met: d.is_met,
+            };
+          }
+        });
+
+        // For each deadline, check if the document was submitted
+        Object.values(deadlineMap).forEach(deadline => {
+          if (!deadline.is_met) {
+            // Check if there's a submitted/approved document for this barangay and document type
+            const submittedDoc = (allDocs || []).find(doc =>
+              doc.barangay_id === deadline.barangay_id &&
+              doc.document_type === deadline.document_type &&
+              (doc.status === 'submitted' || doc.status === 'approved')
+            );
+
+            if (!submittedDoc) {
+              missingDocsWithBrgy.push({
+                id: `${deadline.barangay_id}-${deadline.document_type}`,
+                title: deadline.description || deadline.document_type,
+                barangay: deadline.barangay,
+                status: 'Not Submitted',
+              });
+            }
+          }
+        });
+
+        setMissingDocsList(missingDocsWithBrgy);
 
         const barangayStats = {};
 
@@ -739,20 +782,34 @@ export default function LYDOHomeScreen() {
             if (doc.status === 'approved') {
               barangayStats[doc.barangay_id].hasApproved = true;
             }
-            if (doc.status === 'draft' || doc.status === 'saved') {
-              barangayStats[doc.barangay_id].hasMissing = true;
-            }
           }
         });
 
-        // Check deadline status per barangay
+        // Check deadline status per barangay - use deadlines to determine missing documents
         const today = new Date();
         const threeDaysFromNow = new Date(today.getTime() + (3 * 24 * 60 * 60 * 1000));
+
+        // Track which barangays have unfulfilled deadlines (missing documents)
+        const barangaysWithMissing = new Set();
 
         allDeadlines?.forEach(deadline => {
           if (deadline.barangay_id && barangayStats[deadline.barangay_id]) {
             const deadlineDate = new Date(deadline.deadline_date);
+
+            // Check if this deadline is not met (missing document)
             if (!deadline.is_met) {
+              // Check if there's a submitted/approved document for this deadline
+              const hasDocument = (allDocs || []).some(doc =>
+                doc.barangay_id === deadline.barangay_id &&
+                doc.document_type === deadline.document_type &&
+                (doc.status === 'submitted' || doc.status === 'approved')
+              );
+
+              if (!hasDocument) {
+                barangayStats[deadline.barangay_id].hasMissing = true;
+                barangaysWithMissing.add(deadline.barangay_id);
+              }
+
               if (deadlineDate < today) {
                 barangayStats[deadline.barangay_id].hasOverdue = true;
               } else if (deadlineDate <= threeDaysFromNow) {
@@ -1025,6 +1082,58 @@ export default function LYDOHomeScreen() {
     <SafeAreaView style={styles.safe}>
       <StatusBar barStyle="light-content" backgroundColor={COLORS.navy} />
       <CalendarModal visible={calendarVisible} onClose={() => setCalendarVisible(false)} />
+
+      {/* Missing Documents Modal */}
+      <Modal visible={missingDocsModalVisible} transparent animationType="fade" onRequestClose={() => setMissingDocsModalVisible(false)}>
+        <View style={missingModalStyles.backdrop}>
+          <View style={missingModalStyles.modal}>
+            <View style={missingModalStyles.header}>
+              <View style={{ flex: 1 }}>
+                <Text style={missingModalStyles.title}>Missing Documents</Text>
+                <Text style={missingModalStyles.subtitle}>
+                  {missingDocsList.length > 0
+                    ? `${missingDocsList.length} document${missingDocsList.length !== 1 ? 's' : ''} not yet submitted`
+                    : 'All barangays are up to date'}
+                </Text>
+              </View>
+              <TouchableOpacity style={missingModalStyles.closeBtn} onPress={() => setMissingDocsModalVisible(false)} activeOpacity={0.8}>
+                <Text style={missingModalStyles.closeText}>✕</Text>
+              </TouchableOpacity>
+            </View>
+            <View style={missingModalStyles.divider} />
+
+            <ScrollView
+              style={missingModalStyles.body}
+              contentContainerStyle={missingModalStyles.bodyContent}
+              showsVerticalScrollIndicator={false}
+            >
+              {missingDocsList.length === 0 ? (
+                <View style={missingModalStyles.emptyState}>
+                  <Text style={missingModalStyles.emptyText}>No missing documents</Text>
+                  <Text style={missingModalStyles.emptySubText}>All barangays have submitted their documents.</Text>
+                </View>
+              ) : (
+                <View style={missingModalStyles.list}>
+                  {missingDocsList.map((doc, idx) => (
+                    <View key={doc.id} style={[missingModalStyles.itemRow, idx < missingDocsList.length - 1 && missingModalStyles.itemRowBorder]}>
+                      <View style={missingModalStyles.itemInfo}>
+                        <Text style={missingModalStyles.itemTitle}>{doc.title}</Text>
+                        <Text style={missingModalStyles.itemBarangay}>{doc.barangay}</Text>
+                      </View>
+                      <View style={[missingModalStyles.statusBadge, missingModalStyles.statusNotSubmitted]}>
+                        <Text style={[missingModalStyles.statusText, missingModalStyles.statusNotSubmittedText]}>
+                          Not Submitted
+                        </Text>
+                      </View>
+                    </View>
+                  ))}
+                </View>
+              )}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
       <View style={styles.layout}>
         {/* Sidebar overlay (mobile) */}
         {isMobile && sidebarVisible && (
@@ -1263,7 +1372,7 @@ export default function LYDOHomeScreen() {
                 {QUICK_ACTIONS.filter(a => !a.fullWidth).map((action) => {
                   // Get badge count based on the badgeProp
                   let badgeCount = 0;
-                  if (action.badgeProp === 'consultationsCount') badgeCount = consultationsCount;
+                  if (action.badgeProp === 'proposalsForReview') badgeCount = proposalsForReview;
 
                   return (
                     <TouchableOpacity
@@ -1272,6 +1381,7 @@ export default function LYDOHomeScreen() {
                       activeOpacity={0.8}
                       onPress={() => {
                         if (action.id === 'calendar') setCalendarVisible(true);
+                        else if (action.id === 'missing') setMissingDocsModalVisible(true);
                         else if (action.route) router.push(action.route);
                       }}
                     >
@@ -1767,4 +1877,50 @@ const calStyles = StyleSheet.create({
   timelineStatusIconPending: { backgroundColor: '#F3E8C4' },
   timelineStatusIconText: { fontSize: 9, fontWeight: '900', color: COLORS.white, lineHeight: 10 },
   timelineLabel: { flex: 1, fontSize: 12, color: '#444', lineHeight: 16, fontWeight: '500' },
+});
+
+// ─── MISSING DOCUMENTS MODAL STYLES ──────────────────────────────────────────
+const missingModalStyles = StyleSheet.create({
+  backdrop: {
+    flex: 1, backgroundColor: 'rgba(0,0,0,0.65)',
+    justifyContent: 'center', alignItems: 'center', padding: 24,
+  },
+  modal: {
+    backgroundColor: COLORS.white, borderRadius: 16,
+    width: isMobile ? '92%' : 480,
+    height: isMobile ? '75%' : 560,
+    overflow: 'hidden', elevation: 20, shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.25, shadowRadius: 20,
+  },
+  header: {
+    flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between',
+    paddingHorizontal: 16, paddingVertical: 14, backgroundColor: COLORS.navy,
+  },
+  title: { fontSize: 16, fontWeight: '800', color: COLORS.white },
+  subtitle: { fontSize: 12, fontWeight: '600', color: 'rgba(255,255,255,0.75)', marginTop: 3 },
+  closeBtn: {
+    width: 28, height: 28, borderRadius: 14,
+    backgroundColor: 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center',
+    marginLeft: 12,
+  },
+  closeText: { fontSize: 12, fontWeight: '700', color: COLORS.white },
+  divider: { height: 1, backgroundColor: COLORS.lightGray },
+  body: { flex: 1 },
+  bodyContent: { padding: 16, flexGrow: 1 },
+  emptyState: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 40 },
+  emptyText: { fontSize: 15, fontWeight: '700', color: COLORS.darkText, marginBottom: 4 },
+  emptySubText: { fontSize: 13, color: COLORS.subText, textAlign: 'center' },
+  list: { flex: 1 },
+  itemRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, gap: 10 },
+  itemRowBorder: { borderBottomWidth: 1, borderBottomColor: COLORS.lightGray },
+  itemInfo: { flex: 1 },
+  itemTitle: { fontSize: 13, fontWeight: '600', color: COLORS.darkText, marginBottom: 2 },
+  itemBarangay: { fontSize: 12, color: COLORS.subText },
+  statusBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 },
+  statusDraft: { backgroundColor: '#FEF3C7' },
+  statusSaved: { backgroundColor: '#DBEAFE' },
+  statusNotSubmitted: { backgroundColor: '#FEE2E2' },
+  statusText: { fontSize: 10, fontWeight: '700' },
+  statusDraftText: { color: '#B45309' },
+  statusSavedText: { color: '#1D4ED8' },
+  statusNotSubmittedText: { color: '#DC2626' },
 });
