@@ -506,15 +506,16 @@ function CalendarModal({ visible, onClose, barangayId }) {
 // this static mock list.
 
 // ─── QUICK ACTIONS DATA ───────────────────────────────────────────────────────
+// Badge values will be dynamically updated in the render
 const SK_QUICK_ACTIONS = [
   { id: 'proposal', label: 'Create Proposal', icon: '🔔', color: '#133E75' },
   { id: 'drafts', label: 'View Drafts', icon: '📋', color: '#133E75' },
   { id: 'logs', label: 'Activity logs', icon: '📝', color: '#133E75' },
   { id: 'upload', label: 'Scan & Upload', icon: '📄', color: '#133E75', isScan: true },
-  { id: 'consultation', label: 'Consultation', icon: '💬', color: '#133E75', badge: 2 },
-  { id: 'calendar', label: 'View Deadline Calendar', icon: '📅', color: '#F97316' },
+  { id: 'consultation', label: 'Consultation', icon: '💬', color: '#133E75' },
+  { id: 'calendar', label: 'View Deadline Calendar', icon: '📅', color: '#F97316', badgeProp: 'deadlinesCount' },
   { id: 'archive', label: 'View Archive', icon: '🗃', color: '#6B7A8F' },
-  { id: 'returned', label: 'Returned Proposal', icon: '💬', color: '#9333EA', badge: 2 },
+  { id: 'returned', label: 'Returned Proposal', icon: '↩', color: '#9333EA', badgeProp: 'returnedProposalsCount' },
 ];
 
 // ─── MAIN COMPONENT ───────────────────────────────────────────────────────────
@@ -522,13 +523,16 @@ export default function HomeScreen({ navigation }) {
   const router = useRouter();
   const { activeTab, setActiveTab } = useNav();
   const { logout, user } = useAuth();
-  const [notifCount] = useState(2);
+  const [notifCount, setNotifCount] = useState(0);
   const [sidebarVisible, setSidebarVisible] = useState(false);
   const [calendarVisible, setCalendarVisible] = useState(false);
   const [docStats, setDocStats] = useState({ total: 0, submitted: 0, forRevision: 0, approved: 0, drafts: 0 });
   const [recentActivities, setRecentActivities] = useState([]);
   const [complianceTasks, setComplianceTasks] = useState([]);
   const [approachingDeadlines, setApproachingDeadlines] = useState([]);
+  const [consultationsCount, setConsultationsCount] = useState(0);
+  const [returnedProposalsCount, setReturnedProposalsCount] = useState(0);
+  const [deadlinesCount, setDeadlinesCount] = useState(0);
 
   useEffect(() => {
     if (user && user.role !== 'sk') router.replace('/');
@@ -565,6 +569,9 @@ export default function HomeScreen({ navigation }) {
 
       setDocStats({ total, submitted, forRevision, approved, drafts });
 
+      // Set returned proposals count for badge
+      setReturnedProposalsCount(forRevision);
+
       // Build recent activities from docs
       const acts = (documents || []).slice(0, 5).map(doc => {
         const date = doc.submitted_at || doc.saved_at || doc.created_at;
@@ -586,6 +593,20 @@ export default function HomeScreen({ navigation }) {
     } catch (error) { console.error('Error:', error); }
   }, [barangayId]);
 
+  // Fetch consultations for this barangay
+  const fetchConsultations = useCallback(async () => {
+    if (!barangayId) return;
+    try {
+      const { count: consultCount } = await supabase
+        .from('consultations')
+        .select('*', { count: 'exact', head: true })
+        .eq('barangay_id', barangayId)
+        .eq('status', 'pending');
+
+      setConsultationsCount(consultCount || 0);
+    } catch (error) { console.error('Error fetching consultations:', error); }
+  }, [barangayId]);
+
   // Parse a Postgres `date` (YYYY-MM-DD) as a UTC midnight instant, avoiding
   // local-timezone drift that could shift the day by ±1.
   const parseDateOnly = (dateStr) => {
@@ -604,6 +625,9 @@ export default function HomeScreen({ navigation }) {
         .order('deadline_date', { ascending: true });
 
       if (error) { console.error('Error fetching tasks:', error); return; }
+
+      // Set deadlines count for badge
+      setDeadlinesCount(deadlines?.length || 0);
 
       const taskList = (deadlines || []).map(d => ({
         id: d.deadline_id.toString(),
@@ -639,8 +663,15 @@ export default function HomeScreen({ navigation }) {
     useCallback(() => {
       fetchDocuments();
       fetchTasks();
-    }, [fetchDocuments, fetchTasks])
+      fetchConsultations();
+    }, [fetchDocuments, fetchTasks, fetchConsultations])
   );
+
+  // Update notification count when badge counts change
+  useEffect(() => {
+    const total = returnedProposalsCount + deadlinesCount;
+    setNotifCount(total);
+  }, [returnedProposalsCount, deadlinesCount]);
 
   const handleNavPress = (tab) => {
     if (tab === 'Dashboard') router.push('/(tabs)/sk-dashboard');
@@ -758,18 +789,14 @@ export default function HomeScreen({ navigation }) {
             </View>
             {!isMobile && (
               <View style={styles.headerActions}>
-                <TouchableOpacity style={styles.headerActionBtn} activeOpacity={0.7}>
-                  <View style={{ position: 'relative' }}>
-                    <BellIcon hasNotif={notifCount > 0} />
-                    {notifCount > 0 && (
-                      <View style={styles.notifBadge}>
-                        <Text style={styles.notifBadgeText}>{notifCount}</Text>
-                      </View>
-                    )}
-                  </View>
-                  <Text style={styles.headerActionLabel}>Notification</Text>
+                <TouchableOpacity style={styles.bellBtn} activeOpacity={0.7}>
+                  <BellIcon hasNotif={notifCount > 0} />
+                  {notifCount > 0 && (
+                    <View style={styles.notifBadge}>
+                      <Text style={styles.notifBadgeText}>{notifCount}</Text>
+                    </View>
+                  )}
                 </TouchableOpacity>
-
               </View>
             )}
           </View>
@@ -898,24 +925,35 @@ export default function HomeScreen({ navigation }) {
               </View>
               <View style={styles.divider} />
               <View style={styles.quickGrid}>
-                {SK_QUICK_ACTIONS.map((action) => (
-                  <TouchableOpacity
-                    key={action.id}
-                    style={[styles.quickBtn, action.isScan && styles.quickBtnScan]}
-                    activeOpacity={0.8}
-                    onPress={() => handleQuickAction(action.id)}
-                  >
-                    <View style={[styles.quickIconBox, { backgroundColor: action.color + '18' }]}>
-                      <Text style={styles.quickIcon}>{action.icon}</Text>
-                    </View>
-                    <Text style={styles.quickLabel}>{action.label}</Text>
-                    {action.badge ? (
-                      <View style={styles.quickBadge}>
-                        <Text style={styles.quickBadgeText}>{action.badge}</Text>
+                {SK_QUICK_ACTIONS.map((action) => {
+                  // Get badge count based on the badgeProp
+                  let badgeCount = 0;
+                  if (action.badgeProp === 'returnedProposalsCount') badgeCount = returnedProposalsCount;
+                  else if (action.badgeProp === 'deadlinesCount') badgeCount = deadlinesCount;
+
+                  return (
+                    <TouchableOpacity
+                      key={action.id}
+                      style={[
+                        styles.quickBtn,
+                        action.isScan && styles.quickBtnScan,
+                        { position: 'relative' }
+                      ]}
+                      activeOpacity={0.8}
+                      onPress={() => handleQuickAction(action.id)}
+                    >
+                      <View style={[styles.quickIconBox, { backgroundColor: action.color + '18' }]}>
+                        <Text style={styles.quickIcon}>{action.icon}</Text>
                       </View>
-                    ) : null}
-                  </TouchableOpacity>
-                ))}
+                      <Text style={styles.quickLabel}>{action.label}</Text>
+                      {badgeCount > 0 && (
+                        <View style={styles.quickBadge}>
+                          <Text style={styles.quickBadgeText}>{badgeCount}</Text>
+                        </View>
+                      )}
+                    </TouchableOpacity>
+                  );
+                })}
               </View>
             </View>
 
@@ -1149,6 +1187,12 @@ const styles = StyleSheet.create({
   headerActionIcon: { fontSize: 16 },
   headerActionLabel: { fontSize: 12, fontWeight: '600', color: COLORS.darkText },
   archivesBtnText: { color: COLORS.white },
+  bellBtn: {
+    width: 40, height: 40, borderRadius: 20,
+    backgroundColor: COLORS.cardBg, alignItems: 'center', justifyContent: 'center',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08, shadowRadius: 6, elevation: 3,
+  },
 
   // ── Bell icons ──
   bellWrapper: { width: 20, height: 22, alignItems: 'center' },

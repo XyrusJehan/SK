@@ -685,6 +685,19 @@ export default function LYDOMonitorDeadlinesScreen() {
 
       if (error) throw error;
 
+      // Log the activity
+      const barangayLabel = barangayId === ALL_BARANGAYS_VALUE
+        ? 'All Barangays'
+        : barangays.find(b => b.barangay_id === barangayId)?.barangay_name || 'Unknown';
+
+      const logDescription = `Added deadline for ${description || documentType} - ${barangayLabel} (Due: ${formatDateLong(deadlineDate)})`;
+
+      await supabase.from('lydo_activity_logs').insert({
+        user_id: createdBy,
+        action: 'Add deadline',
+        description: logDescription,
+      });
+
       setAddModalVisible(false);
       await loadAll();
     } catch (err) {

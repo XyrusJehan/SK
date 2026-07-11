@@ -25,28 +25,32 @@ const COLORS = {
   cardBg:    '#FFFFFF',
 
   planning: {
-    header:  '#7B9FD4',
-    bg:      '#C8D9F0',
+    header:  '#2A4E8A',
+    bg:      '#FFFFFF',
     text:    '#FFFFFF',
     subText: '#2A4E8A',
+    border:  '#D3DCEB',
   },
   financial: {
-    header:  '#4CAF50',
-    bg:      '#C8EDCA',
+    header:  '#1F7A3E',
+    bg:      '#FFFFFF',
     text:    '#FFFFFF',
     subText: '#1A6B38',
+    border:  '#D2E5D6',
   },
   governance: {
-    header:  '#7C5CBF',
-    bg:      '#D8CAEF',
+    header:  '#5A3E96',
+    bg:      '#FFFFFF',
     text:    '#FFFFFF',
     subText: '#5A2EA0',
+    border:  '#DCD4EC',
   },
   performance: {
-    header:  '#E87A30',
-    bg:      '#F5D5B8',
+    header:  '#B85A18',
+    bg:      '#FFFFFF',
     text:    '#FFFFFF',
     subText: '#A04010',
+    border:  '#EAD9C8',
   },
 };
 
@@ -222,7 +226,7 @@ const LogoutNavIcon = ({ color = '#fff', size = 16 }) => (
 const DocumentCard = ({ group, onItemPress, submittedSet, labelToDocType }) => {
   const { colors, title, icon, items } = group;
   return (
-    <View style={[styles.card, { backgroundColor: colors.bg }]}>
+    <View style={[styles.card, { backgroundColor: colors.bg, borderColor: colors.border || '#E5E5E5' }]}>
       <View style={[styles.cardHeader, { backgroundColor: colors.header }]}>
         <Text style={styles.cardHeaderIcon}>{icon}</Text>
         <Text style={styles.cardHeaderTitle}>{title}</Text>
@@ -666,33 +670,35 @@ const styles = StyleSheet.create({
   docTabTextActive: { color: COLORS.darkText, fontWeight: '800' },
 
   // ── Cards grid ──
-  gridInner:         { flexDirection: 'row', flexWrap: 'wrap', gap: 12, paddingBottom: 24 },
-  gridMobile:        { flexDirection: 'column', gap: 12, paddingBottom: 24 },
-  cardWrapper:       { width: '47%', minWidth: 150 },
+  gridInner:         { flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingBottom: 24 },
+  gridMobile:        { flexDirection: 'column', gap: 14, paddingBottom: 24 },
+  cardWrapper:       { flexBasis: '23%', flexGrow: 1, minWidth: 220 },
   cardWrapperMobile: { width: '100%' },
 
   // ── Individual doc card (lydo-style) ──
   card: {
-    borderRadius: 16, overflow: 'hidden', elevation: 3,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.1, shadowRadius: 8,
+    borderRadius: 10, overflow: 'hidden', elevation: 2,
+    borderWidth: 1,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06, shadowRadius: 6,
+    height: '100%',
   },
   cardHeader: {
     flexDirection: 'row', alignItems: 'center',
-    paddingHorizontal: 12, paddingVertical: 12, gap: 8,
+    paddingHorizontal: 14, paddingVertical: 13, gap: 8,
   },
-  cardHeaderIcon:  { fontSize: isMobile ? 16 : 18 },
+  cardHeaderIcon:  { fontSize: isMobile ? 17 : 19 },
   cardHeaderTitle: {
-    fontSize: isMobile ? 8 : 10, fontWeight: '900', color: COLORS.white,
-    letterSpacing: 0.8, flex: 1, flexWrap: 'wrap',
+    fontSize: isMobile ? 13 : 15, fontWeight: '700', color: COLORS.white,
+    letterSpacing: 1, flex: 1, flexWrap: 'wrap',
   },
-  cardBody:    { padding: isMobile ? 10 : 14 },
-  docItem:     { flexDirection: 'row', alignItems: 'flex-start', gap: 8, marginBottom: 6 },
-  docBullet:   { width: 5, height: 5, borderRadius: 3, marginTop: 5, flexShrink: 0 },
-  docItemText: { fontSize: isMobile ? 11 : 12, lineHeight: 18, flex: 1 },
+  cardBody:    { padding: isMobile ? 12 : 16 },
+  docItem:     { flexDirection: 'row', alignItems: 'flex-start', gap: 8, marginBottom: 10 },
+  docBullet:   { width: 5, height: 5, borderRadius: 2.5, marginTop: 9, flexShrink: 0 },
+  docItemText: { fontSize: isMobile ? 15 : 17, lineHeight: 24, flexShrink: 1, fontWeight: '500' },
   redDot: {
-    width: 8, height: 8, borderRadius: 4,
-    backgroundColor: '#E53935', flexShrink: 0, alignSelf: 'center',
+    width: 7, height: 7, borderRadius: 3.5,
+    backgroundColor: '#C0392B', flexShrink: 0, alignSelf: 'center', marginTop: 2,
   },
 
   // Empty state

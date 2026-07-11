@@ -44,6 +44,28 @@ const toPhilippineTime = (dateStr, options) => {
   return d.toLocaleTimeString('en-PH', { timeZone: 'Asia/Manila', ...options });
 };
 
+// Helper to get activity type based on action
+const getActivityType = (action) => {
+  if (!action) return 'create';
+  const lower = action.toLowerCase();
+  if (lower.includes('approve') || lower.includes('forward')) return 'approved';
+  if (lower.includes('return')) return 'returned';
+  if (lower.includes('add') || lower.includes('create')) return 'create';
+  return 'create';
+};
+
+// Helper to get activity icon based on action
+const getActivityIcon = (action) => {
+  if (!action) return '✎';
+  const lower = action.toLowerCase();
+  if (lower.includes('approve')) return '✔';
+  if (lower.includes('forward')) return '▷';
+  if (lower.includes('return')) return '↩';
+  if (lower.includes('add template') || lower.includes('replace template')) return '➕';
+  if (lower.includes('add account') || lower.includes('add barangay')) return '👤';
+  return '✎';
+};
+
 // ─── NAV TABS ─────────────────────────────────────────────────────────────────
 const NAV_TABS = ['Dashboard', 'Documents', 'Monitor', 'Barangay', 'Logs'];
 
@@ -157,15 +179,16 @@ const COLORS = {
 };
 
 // ─── MOCK / STATIC DATA ───────────────────────────────────────────────────────
-const MONITORING_TASKS = [
-  { id: '1', description: 'Remind barangays with missing documents', action: 'Send Reminder', actionType: 'reminder' },
-  { id: '2', description: 'Review submitted proposals of SK', action: 'Review Now', actionType: 'review', badge: 3 },
-  { id: '3', description: 'Follow up near deadline submission', action: 'Send Reminder', actionType: 'reminder' },
-  { id: '4', description: 'Review returned proposals of SK', action: 'Review Now', actionType: 'review' },
+// Badge values will be dynamically updated in the render
+const MONITORING_TASKS_BASE = [
+  { id: '1', description: 'Remind barangays with missing documents', action: 'Send Reminder', actionType: 'reminder', badgeProp: 'missingDocs' },
+  { id: '2', description: 'Review submitted proposals of SK', action: 'Review Now', actionType: 'review', badgeProp: 'proposalsForReview' },
+  { id: '3', description: 'Follow up near deadline submission', action: 'Send Reminder', actionType: 'reminder', badgeProp: 'approachingDeadlines' },
+  { id: '4', description: 'Review returned proposals of SK', action: 'Review Now', actionType: 'review', badgeProp: 'forRevision' },
 ];
 
 const QUICK_ACTIONS = [
-  { id: 'consultation', label: 'Consultation', badge: 5, color: COLORS.navy, icon: '💬', route: '/(tabs)/lydo-monitor' },
+  { id: 'consultation', label: 'Consultation', badgeProp: 'consultationsCount', color: COLORS.navy, icon: '💬', route: '/(tabs)/lydo-monitor' },
   { id: 'budget', label: 'View Budget', color: '#1A2332', icon: '📊', route: '/(tabs)/lydo-monitor-budget' },
   { id: 'export', label: 'Export  Reports', color: COLORS.navy, icon: '⬇', route: '/(tabs)/lydo-monitor-report' },
   { id: 'calendar', label: 'View Deadline Calendar', color: '#F97316', icon: '📅', route: null },
@@ -605,9 +628,12 @@ export default function LYDOHomeScreen() {
   const [approved, setApproved] = useState(0);
   const [missingDocs, setMissingDocs] = useState(0);
   const [currentTime, setCurrentTime] = useState('');
-  const [notifCount] = useState(2);
+  const [notifCount, setNotifCount] = useState(0);
   const [progressData, setProgressData] = useState({ submitted: 0, awaiting: 0, incomplete: 0, total: 0 });
   const [approachingDeadlines, setApproachingDeadlines] = useState([]);
+  const [proposalsForReview, setProposalsForReview] = useState(0);
+  const [consultationsCount, setConsultationsCount] = useState(0);
+  const [lydoActivities, setLydoActivities] = useState([]);
 
   useEffect(() => {
     if (user && user.role !== 'lydo') router.replace('/');
@@ -637,10 +663,18 @@ export default function LYDOHomeScreen() {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const { data: brgyData } = await supabase
+        // Get all barangays with their IDs
+        const { data: brgyData, count: brgyCount } = await supabase
           .from('barangays')
           .select('barangay_id', { count: 'exact' });
-        if (brgyData) setTotalBarangays(brgyData.length || 0);
+        if (brgyCount) setTotalBarangays(brgyCount);
+
+        // Get full barangay data for compliance calculation
+        const { data: allBarangays } = await supabase
+          .from('barangays')
+          .select('barangay_id');
+
+        const barangayList = allBarangays || [];
 
         // Fetch compliance data from documents table
         const { data: docsData } = await supabase
@@ -672,14 +706,105 @@ export default function LYDOHomeScreen() {
           });
         }
 
-        // Set compliance data based on actual barangays
-        const totalBrgy = brgyData?.length || 0;
+        // Calculate compliance data based on actual barangay document status
+        // Fetch all documents with barangay info
+        const { data: allDocs } = await supabase
+          .from('documents')
+          .select('document_id, status, barangay_id');
+
+        // Fetch all deadlines
+        const { data: allDeadlines } = await supabase
+          .from('submission_deadlines')
+          .select('deadline_id, deadline_date, is_met, barangay_id');
+
+        const barangayStats = {};
+
+        // Initialize stats for each barangay
+        barangayList.forEach(brgy => {
+          barangayStats[brgy.barangay_id] = {
+            hasSubmitted: false,
+            hasApproved: false,
+            hasMissing: false,
+            hasOverdue: false,
+            hasNearDeadline: false,
+          };
+        });
+
+        // Check document statuses per barangay
+        allDocs?.forEach(doc => {
+          if (doc.barangay_id && barangayStats[doc.barangay_id]) {
+            if (doc.status === 'submitted' || doc.status === 'approved') {
+              barangayStats[doc.barangay_id].hasSubmitted = true;
+            }
+            if (doc.status === 'approved') {
+              barangayStats[doc.barangay_id].hasApproved = true;
+            }
+            if (doc.status === 'draft' || doc.status === 'saved') {
+              barangayStats[doc.barangay_id].hasMissing = true;
+            }
+          }
+        });
+
+        // Check deadline status per barangay
+        const today = new Date();
+        const threeDaysFromNow = new Date(today.getTime() + (3 * 24 * 60 * 60 * 1000));
+
+        allDeadlines?.forEach(deadline => {
+          if (deadline.barangay_id && barangayStats[deadline.barangay_id]) {
+            const deadlineDate = new Date(deadline.deadline_date);
+            if (!deadline.is_met) {
+              if (deadlineDate < today) {
+                barangayStats[deadline.barangay_id].hasOverdue = true;
+              } else if (deadlineDate <= threeDaysFromNow) {
+                barangayStats[deadline.barangay_id].hasNearDeadline = true;
+              }
+            }
+          }
+        });
+
+        // Count barangays in each category
+        let fullyCompliant = 0;
+        let withMissingDocs = 0;
+        let nearDeadline = 0;
+        let overdue = 0;
+
+        Object.values(barangayStats).forEach(stats => {
+          if (stats.hasSubmitted || stats.hasApproved) {
+            if (!stats.hasMissing && !stats.hasOverdue && !stats.hasNearDeadline) {
+              fullyCompliant++;
+            }
+          }
+          if (stats.hasMissing) {
+            withMissingDocs++;
+          }
+          if (stats.hasNearDeadline && !stats.hasOverdue) {
+            nearDeadline++;
+          }
+          if (stats.hasOverdue) {
+            overdue++;
+          }
+        });
+
         setComplianceData([
-          { label: 'Fully Compliant', count: 0, color: COLORS.green },
-          { label: 'With Missing Documents', count: 0, color: COLORS.orange },
-          { label: 'Near Deadline', count: 0, color: COLORS.yellow },
-          { label: 'Overdue', count: 0, color: COLORS.red },
+          { label: 'Fully Compliant', count: fullyCompliant, color: COLORS.green },
+          { label: 'With Missing Documents', count: withMissingDocs, color: COLORS.orange },
+          { label: 'Near Deadline', count: nearDeadline, color: COLORS.yellow },
+          { label: 'Overdue', count: overdue, color: COLORS.red },
         ]);
+
+        // Fetch proposals awaiting review (submitted status) - these need LYDO review
+        const { count: submittedCount } = await supabase
+          .from('documents')
+          .select('*', { count: 'exact', head: true })
+          .eq('status', 'submitted');
+        setProposalsForReview(submittedCount || 0);
+
+        // Fetch consultations/meetings that need attention
+        const { count: consultCount } = await supabase
+          .from('consultations')
+          .select('*', { count: 'exact', head: true })
+          .eq('status', 'pending');
+        setConsultationsCount(consultCount || 0);
 
         const { data: docsData2 } = await supabase
           .from('documents')
@@ -714,12 +839,52 @@ export default function LYDOHomeScreen() {
           });
           setActivities(formatted);
         }
+
+        // Fetch LYDO activity logs for Recent Activity section
+        const { data: lydoLogs, error: lydoLogsError } = await supabase
+          .from('lydo_activity_logs')
+          .select(`
+            id,
+            action,
+            description,
+            created_at,
+            performed_by:users!lydo_activity_logs_user_id_fkey (
+              first_name,
+              last_name
+            )
+          `)
+          .order('created_at', { ascending: false })
+          .limit(10);
+
+        if (lydoLogsError) {
+          console.error('Error fetching LYDO activity logs:', lydoLogsError);
+        } else if (lydoLogs) {
+          const formattedLogs = lydoLogs.map(log => ({
+            id: log.id,
+            label: log.action || 'Action',
+            description: log.description || '',
+            performedBy: log.performed_by
+              ? `${log.performed_by.first_name} ${log.performed_by.last_name}`
+              : 'LYDO Officer',
+            time: toPhilippineTime(log.created_at, { hour: '2-digit', minute: '2-digit' }),
+            date: toPhilippineDate(log.created_at, { month: 'long', day: 'numeric', year: 'numeric' }),
+            type: getActivityType(log.action),
+            icon: getActivityIcon(log.action),
+          }));
+          setLydoActivities(formattedLogs);
+        }
       } catch (e) {
         console.error(e);
       }
     };
     fetchData();
   }, []);
+
+  // ── Update notification count when badge counts change ───────────────────────
+  useEffect(() => {
+    const total = proposalsForReview + consultationsCount + forRevision + missingDocs;
+    setNotifCount(total);
+  }, [proposalsForReview, consultationsCount, forRevision, missingDocs]);
 
   // ── Approaching Deadline card — org-wide, grouped across all barangays ──
   // Each submission_deadlines row is per-barangay, so a single logical
@@ -1031,40 +1196,47 @@ export default function LYDOHomeScreen() {
               <View style={styles.card}>
                 <Text style={styles.cardTitle}>Monitoring Tasks</Text>
                 <View style={styles.divider} />
-                {MONITORING_TASKS.map((task, idx) => (
-                  <View key={task.id} style={[styles.taskRow, idx < MONITORING_TASKS.length - 1 && styles.taskRowBorder]}>
-                    <Text style={styles.taskDesc}>{task.description}</Text>
-                    <View style={styles.taskBtnWrapper}>
-                      {task.badge ? (
-                        <View style={styles.taskBadge}>
-                          <Text style={styles.taskBadgeText}>{task.badge}</Text>
-                        </View>
-                      ) : null}
-                      <TouchableOpacity
-                        style={styles.taskBtn}
-                        onPress={task.actionType === 'reminder' ? handleSendReminder : undefined}
-                        activeOpacity={0.8}
-                      >
-                        <Text style={styles.taskBtnText}>{task.action}</Text>
-                      </TouchableOpacity>
+                {MONITORING_TASKS_BASE.map((task, idx) => {
+                  // Get badge count based on the badgeProp
+                  let badgeCount = 0;
+                  if (task.badgeProp === 'proposalsForReview') badgeCount = proposalsForReview;
+                  else if (task.badgeProp === 'forRevision') badgeCount = forRevision;
+                  else if (task.badgeProp === 'missingDocs') badgeCount = missingDocs;
+                  else if (task.badgeProp === 'approachingDeadlines') badgeCount = approachingDeadlines.filter(d => d.urgent).length;
+
+                  return (
+                    <View key={task.id} style={[styles.taskRow, idx < MONITORING_TASKS_BASE.length - 1 && styles.taskRowBorder]}>
+                      <Text style={styles.taskDesc}>{task.description}</Text>
+                      <View style={styles.taskBtnWrapper}>
+                        {badgeCount > 0 && (
+                          <View style={styles.taskBadge}>
+                            <Text style={styles.taskBadgeText}>{badgeCount}</Text>
+                          </View>
+                        )}
+                        <TouchableOpacity
+                          style={styles.taskBtn}
+                          onPress={task.actionType === 'reminder' ? handleSendReminder : undefined}
+                          activeOpacity={0.8}
+                        >
+                          <Text style={styles.taskBtnText}>{task.action}</Text>
+                        </TouchableOpacity>
+                      </View>
                     </View>
-                  </View>
-                ))}
+                  );
+                })}
               </View>
 
               {/* Recent Activity */}
               <View style={styles.card}>
                 <View style={styles.cardHeaderRow}>
                   <Text style={styles.cardTitle}>Recent Activity</Text>
-                  <TouchableOpacity>
+                  <TouchableOpacity onPress={() => router.push('/(tabs)/lydo-logs')}>
                     <Text style={styles.viewAll}>View All</Text>
                   </TouchableOpacity>
                 </View>
                 <View style={styles.divider} />
-                {(activities.length > 0 ? activities.slice(0, 3) : [
-                  { id: '1', label: 'Approved Annual Budget', barangay: 'Barangay San Jose', time: '3:00 PM', date: 'May 30, 2026', type: 'approved', icon: '✔' },
-                  { id: '2', label: 'Sent the ABYIP Template', barangay: 'Barangay San Roque', time: '3:00 PM', date: 'May 30, 2026', type: 'create', icon: '▷' },
-                  { id: '3', label: 'Returned ABYIP Proposal', barangay: 'Barangay San José', time: '3:00 PM', date: 'May 30, 2026', type: 'returned', icon: '↩' },
+                {(lydoActivities.length > 0 ? lydoActivities.slice(0, 3) : [
+                  { id: '1', label: 'No recent activity', description: '', performedBy: '', time: '--:--', date: '--', type: 'create', icon: '✎' },
                 ]).map((act, idx, arr) => (
                   <View key={act.id} style={[styles.activityRow, idx < arr.length - 1 && styles.activityRowBorder]}>
                     <View style={[styles.activityIconBox, { backgroundColor: activityIconColor(act.type) + '20' }]}>
@@ -1072,7 +1244,7 @@ export default function LYDOHomeScreen() {
                     </View>
                     <View style={styles.activityInfo}>
                       <Text style={styles.activityLabel}>{act.label}</Text>
-                      <Text style={styles.activityMeta}>{act.barangay}</Text>
+                      <Text style={styles.activityMeta}>{act.description || act.performedBy}</Text>
                     </View>
                     <View style={styles.activityTime}>
                       <Text style={styles.activityDateText}>{act.date}</Text>
@@ -1088,27 +1260,33 @@ export default function LYDOHomeScreen() {
               <Text style={styles.cardTitle}>Quick Actions</Text>
               <View style={styles.divider} />
               <View style={styles.quickGrid}>
-                {QUICK_ACTIONS.filter(a => !a.fullWidth).map((action) => (
-                  <TouchableOpacity
-                    key={action.id}
-                    style={styles.quickBtn}
-                    activeOpacity={0.8}
-                    onPress={() => {
-                      if (action.id === 'calendar') setCalendarVisible(true);
-                      else if (action.route) router.push(action.route);
-                    }}
-                  >
-                    <View style={[styles.quickIconBox, { backgroundColor: action.color + '18' }]}>
-                      <Text style={styles.quickIcon}>{action.icon}</Text>
-                    </View>
-                    <Text style={styles.quickLabel}>{action.label}</Text>
-                    {action.badge ? (
-                      <View style={styles.quickBadge}>
-                        <Text style={styles.quickBadgeText}>{action.badge}</Text>
+                {QUICK_ACTIONS.filter(a => !a.fullWidth).map((action) => {
+                  // Get badge count based on the badgeProp
+                  let badgeCount = 0;
+                  if (action.badgeProp === 'consultationsCount') badgeCount = consultationsCount;
+
+                  return (
+                    <TouchableOpacity
+                      key={action.id}
+                      style={styles.quickBtn}
+                      activeOpacity={0.8}
+                      onPress={() => {
+                        if (action.id === 'calendar') setCalendarVisible(true);
+                        else if (action.route) router.push(action.route);
+                      }}
+                    >
+                      <View style={[styles.quickIconBox, { backgroundColor: action.color + '18' }]}>
+                        <Text style={styles.quickIcon}>{action.icon}</Text>
                       </View>
-                    ) : null}
-                  </TouchableOpacity>
-                ))}
+                      <Text style={styles.quickLabel}>{action.label}</Text>
+                      {badgeCount > 0 && (
+                        <View style={styles.quickBadge}>
+                          <Text style={styles.quickBadgeText}>{badgeCount}</Text>
+                        </View>
+                      )}
+                    </TouchableOpacity>
+                  );
+                })}
               </View>
               <TouchableOpacity style={styles.createTaskBtn} activeOpacity={0.8}>
                 <Text style={styles.createTaskText}>Create Task</Text>
