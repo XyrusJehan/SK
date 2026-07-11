@@ -1,44 +1,67 @@
 /**
  * CropEditor.tsx
- * ─────────────────────────────────────────────────────────────────────────────
  * Interactive document crop editor for Expo Web / React Native Web.
- *
- * Renders the raw captured image with:
- *   • A draggable, resizable crop rectangle
- *   • 8 resize handles (corners + edge midpoints)
- *   • Dark overlay outside the crop area
- *   • Rule-of-thirds grid lines inside
- *   • Full-brightness preview inside the crop box vs dimmed outside
- *
- * Works entirely with DOM APIs (available in Expo Web).
- * Falls back to a plain <Image> on native (crop is handled natively there).
- *
- * Props:
- *   imageUri  — data-URL of the image to crop
- *   region    — { x, y, w, h } all in % of image container
- *   onChange  — called with new region on every drag move
+ * Supports both rectangular cropping and perspective quadrilateral cropping.
  */
 
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useState } from 'react';
 import { Platform, View, Image, StyleSheet } from 'react-native';
-import type { CropRegion } from './useDocumentScanner';
+import type { CropRegion, QuadCorners } from './useDocumentScanner';
 
 interface CropEditorProps {
   imageUri: string;
   region: CropRegion;
-  onChange: (r: CropRegion) => void;
+  corners?: QuadCorners;
+  onChange?: (r: CropRegion) => void;
+  onCornersChange?: (c: QuadCorners) => void;
 }
 
 // ─── Web implementation ───────────────────────────────────────────────────────
 
-function CropEditorWeb({ imageUri, region, onChange }: CropEditorProps) {
+function CropEditorWeb({ imageUri, region, corners, onChange, onCornersChange }: CropEditorProps) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const regionRef = useRef(region);
+  const cornersRef = useRef(corners || {
+    tl: { x: region.x, y: region.y },
+    tr: { x: region.x + region.w, y: region.y },
+    br: { x: region.x + region.w, y: region.y + region.h },
+    bl: { x: region.x, y: region.y + region.h },
+  });
+  const onChangeRef = useRef(onChange);
+  const onCornersChangeRef = useRef(onCornersChange);
   const dragState = useRef<{
     handle: string;
     startX: number;
     startY: number;
     startRegion: CropRegion;
+    startCorners: QuadCorners;
   } | null>(null);
+  const [mode, setMode] = useState<'region' | 'corners'>('corners');
+
+  // Determine if corners form a non-rectangular quad
+  const isPerspective = corners ? (
+    Math.abs(corners.tl.x - region.x) > 1 ||
+    Math.abs(corners.tl.y - region.y) > 1 ||
+    Math.abs(corners.tr.x - (region.x + region.w)) > 1 ||
+    Math.abs(corners.tr.y - region.y) > 1 ||
+    Math.abs(corners.br.x - (region.x + region.w)) > 1 ||
+    Math.abs(corners.br.y - (region.y + region.h)) > 1 ||
+    Math.abs(corners.bl.x - region.x) > 1 ||
+    Math.abs(corners.bl.y - (region.y + region.h)) > 1
+  ) : false;
+
+  useEffect(() => {
+    regionRef.current = region;
+  }, [region]);
+  useEffect(() => {
+    if (corners) cornersRef.current = corners;
+  }, [corners]);
+  useEffect(() => {
+    onChangeRef.current = onChange;
+  }, [onChange]);
+  useEffect(() => {
+    onCornersChangeRef.current = onCornersChange;
+  }, [onCornersChange]);
 
   const clamp = (v: number, min: number, max: number) =>
     Math.min(max, Math.max(min, v));
@@ -47,40 +70,81 @@ function CropEditorWeb({ imageUri, region, onChange }: CropEditorProps) {
     e: React.MouseEvent | React.TouchEvent,
     handle: string,
   ) => {
-    e.preventDefault();
-    const clientX =
-      'touches' in e ? e.touches[0].clientX : (e as React.MouseEvent).clientX;
-    const clientY =
-      'touches' in e ? e.touches[0].clientY : (e as React.MouseEvent).clientY;
+    // Note: preventDefault doesn't work in passive touch events, but that's okay
+    // The touchmove/touchend listeners handle the drag behavior
+    if (!regionRef.current || !cornersRef.current) return;
+
+    let clientX: number, clientY: number;
+    if ('touches' in e && e.touches && e.touches.length > 0) {
+      clientX = e.touches[0].clientX;
+      clientY = e.touches[0].clientY;
+    } else if ('clientX' in e) {
+      clientX = (e as React.MouseEvent).clientX;
+      clientY = (e as React.MouseEvent).clientY;
+    } else {
+      return;
+    }
+
     dragState.current = {
       handle,
       startX: clientX,
       startY: clientY,
-      startRegion: { ...region },
+      startRegion: { ...regionRef.current },
+      startCorners: { ...cornersRef.current },
     };
   };
 
   useEffect(() => {
     const onMove = (e: MouseEvent | TouchEvent) => {
       if (!dragState.current || !containerRef.current) return;
-      const clientX =
-        'touches' in e
-          ? (e as TouchEvent).touches[0].clientX
-          : (e as MouseEvent).clientX;
-      const clientY =
-        'touches' in e
-          ? (e as TouchEvent).touches[0].clientY
-          : (e as MouseEvent).clientY;
+      const { handle, startRegion: r, startCorners: sc } = dragState.current;
+      if (!r || !sc) return;
+
+      let clientX: number, clientY: number;
+      if ('touches' in e && e.touches && e.touches.length > 0) {
+        clientX = e.touches[0].clientX;
+        clientY = e.touches[0].clientY;
+      } else if ('clientX' in e) {
+        clientX = (e as MouseEvent).clientX;
+        clientY = (e as MouseEvent).clientY;
+      } else {
+        return;
+      }
+
       const rect = containerRef.current.getBoundingClientRect();
       const dx = ((clientX - dragState.current.startX) / rect.width) * 100;
       const dy = ((clientY - dragState.current.startY) / rect.height) * 100;
-      const { handle, startRegion: r } = dragState.current;
       let { x, y, w, h } = r;
 
-      if (handle === 'move') {
+      const isCorner = ['tl', 'tr', 'br', 'bl'].includes(handle);
+
+      if (isCorner && onCornersChangeRef.current) {
+        // Corner drag mode - update individual corner
+        const newCorners = { ...sc };
+        const corner = handle as keyof QuadCorners;
+        newCorners[corner] = {
+          x: clamp(sc[corner].x + dx, 0, 100),
+          y: clamp(sc[corner].y + dy, 0, 100),
+        };
+        onCornersChangeRef.current(newCorners);
+        setMode('corners');
+      } else if (handle === 'move') {
+        // Move entire region
         x = clamp(r.x + dx, 0, 100 - r.w);
         y = clamp(r.y + dy, 0, 100 - r.h);
+        onChangeRef.current?.({ x, y, w, h });
+        // Also move corners in sync
+        if (onCornersChangeRef.current) {
+          onCornersChangeRef.current({
+            tl: { x: x, y: y },
+            tr: { x: x + w, y: y },
+            br: { x: x + w, y: y + h },
+            bl: { x: x, y: y + h },
+          });
+        }
+        setMode('region');
       } else {
+        // Resize handles (e, w, n, s, ne, nw, se, sw)
         if (handle.includes('e')) w = clamp(r.w + dx, 10, 100 - r.x);
         if (handle.includes('s')) h = clamp(r.h + dy, 10, 100 - r.y);
         if (handle.includes('w')) {
@@ -93,9 +157,20 @@ function CropEditorWeb({ imageUri, region, onChange }: CropEditorProps) {
           h = r.h - (ny - r.y);
           y = ny;
         }
+        onChangeRef.current?.({ x, y, w, h });
+        // Update corners to match new region
+        if (onCornersChangeRef.current) {
+          onCornersChangeRef.current({
+            tl: { x, y },
+            tr: { x: x + w, y },
+            br: { x: x + w, y: y + h },
+            bl: { x, y: y + h },
+          });
+        }
+        setMode('region');
       }
-      onChange({ x, y, w, h });
     };
+
     const onEnd = () => {
       dragState.current = null;
     };
@@ -110,18 +185,37 @@ function CropEditorWeb({ imageUri, region, onChange }: CropEditorProps) {
       window.removeEventListener('touchmove', onMove);
       window.removeEventListener('touchend', onEnd);
     };
-  }, [region, onChange]);
+  }, []);
 
-  const handles: { id: string; top: string; left: string; cursor: string }[] = [
-    { id: 'nw', top: `${region.y}%`,            left: `${region.x}%`,              cursor: 'nw-resize' },
-    { id: 'n',  top: `${region.y}%`,            left: `${region.x + region.w / 2}%`, cursor: 'n-resize'  },
-    { id: 'ne', top: `${region.y}%`,            left: `${region.x + region.w}%`,   cursor: 'ne-resize' },
-    { id: 'e',  top: `${region.y + region.h / 2}%`, left: `${region.x + region.w}%`, cursor: 'e-resize' },
-    { id: 'se', top: `${region.y + region.h}%`, left: `${region.x + region.w}%`,   cursor: 'se-resize' },
-    { id: 's',  top: `${region.y + region.h}%`, left: `${region.x + region.w / 2}%`, cursor: 's-resize' },
-    { id: 'sw', top: `${region.y + region.h}%`, left: `${region.x}%`,              cursor: 'sw-resize' },
-    { id: 'w',  top: `${region.y + region.h / 2}%`, left: `${region.x}%`,          cursor: 'w-resize'  },
-  ];
+  const activeCorners = corners || {
+    tl: { x: region.x, y: region.y },
+    tr: { x: region.x + region.w, y: region.y },
+    br: { x: region.x + region.w, y: region.y + region.h },
+    bl: { x: region.x, y: region.y + region.h },
+  };
+
+  // Determine if we're in perspective mode (asymmetric quad)
+  const perspectiveMode = isPerspective || mode === 'corners';
+
+  const cornerHandles = [
+    { id: 'tl', x: activeCorners.tl.x, y: activeCorners.tl.y, cursor: 'nw-resize' },
+    { id: 'tr', x: activeCorners.tr.x, y: activeCorners.tr.y, cursor: 'ne-resize' },
+    { id: 'br', x: activeCorners.br.x, y: activeCorners.br.y, cursor: 'se-resize' },
+    { id: 'bl', x: activeCorners.bl.x, y: activeCorners.bl.y, cursor: 'sw-resize' },
+  ] as const;
+
+  // Build SVG polygon points
+  const polygonPoints = `${activeCorners.tl.x},${activeCorners.tl.y} ${activeCorners.tr.x},${activeCorners.tr.y} ${activeCorners.br.x},${activeCorners.br.y} ${activeCorners.bl.x},${activeCorners.bl.y}`;
+
+  // Compute bounding box from corners for fallback rectangle
+  const cornerXs = [activeCorners.tl.x, activeCorners.tr.x, activeCorners.br.x, activeCorners.bl.x];
+  const cornerYs = [activeCorners.tl.y, activeCorners.tr.y, activeCorners.br.y, activeCorners.bl.y];
+  const derivedRegion = {
+    x: Math.min(...cornerXs),
+    y: Math.min(...cornerYs),
+    w: Math.max(...cornerXs) - Math.min(...cornerXs),
+    h: Math.max(...cornerYs) - Math.min(...cornerYs),
+  };
 
   return (
     <div
@@ -136,74 +230,108 @@ function CropEditorWeb({ imageUri, region, onChange }: CropEditorProps) {
         backgroundColor: '#000',
       }}
     >
-      {/* Dimmed base image */}
       <img
         src={imageUri}
         alt="scan"
         style={{ display: 'block', width: '100%', height: 'auto', opacity: 0.45 }}
         draggable={false}
       />
+      <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.4)', pointerEvents: 'none' }} />
 
-      {/* Dark overlay — four rectangles surrounding the crop box */}
-      {/* Left  */}
-      <div style={{ position: 'absolute', top: 0, left: 0, width: `${region.x}%`, height: '100%', background: 'rgba(0,0,0,0.55)' }} />
-      {/* Right */}
-      <div style={{ position: 'absolute', top: 0, left: `${region.x + region.w}%`, right: 0, height: '100%', background: 'rgba(0,0,0,0.55)' }} />
-      {/* Top   */}
-      <div style={{ position: 'absolute', top: 0, left: `${region.x}%`, width: `${region.w}%`, height: `${region.y}%`, background: 'rgba(0,0,0,0.55)' }} />
-      {/* Bottom*/}
-      <div style={{ position: 'absolute', top: `${region.y + region.h}%`, left: `${region.x}%`, width: `${region.w}%`, bottom: 0, background: 'rgba(0,0,0,0.55)' }} />
+      {/* Use SVG for proper perspective quad rendering */}
+      <svg
+        style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          width: '100%',
+          height: '100%',
+          pointerEvents: 'none',
+        }}
+        viewBox="0 0 100 100"
+        preserveAspectRatio="none"
+      >
+        {/* Semi-transparent fill inside the quad */}
+        <polygon
+          points={polygonPoints}
+          fill="rgba(232, 197, 71, 0.15)"
+          stroke="none"
+        />
+        {/* Quadrilateral border lines */}
+        <polygon
+          points={polygonPoints}
+          fill="none"
+          stroke="#E8C547"
+          strokeWidth="0.5"
+          strokeLinejoin="round"
+        />
+        {/* Diagonal lines for perspective visualization (optional) */}
+        <line
+          x1={activeCorners.tl.x}
+          y1={activeCorners.tl.y}
+          x2={activeCorners.br.x}
+          y2={activeCorners.br.y}
+          stroke="rgba(232, 197, 71, 0.2)"
+          strokeWidth="0.2"
+          strokeDasharray="2,2"
+        />
+        <line
+          x1={activeCorners.tr.x}
+          y1={activeCorners.tr.y}
+          x2={activeCorners.bl.x}
+          y2={activeCorners.bl.y}
+          stroke="rgba(232, 197, 71, 0.2)"
+          strokeWidth="0.2"
+          strokeDasharray="2,2"
+        />
+      </svg>
 
-      {/* Full-brightness crop window */}
+      {/* Fallback rectangle overlay (shown behind SVG) */}
       <div
         style={{
           position: 'absolute',
-          top: `${region.y}%`,
-          left: `${region.x}%`,
-          width: `${region.w}%`,
-          height: `${region.h}%`,
-          overflow: 'hidden',
-          boxShadow: '0 0 0 2px #E8C547, 0 0 0 4px rgba(19,62,117,0.7)',
+          top: `${derivedRegion.y}%`,
+          left: `${derivedRegion.x}%`,
+          width: `${derivedRegion.w}%`,
+          height: `${derivedRegion.h}%`,
+          border: '2px solid rgba(232, 197, 71, 0.3)',
           cursor: 'move',
+          pointerEvents: 'none',
         }}
-        onMouseDown={(e) => startDrag(e, 'move')}
-        onTouchStart={(e) => startDrag(e, 'move')}
-      >
-        <img
-          src={imageUri}
-          alt=""
-          draggable={false}
-          style={{
-            position: 'absolute',
-            top: `-${region.y}%`,
-            left: `-${region.x}%`,
-            width: `${(10000 / region.w)}%`,
-            display: 'block',
-          }}
-        />
-        {/* Rule-of-thirds grid */}
-        {[33.33, 66.66].map((p) => (
-          <React.Fragment key={p}>
-            <div style={{ position: 'absolute', top: `${p}%`, left: 0, right: 0, height: 1, background: 'rgba(255,255,255,0.25)' }} />
-            <div style={{ position: 'absolute', left: `${p}%`, top: 0, bottom: 0, width: 1, background: 'rgba(255,255,255,0.25)' }} />
-          </React.Fragment>
-        ))}
-      </div>
+      />
 
-      {/* Resize handles */}
-      {handles.map((h) => (
+      {/* Center move handle */}
+      <div
+        style={{
+          top: `${derivedRegion.y + derivedRegion.h / 2}%`,
+          left: `${derivedRegion.x + derivedRegion.w / 2}%`,
+          width: 20,
+          height: 20,
+          marginTop: -10,
+          marginLeft: -10,
+          background: 'rgba(19, 62, 117, 0.8)',
+          borderRadius: '50%',
+          cursor: 'move',
+          zIndex: 5,
+          touchAction: 'none',
+        }}
+        onMouseDown={(e) => { e.stopPropagation(); startDrag(e, 'move'); }}
+        onTouchStart={(e) => { e.stopPropagation(); startDrag(e, 'move'); }}
+      />
+
+      {cornerHandles.map((h) => (
         <div
           key={h.id}
           style={{
             position: 'absolute',
-            top: h.top,
-            left: h.left,
-            width: 18,
-            height: 18,
-            marginTop: -9,
-            marginLeft: -9,
+            top: `${h.y}%`,
+            left: `${h.x}%`,
+            width: 22,
+            height: 22,
+            marginTop: -11,
+            marginLeft: -11,
             background: '#E8C547',
-            border: '2.5px solid #133E75',
+            border: '3px solid #133E75',
             borderRadius: 4,
             cursor: h.cursor,
             zIndex: 10,
@@ -220,8 +348,6 @@ function CropEditorWeb({ imageUri, region, onChange }: CropEditorProps) {
 // ─── Native fallback ──────────────────────────────────────────────────────────
 
 function CropEditorNative({ imageUri }: CropEditorProps) {
-  // On native, use a simple image preview — full crop UX handled by
-  // expo-image-manipulator + @baronha/react-native-multiple-image-picker
   return (
     <View style={nativeStyles.container}>
       <Image source={{ uri: imageUri }} style={nativeStyles.image} resizeMode="contain" />
@@ -233,8 +359,6 @@ const nativeStyles = StyleSheet.create({
   container: { width: '100%', minHeight: 260, backgroundColor: '#000', borderRadius: 8, overflow: 'hidden' },
   image: { width: '100%', height: 300 },
 });
-
-// ─── Export ───────────────────────────────────────────────────────────────────
 
 export const CropEditor = Platform.OS === 'web' ? CropEditorWeb : CropEditorNative;
 export default CropEditor;
