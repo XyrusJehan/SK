@@ -4,7 +4,8 @@
       "Bash(Get-ChildItem -Path \"C:\\\\xampp\\\\htdocs\\\\SK\\\\app\" -Recurse -File)",
       "Bash(Select-Object FullName)",
       "Bash(npx tsc *)",
-      "Bash(Select-Object -First 30)"
+      "Bash(Select-Object -First 30)",
+      "Bash(node -e \"try { require\\('./app/\\(tabs\\)/sk-document-list.js'\\); console.log\\('sk-document-list.js: OK'\\); } catch\\(e\\) { console.log\\('sk-document-list.js: Error -', e.message\\); }\")"
     ]
   }
 }

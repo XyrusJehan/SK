@@ -382,6 +382,16 @@ export default function LYDODocumentsScreen({ navigation }) {
   const [newFolderYear, setNewFolderYear] = useState('');
   const [addFolderError, setAddFolderError] = useState('');
 
+  // Add Document Type modal state
+  const [addDocTypeVisible, setAddDocTypeVisible] = useState(false);
+  const [newDocTypeName, setNewDocTypeName] = useState('');
+  const [newDocTypeCategory, setNewDocTypeCategory] = useState('');
+  const [newDocTypeYear, setNewDocTypeYear] = useState('');
+  const [addDocTypeError, setAddDocTypeError] = useState('');
+
+  // Document categories (from document_category table)
+  const [docCategories, setDocCategories] = useState([]);
+
   // Handle view press - open document viewer
   const handleViewPress = (doc) => {
     if (!doc.file_url) {
@@ -430,18 +440,29 @@ export default function LYDODocumentsScreen({ navigation }) {
           setBarangays(barangayData || []);
         }
 
-        // Fetch all distinct years — approved docs + 'Year Folder' saved sentinels
+        // Fetch fiscal years from folder_year table
         const { data: yearData, error: yearError } = await supabase
-          .from('documents')
-          .select('year')
-          .or('status.eq.approved,and(status.eq.saved,document_type.eq.Year Folder)')
-          .order('year', { ascending: true });
+          .from('folder_year')
+          .select('id, fiscal_year')
+          .order('fiscal_year', { ascending: true });
 
         if (yearError) {
           console.error('Error fetching years:', yearError);
         } else {
-          const years = [...new Set(yearData?.map(d => d.year).filter(Boolean))].sort((a, b) => a - b);
+          const years = yearData?.map(d => d.fiscal_year).filter(Boolean).sort((a, b) => a - b) || [];
           setDocumentYears(years);
+        }
+
+        // Fetch document categories
+        const { data: catData, error: catError } = await supabase
+          .from('document_category')
+          .select('id, document_category')
+          .order('document_category');
+
+        if (catError) {
+          console.error('Error fetching categories:', catError);
+        } else {
+          setDocCategories(catData || []);
         }
       } catch (error) {
         console.error('Error:', error);
@@ -470,21 +491,65 @@ export default function LYDODocumentsScreen({ navigation }) {
 
     const fetchDocTypesForYear = async () => {
       try {
-        const { data, error } = await supabase
+        // First, get the folder_year ID for this fiscal year
+        const { data: yearData, error: yearDataError } = await supabase
+          .from('folder_year')
+          .select('id')
+          .eq('fiscal_year', year)
+          .single();
+
+        if (yearDataError) {
+          console.error('Error fetching folder year:', yearDataError);
+          return;
+        }
+
+        const folderYearId = yearData?.id;
+        if (!folderYearId) {
+          console.error('No folder year found for:', year);
+          return;
+        }
+
+        // Fetch all document types - we'll filter locally by year
+        const { data: allDocTypes, error: typesError } = await supabase
+          .from('document_types')
+          .select('id, document_type, category, year')
+          .order('document_type');
+
+        if (typesError) { console.error('Error fetching doc types:', typesError); return; }
+
+        // Filter: include types that are either (specific to this year) or (no specific year / null)
+        const allTypes = (allDocTypes || []).filter(dt => {
+          const dtYear = dt.year?.toString();
+          return dtYear === year.toString() || dtYear === null || dtYear === undefined;
+        });
+
+        // Get counts from actual documents for this year using folder_year id
+        const { data: docsData } = await supabase
           .from('documents')
           .select('document_type')
-          .eq('year', year)
+          .eq('year', folderYearId)
           .eq('status', 'approved');
 
-        if (error) { console.error('Error fetching doc types:', error); return; }
-
-        // Get unique document_types with count
         const countMap = new Map();
-        data?.forEach(doc => {
-          if (doc.document_type) {
-            countMap.set(doc.document_type, (countMap.get(doc.document_type) || 0) + 1);
+
+        // First, add document types from document_types table
+        allTypes.forEach(docType => {
+          if (docType.document_type) {
+            // Count how many documents exist for this type
+            const count = docsData?.filter(d => d.document_type === docType.id.toString()).length || 0;
+            countMap.set(docType.document_type, count);
           }
         });
+
+        // If countMap is empty (no documents yet), still show all document types with count 0
+        if (countMap.size === 0 && allTypes.length > 0) {
+          allTypes.forEach(docType => {
+            if (docType.document_type && !countMap.has(docType.document_type)) {
+              countMap.set(docType.document_type, 0);
+            }
+          });
+        }
+
         const types = Array.from(countMap.entries()).map(([document_type, count]) => ({ document_type, count }));
         types.sort((a, b) => a.document_type.localeCompare(b.document_type));
         setDocTypesForYear(types);
@@ -504,11 +569,53 @@ export default function LYDODocumentsScreen({ navigation }) {
 
     const fetchDocsForType = async () => {
       try {
+        // First, get the folder_year ID for the selected fiscal year
+        const { data: yearData, error: yearError } = await supabase
+          .from('folder_year')
+          .select('id')
+          .eq('fiscal_year', selectedYear)
+          .single();
+
+        if (yearError) {
+          console.error('Error fetching folder year:', yearError);
+          return;
+        }
+
+        const folderYearId = yearData?.id;
+        if (!folderYearId) {
+          console.error('No folder year found for:', selectedYear);
+          return;
+        }
+
+        // Then, find the document type ID from document_types table
+        const { data: typeData, error: typeError } = await supabase
+          .from('document_types')
+          .select('id')
+          .eq('document_type', docType)
+          .single();
+
+        if (typeError) {
+          console.error('Error finding document type:', typeError);
+          // Fallback: try querying directly with the docType string
+          const { data, error } = await supabase
+            .from('documents')
+            .select('document_id, title, document_type, status, submitted_at, file_url, barangay_id, barangays(barangay_id, barangay_name)')
+            .eq('year', folderYearId)
+            .eq('document_type', docType)
+            .eq('status', 'approved');
+
+          if (error) { console.error('Error fetching docs:', error); return; }
+          setDocsForType(data || []);
+          return;
+        }
+
+        // Query documents using the found type ID and folder_year id
+        const typeId = typeData?.id?.toString();
         const { data, error } = await supabase
           .from('documents')
           .select('document_id, title, document_type, status, submitted_at, file_url, barangay_id, barangays(barangay_id, barangay_name)')
-          .eq('year', selectedYear)
-          .eq('document_type', docType)
+          .eq('year', folderYearId)
+          .eq('document_type', typeId)
           .eq('status', 'approved');
 
         if (error) { console.error('Error fetching docs:', error); return; }
@@ -568,26 +675,14 @@ export default function LYDODocumentsScreen({ navigation }) {
     }
 
     try {
-      // Insert a sentinel row into documents to anchor this year folder.
-      // Uses status:'saved' to satisfy any check constraint on the status column.
-      const insertPayload = {
-        title:           `Year Folder ${yearNum}`,
-        year:            yearNum,
-        status:          'saved',
-        folder_category: 'planning',
-        document_type:   'Year Folder',
-        current_version: 1,
-        created_at:      new Date().toISOString(),
-        saved_at:        new Date().toISOString(),
-      };
-
-      // Only include submitted_by if we have a valid user id
-      if (user?.id) insertPayload.submitted_by = user.id;
-
+      // Insert new fiscal year into folder_year table
       const { data: inserted, error } = await supabase
-        .from('documents')
-        .insert(insertPayload)
-        .select('year')
+        .from('folder_year')
+        .insert({
+          fiscal_year: yearNum,
+          created_at: new Date().toISOString(),
+        })
+        .select('fiscal_year')
         .single();
 
       if (error) {
@@ -605,6 +700,62 @@ export default function LYDODocumentsScreen({ navigation }) {
       setAddFolderError('');
     } catch (err) {
       setAddFolderError(`Unexpected error: ${err.message}`);
+      console.error(err);
+    }
+  };
+
+  const handleAddDocType = async () => {
+    const trimmed = newDocTypeName.trim();
+
+    // Validate: name is required
+    if (!trimmed) {
+      setAddDocTypeError('Document type name is required.');
+      return;
+    }
+
+    if (!newDocTypeCategory) {
+      setAddDocTypeError('Please select a category.');
+      return;
+    }
+
+    try {
+      // Prepare the insert payload
+      const insertPayload = {
+        document_type: trimmed,
+        category: newDocTypeCategory,
+        created_at: new Date().toISOString(),
+      };
+
+      // Add year if specified (null means applies to all years)
+      if (newDocTypeYear && newDocTypeYear !== 'all') {
+        insertPayload.year = newDocTypeYear;
+      }
+
+      const { data: inserted, error } = await supabase
+        .from('document_types')
+        .insert(insertPayload)
+        .select('id, document_type')
+        .single();
+
+      if (error) {
+        setAddDocTypeError(`Error: ${error.message}`);
+        console.error('Insert document type error:', error);
+        return;
+      }
+
+      // Close modal and reset
+      setAddDocTypeVisible(false);
+      setNewDocTypeName('');
+      setNewDocTypeCategory('');
+      setNewDocTypeYear('');
+      setAddDocTypeError('');
+
+      // Refresh the document types for the current year
+      if (selectedYear) {
+        goToYears(selectedYear);
+      }
+    } catch (err) {
+      setAddDocTypeError(`Unexpected error: ${err.message}`);
       console.error(err);
     }
   };
@@ -770,24 +921,39 @@ export default function LYDODocumentsScreen({ navigation }) {
                 </TouchableOpacity>
               )}
             </View>
-            <TouchableOpacity
-              style={styles.addFolderBtn}
-              onPress={() => {
-                setNewFolderYear('');
-                setAddFolderError('');
-                setAddFolderVisible(true);
-              }}
-              activeOpacity={0.8}
-            >
-              {/* Mini folder icon */}
-              <View style={styles.addFolderBtnIconWrap}>
-                <View style={styles.addFolderBtnFolderTab} />
-                <View style={styles.addFolderBtnFolderBody}>
-                  <Text style={styles.addFolderBtnPlus}>+</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <TouchableOpacity
+                style={styles.addFolderBtn}
+                onPress={() => {
+                  setNewFolderYear('');
+                  setAddFolderError('');
+                  setAddFolderVisible(true);
+                }}
+                activeOpacity={0.8}
+              >
+                {/* Mini folder icon */}
+                <View style={styles.addFolderBtnIconWrap}>
+                  <View style={styles.addFolderBtnFolderTab} />
+                  <View style={styles.addFolderBtnFolderBody}>
+                    <Text style={styles.addFolderBtnPlus}>+</Text>
+                  </View>
                 </View>
-              </View>
-              <Text style={styles.addFolderBtnText}>Add Folder</Text>
-            </TouchableOpacity>
+                <Text style={styles.addFolderBtnText}>Add Folder</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.addFolderBtn}
+                onPress={() => {
+                  setNewDocTypeName('');
+                  setNewDocTypeCategory('');
+                  setNewDocTypeYear('all');
+                  setAddDocTypeError('');
+                  setAddDocTypeVisible(true);
+                }}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.addFolderBtnText}>➕ Document Type</Text>
+              </TouchableOpacity>
+            </View>
           </View>
 
           {/* Container box for year folders */}
@@ -895,6 +1061,141 @@ export default function LYDODocumentsScreen({ navigation }) {
               </View>
             </View>
           </Modal>
+
+          {/* ── ADD DOCUMENT TYPE MODAL ── */}
+          <Modal
+            visible={addDocTypeVisible}
+            transparent
+            animationType="fade"
+            onRequestClose={() => setAddDocTypeVisible(false)}
+          >
+            <TouchableOpacity
+              style={styles.addFolderOverlay}
+              activeOpacity={1}
+              onPress={() => setAddDocTypeVisible(false)}
+            />
+            <View style={styles.addFolderModalWrap} pointerEvents="box-none">
+              <View style={styles.addFolderModal}>
+                {/* Header */}
+                <View style={styles.addFolderModalHeader}>
+                  <View style={styles.addFolderModalHeaderLeft}>
+                    <View style={styles.addFolderModalIconWrap}>
+                      <Text style={{ fontSize: 20 }}>📄</Text>
+                    </View>
+                    <Text style={styles.addFolderModalTitle}>New Document Type</Text>
+                  </View>
+                  <TouchableOpacity
+                    onPress={() => setAddDocTypeVisible(false)}
+                    style={styles.addFolderCloseBtn}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={styles.addFolderCloseBtnText}>✕</Text>
+                  </TouchableOpacity>
+                </View>
+
+                <View style={styles.addFolderModalDivider} />
+
+                {/* Body */}
+                <View style={styles.addFolderModalBody}>
+                  <Text style={styles.addFolderModalLabel}>Document Type Name</Text>
+                  <TextInput
+                    style={[styles.addFolderInput, addDocTypeError && !newDocTypeName.trim() ? styles.addFolderInputError : null]}
+                    placeholder="e.g. Annual Report"
+                    placeholderTextColor={COLORS.midGray}
+                    value={newDocTypeName}
+                    onChangeText={t => { setNewDocTypeName(t); setAddDocTypeError(''); }}
+                    autoFocus
+                  />
+
+                  <Text style={[styles.addFolderModalLabel, { marginTop: 12 }]}>Category</Text>
+                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 4 }}>
+                    {docCategories.map(cat => (
+                      <TouchableOpacity
+                        key={cat.id}
+                        style={[
+                          styles.categoryChip,
+                          newDocTypeCategory === cat.id.toString() && styles.categoryChipActive
+                        ]}
+                        onPress={() => { setNewDocTypeCategory(cat.id.toString()); setAddDocTypeError(''); }}
+                      >
+                        <Text style={[
+                          styles.categoryChipText,
+                          newDocTypeCategory === cat.id.toString() && styles.categoryChipTextActive
+                        ]}>
+                          {cat.document_category}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+
+                  <Text style={[styles.addFolderModalLabel, { marginTop: 12 }]}>Year Specific (Optional)</Text>
+                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 4 }}>
+                    <TouchableOpacity
+                      style={[
+                        styles.categoryChip,
+                        (newDocTypeYear === '' || newDocTypeYear === 'all') && styles.categoryChipActive
+                      ]}
+                      onPress={() => { setNewDocTypeYear('all'); setAddDocTypeError(''); }}
+                    >
+                      <Text style={[
+                        styles.categoryChipText,
+                        (newDocTypeYear === '' || newDocTypeYear === 'all') && styles.categoryChipTextActive
+                      ]}>
+                        All Years
+                      </Text>
+                    </TouchableOpacity>
+                    {documentYears.map(y => (
+                      <TouchableOpacity
+                        key={y}
+                        style={[
+                          styles.categoryChip,
+                          newDocTypeYear === y.toString() && styles.categoryChipActive
+                        ]}
+                        onPress={() => { setNewDocTypeYear(y.toString()); setAddDocTypeError(''); }}
+                      >
+                        <Text style={[
+                          styles.categoryChipText,
+                          newDocTypeYear === y.toString() && styles.categoryChipTextActive
+                        ]}>
+                          {y}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+
+                  {addDocTypeError ? (
+                    <Text style={styles.addFolderErrorText}>{addDocTypeError}</Text>
+                  ) : (
+                    <Text style={styles.addFolderHint}>
+                      This document type will be available for the selected category and year(s).
+                    </Text>
+                  )}
+                </View>
+
+                {/* Footer buttons */}
+                <View style={styles.addFolderModalFooter}>
+                  <TouchableOpacity
+                    style={styles.addFolderCancelBtn}
+                    onPress={() => setAddDocTypeVisible(false)}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={styles.addFolderCancelText}>Cancel</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[
+                      styles.addFolderConfirmBtn,
+                      (!newDocTypeName.trim() || !newDocTypeCategory) && styles.addFolderConfirmBtnDisabled
+                    ]}
+                    onPress={handleAddDocType}
+                    activeOpacity={0.8}
+                    disabled={!newDocTypeName.trim() || !newDocTypeCategory}
+                  >
+                    <Text style={styles.addFolderConfirmText}>Add Type</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </View>
+          </Modal>
         </>
       )}
 
@@ -920,23 +1221,25 @@ export default function LYDODocumentsScreen({ navigation }) {
             <Text style={styles.breadcrumbCurrent}>{selectedYear} Documents</Text>
           </View>
 
-          {/* Search row + label */}
+          {/* Search row + label + Add Doc Type button */}
           <View style={styles.tableTopRow}>
             <Text style={styles.allDocsLabel}>All Documents</Text>
-            <View style={styles.searchBox}>
-              <Text style={{ fontSize: 13, marginRight: 6 }}>🔍</Text>
-              <TextInput
-                style={styles.searchInput}
-                placeholder="Search"
-                placeholderTextColor={COLORS.midGray}
-                value={searchText}
-                onChangeText={setSearchText}
-              />
-              {searchText.length > 0 && (
-                <TouchableOpacity onPress={() => setSearchText('')}>
-                  <Text style={{ color: COLORS.midGray, fontSize: 13 }}>✕</Text>
-                </TouchableOpacity>
-              )}
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <View style={styles.searchBox}>
+                <Text style={{ fontSize: 13, marginRight: 6 }}>🔍</Text>
+                <TextInput
+                  style={styles.searchInput}
+                  placeholder="Search"
+                  placeholderTextColor={COLORS.midGray}
+                  value={searchText}
+                  onChangeText={setSearchText}
+                />
+                {searchText.length > 0 && (
+                  <TouchableOpacity onPress={() => setSearchText('')}>
+                    <Text style={{ color: COLORS.midGray, fontSize: 13 }}>✕</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
             </View>
           </View>
 
@@ -1695,6 +1998,28 @@ const styles = StyleSheet.create({
   },
   addFolderConfirmBtnDisabled: { backgroundColor: COLORS.midGray },
   addFolderConfirmText: { fontSize: 14, fontWeight: '700', color: COLORS.white },
+
+  // Category chips
+  categoryChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    borderWidth: 1.5,
+    borderColor: COLORS.lightGray,
+    backgroundColor: COLORS.white,
+  },
+  categoryChipActive: {
+    backgroundColor: COLORS.navy,
+    borderColor: COLORS.navy,
+  },
+  categoryChipText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: COLORS.subText,
+  },
+  categoryChipTextActive: {
+    color: COLORS.white,
+  },
 
   // ── Barangay-by-year table ──
   tableTopRow: {

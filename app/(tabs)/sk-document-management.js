@@ -538,6 +538,40 @@ export default function SKDocumentManagementScreen() {
   };
   const hideAlert = () => setAlertModal(a => ({ ...a, visible: false }));
 
+  // Reference tables for mapping IDs to names
+  const [documentCategories, setDocumentCategories] = useState([
+    { id: 1, document_category: 'Planning' },
+    { id: 2, document_category: 'Financial' },
+    { id: 3, document_category: 'Governance' },
+    { id: 4, document_category: 'Performance' }
+  ]);
+  const [documentTypes, setDocumentTypes] = useState([
+    { id: 1, document_type: 'Annual Barangay Youth Investment Program', category: 1 },
+    { id: 2, document_type: 'Comprehensive Barangay Youth Development Plan', category: 1 },
+    { id: 3, document_type: 'Monthly Itemized List', category: 2 },
+    { id: 4, document_type: 'Quarterly Register of Cash in Bank', category: 2 },
+    { id: 5, document_type: 'Approved Annual Budget', category: 2 },
+    { id: 6, document_type: 'Disbursement Vouchers', category: 2 },
+    { id: 7, document_type: 'Resolution', category: 3 },
+    { id: 8, document_type: 'Ordinance', category: 3 },
+    { id: 9, document_type: 'Minutes of the Katipunan ng Kabataan Assembly', category: 3 },
+    { id: 10, document_type: 'Accomplishment Report', category: 4 },
+    { id: 11, document_type: 'Activity Documentation', category: 4 },
+    { id: 12, document_type: 'Event Report', category: 4 },
+    { id: 13, document_type: 'SK PPA Template', category: 1 },
+    { id: 14, document_type: 'SK Internal Rules of Procedure', category: 3 },
+    { id: 15, document_type: 'Barangay Youth Investment Monitoring Form', category: 4 },
+    { id: 16, document_type: 'SKIT Executive Order Template', category: 3 },
+    { id: 17, document_type: 'Program of Work', category: 1 }
+  ]);
+  const [folderYears, setFolderYears] = useState([
+    { id: 1, fiscal_year: 2026 },
+    { id: 2, fiscal_year: 2027 },
+    { id: 3, fiscal_year: 2028 },
+    { id: 4, fiscal_year: 2029 },
+    { id: 5, fiscal_year: 2030 }
+  ]);
+
   const handleViewPress = (doc) => {
     if (!doc.fileUrl) {
       showAlert('error', 'No File', 'This document does not have an attached file.');
@@ -597,13 +631,18 @@ export default function SKDocumentManagementScreen() {
         // Prefer the latest version's file_url, fall back to the documents table file_url
         const resolvedFileUrl = versions?.[0]?.file_url || doc.file_url || null;
 
+        // Get category and document type names from joined data
+        const categoryName = documentCategories.find(c => String(c.id) === doc.folder_category)?.document_category || doc.folder_category || 'planning';
+        const docTypeName = documentTypes.find(t => String(t.id) === doc.document_type)?.document_type || doc.document_type || 'Unknown';
+        const yearValue = folderYears.find(y => String(y.id) === String(doc.year))?.fiscal_year || doc.year;
+
         return {
           id: doc.document_id,
           title: doc.title || 'Untitled',
-          type: doc.document_type || 'Unknown',
-          category: doc.folder_category || 'planning',
+          type: docTypeName,
+          category: categoryName,
           status: doc.status || 'draft',
-          year: doc.year,
+          year: yearValue,
           createdBy: usersMap[doc.submitted_by] || 'Unknown',
           lastModified: doc.saved_at || doc.created_at || new Date().toISOString(),
           fileUrl: resolvedFileUrl,

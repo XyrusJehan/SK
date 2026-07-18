@@ -391,12 +391,26 @@ export default function LYDODocumentListScreen({ navigation }) {
   useEffect(() => {
     const fetchDocuments = async () => {
       try {
-        // Map tab categories to folder_category values
-        const categoryMap = {
-          'Planning': 'planning',
-          'Financial': 'financial',
-          'Governance': 'governance',
-          'Performance': 'performance'
+        // Fetch document categories for mapping
+        const { data: categoriesData } = await supabase
+          .from('document_category')
+          .select('id, document_category');
+
+        const categoryMap = new Map();
+        categoriesData?.forEach(cat => {
+          categoryMap.set(cat.id.toString(), cat.document_category);
+        });
+
+        // Map folder_category numeric IDs to category names
+        const folderCategoryMap = {
+          '1': 'Planning',
+          '2': 'Financial',
+          '3': 'Governance',
+          '4': 'Performance',
+          'planning': 'Planning',
+          'financial': 'Financial',
+          'governance': 'Governance',
+          'performance': 'Performance',
         };
 
         let query = supabase
@@ -419,9 +433,23 @@ export default function LYDODocumentListScreen({ navigation }) {
           query = query.eq('barangay_id', params.barangayId);
         }
 
-        // Filter by year if provided
+        // Filter by year if provided - convert fiscal year to folder_year id
         if (params.year) {
-          query = query.eq('year', params.year);
+          const yearNum = parseInt(params.year, 10);
+          if (!isNaN(yearNum) && yearNum > 1900 && yearNum < 2100) {
+            // It's a fiscal year, need to convert to folder_year id
+            const { data: yearData } = await supabase
+              .from('folder_year')
+              .select('id')
+              .eq('fiscal_year', yearNum)
+              .single();
+            if (yearData?.id) {
+              query = query.eq('year', yearData.id);
+            }
+          } else {
+            // It's already a folder_year id
+            query = query.eq('year', params.year);
+          }
         }
 
         const { data: docs, error } = await query;
@@ -434,10 +462,16 @@ export default function LYDODocumentListScreen({ navigation }) {
         const formattedDocs = docs?.map(doc => ({
           id: doc.document_id,
           name: doc.title || 'Untitled',
-          category: doc.folder_category === 'performance' ? 'Performance' :
-                    doc.folder_category === 'planning' ? 'Planning' :
-                    doc.folder_category === 'financial' ? 'Financial' :
-                    doc.folder_category === 'governance' ? 'Governance' : 'Performance',
+          category: (() => {
+            const fc = doc.folder_category?.toString();
+            // First check if it's a numeric ID (1, 2, 3, 4)
+            if (folderCategoryMap[fc]) return folderCategoryMap[fc];
+            // Fallback to old string values
+            return fc === 'performance' ? 'Performance' :
+                   fc === 'planning' ? 'Planning' :
+                   fc === 'financial' ? 'Financial' :
+                   fc === 'governance' ? 'Governance' : 'Performance';
+          })(),
           subType: doc.document_type || '',
           date: doc.created_at ? new Date(doc.created_at).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
           status: doc.status === 'approved' || doc.status === 'published' ? 'Authorized' : null,

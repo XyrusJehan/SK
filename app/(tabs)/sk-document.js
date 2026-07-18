@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, TextInput, ScrollView, TouchableOpacity,
   StyleSheet, SafeAreaView, StatusBar, Dimensions,
-  Image,
+  Image, Alert,
 } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { useNav } from './navContext';
@@ -269,6 +269,52 @@ export default function SKDocumentScreen() {
   const [sidebarVisible, setSidebarVisible] = useState(false);
   const [documents, setDocuments]           = useState([]);
 
+  // Reference tables - fetched from database
+  const [documentCategories, setDocumentCategories] = useState([]);
+  const [documentTypes, setDocumentTypes] = useState([]);
+  const [folderYears, setFolderYears] = useState([]);
+
+  // Fetch reference tables on mount
+  useEffect(() => {
+    const fetchReferenceData = async () => {
+      try {
+        // Fetch document categories
+        const { data: categories, error: catError } = await supabase
+          .from('document_category')
+          .select('id, document_category, year')
+          .order('document_category');
+
+        if (!catError && categories) {
+          setDocumentCategories(categories);
+        }
+
+        // Fetch document types
+        const { data: types, error: typeError } = await supabase
+          .from('document_types')
+          .select('id, document_type, category, year')
+          .order('document_type');
+
+        if (!typeError && types) {
+          setDocumentTypes(types);
+        }
+
+        // Fetch folder years
+        const { data: years, error: yearError } = await supabase
+          .from('folder_year')
+          .select('id, fiscal_year')
+          .order('fiscal_year', { ascending: false });
+
+        if (!yearError && years) {
+          setFolderYears(years);
+        }
+      } catch (error) {
+        console.error('Error fetching reference data:', error);
+      }
+    };
+
+    fetchReferenceData();
+  }, []);
+
   // Fetch documents for this barangay - refresh every time the screen is focused
   useFocusEffect(
     useCallback(() => {
@@ -287,14 +333,22 @@ export default function SKDocumentScreen() {
             return;
           }
 
-          setDocuments(docs || []);
+          // Transform the data to include readable category and document type names
+          const formattedDocs = (docs || []).map(doc => ({
+            ...doc,
+            category_name: documentCategories.find(c => c.id === Number(doc.folder_category))?.document_category || doc.folder_category || '',
+            doc_type_name: documentTypes.find(t => t.id === Number(doc.document_type))?.document_type || doc.document_type || '',
+            year_value: folderYears.find(y => y.id === Number(doc.year))?.fiscal_year || doc.year
+          }));
+
+          setDocuments(formattedDocs);
         } catch (error) {
           console.error('Error:', error);
         }
       };
 
       fetchDocuments();
-    }, [barangayId])
+    }, [barangayId, documentCategories, documentTypes, folderYears])
   );
 
   const handleNavPress = (tab) => {
@@ -310,6 +364,17 @@ export default function SKDocumentScreen() {
 
   const handleLogout = () => { logout(); router.replace('/'); };
 
+  // Handle bell/notification press
+  const handleNotificationPress = () => {
+    if (notifCount > 0) {
+      Alert.alert(
+        'Notifications',
+        `You have ${notifCount} notification${notifCount > 1 ? 's' : ''}.\n\nThis feature is coming soon!`,
+        [{ text: 'OK' }]
+      );
+    }
+  };
+
   // Tap a bullet item → navigate to list screen with category + subType params
   const handleItemPress = (itemName, group) => {
     router.push({
@@ -318,30 +383,31 @@ export default function SKDocumentScreen() {
     });
   };
 
-  // Map short card labels → full document_type values stored in the DB
+  // Map short card labels → document_type IDs stored in the DB
+  // Based on document_types table: 1-2=Planning, 3-6=Financial, 7-9=Governance, 10-12=Performance
   const LABEL_TO_DOC_TYPE = {
-    'ABYIP':                    'Annual Barangay Youth Investment Program (ABYIP)',
-    'CBYDP':                    'Comprehensive Barangay Youth Development Plan (CBYDP)',
-    'Work Plans':               'Work Plans',
-    'Project Proposals':        'Project Proposals',
-    'Monthly Itemized List':    'Monthly Itemized List',
-    'Quarterly Register of Bank': 'Quarterly Financial Reports',
-    'Annual Budget':            'Approved Annual Budget',
-    'Disbursement Vouchers':    'Disbursement Vouchers',
-    'Liquidation Reports':      'Liquidation Reports',
-    'Resolutions':              'Resolutions',
-    'Ordinances':               'Ordinances',
-    'Accomplishment Reports':   'Accomplishment Reports',
-    'Activity Documentation':   'Documentation',
-    'Event Reports':            'Event Reports',
-    'Minutes of the meetings':  'Minutes of Meetings',
+    'ABYIP':                      1,  // Annual Barangay Youth Investment Program
+    'CBYDP':                      2,  // Comprehensive Barangay Youth Development Plan
+    'Work Plans':                 null,
+    'Project Proposals':         null,
+    'Monthly Itemized List':      3,
+    'Quarterly Register of Bank': 4,
+    'Annual Budget':              5,  // Approved Annual Budget
+    'Disbursement Vouchers':      6,
+    'Liquidation Reports':        null,
+    'Resolutions':                7,
+    'Ordinances':                 8,
+    'Accomplishment Reports':     10,
+    'Activity Documentation':     11,
+    'Event Reports':              12,
+    'Minutes of the meetings':    9,
   };
 
-  // Build a set of document_type values that have been submitted/approved/returned
+  // Build a set of document_type IDs that have been submitted/approved/returned
   const submittedSet = new Set(
     documents
       .filter(d => ['submitted', 'approved', 'returned'].includes(d.status))
-      .map(d => d.document_type)
+      .map(d => Number(d.document_type))
       .filter(Boolean)
   );
 
@@ -414,8 +480,17 @@ export default function SKDocumentScreen() {
             <MenuIcon />
           </TouchableOpacity>
           <Text style={styles.mobileTitle}>Documents</Text>
-          <TouchableOpacity style={styles.bellBtn}>
+          <TouchableOpacity
+            style={[styles.bellBtn, styles.bellBtnMobile]}
+            onPress={handleNotificationPress}
+            activeOpacity={0.7}
+          >
             <BellIcon hasNotif={notifCount > 0} />
+            {notifCount > 0 && (
+              <View style={styles.notifBadge}>
+                <Text style={styles.notifBadgeText}>{notifCount}</Text>
+              </View>
+            )}
           </TouchableOpacity>
         </View>
       )}
@@ -427,7 +502,11 @@ export default function SKDocumentScreen() {
             <Text style={styles.headerSub}>SANGGUNIANG KABATAAN</Text>
             <Text style={styles.headerTitle}>{barangayName.toUpperCase()}</Text>
           </View>
-          <TouchableOpacity style={styles.bellBtn} activeOpacity={0.7}>
+          <TouchableOpacity
+            style={styles.bellBtn}
+            onPress={handleNotificationPress}
+            activeOpacity={0.7}
+          >
             <BellIcon hasNotif={notifCount > 0} />
             {notifCount > 0 && (
               <View style={styles.notifBadge}>
@@ -601,10 +680,14 @@ const styles = StyleSheet.create({
 
   // Bell
   bellBtn: {
+    position: 'relative',
     width: 40, height: 40, borderRadius: 20,
     backgroundColor: COLORS.cardBg, alignItems: 'center', justifyContent: 'center',
     shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.08, shadowRadius: 6, elevation: 3,
+  },
+  bellBtnMobile: {
+    position: 'relative',
   },
   bellWrapper: { width: 20, height: 22, alignItems: 'center' },
   bellBody:    { width: 14, height: 12, borderRadius: 7, borderWidth: 2, borderColor: '#8B0000', marginTop: 4 },
