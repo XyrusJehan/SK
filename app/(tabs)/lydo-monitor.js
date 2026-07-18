@@ -1,5 +1,5 @@
 import { Feather } from '@expo/vector-icons';
-import { useFocusEffect, useRouter } from 'expo-router';
+import { useFocusEffect, useRouter, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -1118,11 +1118,14 @@ const TableRow = ({ item, isEven, viewFilter, onView }) => {
 // ─── MAIN SCREEN ──────────────────────────────────────────────────────────────
 export default function LYDOMonitorScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams();
   const { activeTab, setActiveTab } = useNav();
   const { logout } = useAuth();
 
   const [activeMonitorTab, setActiveMonitorTab] = useState('Consultation');
-  const [viewFilter, setViewFilter]             = useState('submitted');
+  const [viewFilter, setViewFilter]             = useState(
+    ['submitted', 'approved', 'revision'].includes(params?.viewFilter) ? params.viewFilter : 'submitted'
+  );
   const [searchText, setSearchText]             = useState('');
   const [barangayFilter, setBarangayFilter]     = useState('');
   const [documentFilter, setDocumentFilter]     = useState('');
@@ -1134,6 +1137,13 @@ export default function LYDOMonitorScreen() {
   const [returnedDocs, setReturnedDocs]         = useState([]);
 
   const [viewingItem, setViewingItem] = useState(null);
+
+  // Sync viewFilter when params change (e.g., navigating from dashboard)
+  useEffect(() => {
+    if (params?.viewFilter && ['submitted', 'approved', 'revision'].includes(params.viewFilter)) {
+      setViewFilter(params.viewFilter);
+    }
+  }, [params?.viewFilter]);
 
   const today = new Date().toLocaleDateString('en-PH', {
     timeZone: 'Asia/Manila', month: 'long', day: 'numeric', year: 'numeric',

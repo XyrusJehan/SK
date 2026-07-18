@@ -244,11 +244,30 @@ export default function SKDocumentListScreen() {
   };
 
   // Determine initial tab from params (category passed from sk-document)
-  const initTab = DOCUMENT_TABS.includes(params?.category) ? params.category : 'Financial';
+  // Map the category param to the correct tab name
+  const getInitialTab = () => {
+    const categoryMap = {
+      'Planning': 'Planning',
+      'Financial': 'Financial',
+      'Governance': 'Governance',
+      'Activities': 'Activities',
+    };
+    const mappedTab = categoryMap[params?.category];
+    return DOCUMENT_TABS.includes(mappedTab) ? mappedTab : 'Financial';
+  };
   const initSubType = params?.subType || null;
 
-  const [activeDocTab, setActiveDocTab] = useState(initTab);
+  const [activeDocTab, setActiveDocTab] = useState(getInitialTab);
   const [activeSubType, setActiveSubType]   = useState(initSubType);
+
+  // Sync the active tab when params change (e.g., when navigating from sk-document with a new category)
+  useEffect(() => {
+    const newTab = getInitialTab();
+    if (newTab !== activeDocTab) {
+      setActiveDocTab(newTab);
+      setActiveSubType(initSubType);
+    }
+  }, [params?.category, params?.subType]);
   const [searchText, setSearchText]         = useState('');
   const [sortMode, setSortMode]             = useState('Newest'); // 'Newest' | 'Name'
   const [sidebarVisible, setSidebarVisible] = useState(false);
@@ -280,6 +299,34 @@ export default function SKDocumentListScreen() {
       }
     }, [params?.openScanner, scanner])
   );
+
+  // Handle openUpload param from dashboard compliance tasks
+  useEffect(() => {
+    if (params?.openUpload === 'true') {
+      // Set the category and document type from params
+      if (params?.category) {
+        const categoryMap = {
+          'Planning': 'planning',
+          'Financial': 'financial',
+          'Governance': 'governance',
+          'Activities': 'performance',
+        };
+        setUploadCategory(categoryMap[params.category] || 'planning');
+      }
+      if (params?.subType) {
+        setUploadDocType(params.subType);
+        // Also pre-fill the title with the document type
+        setUploadTitle(params.subType);
+      }
+      // Open the upload modal
+      setUploadModalVisible(true);
+      // Clear the URL param after triggering
+      setTimeout(() => {
+        router.setParams({ openUpload: undefined });
+      }, 500);
+    }
+  }, [params?.openUpload, params?.category, params?.subType]);
+
   const [categoryDropdownOpen, setCategoryDropdownOpen] = useState(false);
   const [docTypeDropdownOpen, setDocTypeDropdownOpen] = useState(false);
   const [uploading, setUploading] = useState(false);

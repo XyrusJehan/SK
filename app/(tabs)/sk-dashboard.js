@@ -614,6 +614,70 @@ export default function HomeScreen({ navigation }) {
     return Date.UTC(y, m - 1, d);
   };
 
+  // Helper to map document_type to folder_category
+  const getFolderCategory = (docType) => {
+    const planningTypes = [
+      'Comprehensive Barangay Youth Development Plan (CBYDP)',
+      'Annual Barangay Youth Investment Program (ABYIP)',
+      'SK PPK Template', 'Program of Work', 'Work Plans', 'Project Proposals',
+    ];
+    const financialTypes = [
+      'Approved Annual Budget', 'SK Supplemental Budget',
+      'Registry of Cash Receipts and Deposits', 'Registry of Cash Disbursements',
+      'Monthly Itemized List', 'Quarterly Financial Reports',
+      'Disbursement Vouchers', 'Liquidation Reports',
+    ];
+    const governanceTypes = ['Resolutions', 'Ordinances'];
+    const performanceTypes = [
+      'Accomplishment Reports', 'Documentation', 'Event Reports', 'Minutes of Meetings',
+      'Barangay Youth Investment Monitoring Form', 'Monthly/Quarterly Accomplishment Report',
+    ];
+
+    if (planningTypes.includes(docType)) return 'planning';
+    if (financialTypes.includes(docType)) return 'financial';
+    if (governanceTypes.includes(docType)) return 'governance';
+    if (performanceTypes.includes(docType)) return 'performance';
+    return null;
+  };
+
+  // Handle compliance task button click
+  const handleTaskAction = async (task) => {
+    // If already completed, do nothing
+    if (task.isMet) return;
+
+    try {
+      // Check if document already exists for this document type
+      const { data: existingDocs } = await supabase
+        .from('documents')
+        .select('document_id, status')
+        .eq('barangay_id', barangayId)
+        .eq('document_type', task.document_type)
+        .in('status', ['saved', 'submitted', 'approved', 'returned'])
+        .limit(1);
+
+      const folderCategory = task.folder_category || getFolderCategory(task.document_type);
+
+      if (existingDocs && existingDocs.length > 0) {
+        // Document exists - go to document management Saved tab
+        router.push({ pathname: '/(tabs)/sk-document-management', params: { initialTab: 'Saved' } });
+      } else {
+        // Document doesn't exist - go to document list with upload modal
+        router.push({
+          pathname: '/(tabs)/sk-document-list',
+          params: {
+            category: folderCategory ? folderCategory.charAt(0).toUpperCase() + folderCategory.slice(1) : 'Planning',
+            subType: task.document_type,
+            openUpload: 'true',
+          },
+        });
+      }
+    } catch (error) {
+      console.error('Error checking document status:', error);
+      // Default to going to document list
+      router.push({ pathname: '/(tabs)/sk-document-list' });
+    }
+  };
+
   // Fetch compliance tasks/deadlines
   const fetchTasks = useCallback(async () => {
     if (!barangayId) return;
@@ -629,13 +693,19 @@ export default function HomeScreen({ navigation }) {
       // Set deadlines count for badge
       setDeadlinesCount(deadlines?.length || 0);
 
-      const taskList = (deadlines || []).map(d => ({
-        id: d.deadline_id.toString(),
-        description: d.title || d.document_type,
-        action: d.action_type === 'publish' ? 'Publish' : 'Submit',
-        urgent: new Date(d.deadline_date) <= new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-        isMet: !!d.is_met,
-      }));
+      const taskList = (deadlines || []).map(d => {
+        const docType = d.document_type;
+        const folderCategory = getFolderCategory(docType);
+        return {
+          id: d.deadline_id.toString(),
+          description: d.title || docType,
+          action: d.action_type === 'publish' ? 'Publish' : 'Submit',
+          urgent: new Date(d.deadline_date) <= new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+          isMet: !!d.is_met,
+          document_type: docType,
+          folder_category: folderCategory,
+        };
+      });
       setComplianceTasks(taskList);
 
       // Approaching Deadline card: only deadlines not yet met, nearest first.
@@ -878,6 +948,7 @@ export default function HomeScreen({ navigation }) {
                         styles.taskBtn,
                         task.isMet ? styles.taskBtnMet : styles.taskBtnPending,
                       ]}
+                      onPress={() => handleTaskAction(task)}
                       activeOpacity={0.8}
                     >
                       <Text style={[styles.taskBtnText, task.isMet ? styles.taskBtnMetText : styles.taskBtnPendingText]}>

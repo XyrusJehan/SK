@@ -13,7 +13,7 @@ import {
   Modal,
   ActivityIndicator,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { useNav } from './navContext';
 import { useAuth } from './authContext';
 import { supabase } from '../../utils/supabase';
@@ -182,13 +182,13 @@ const COLORS = {
 // Badge values will be dynamically updated in the render
 const MONITORING_TASKS_BASE = [
   { id: '1', description: 'Remind barangays with missing documents', action: 'Send Reminder', actionType: 'reminder', badgeProp: 'missingDocs' },
-  { id: '2', description: 'Review submitted proposals of SK', action: 'Review Now', actionType: 'review', badgeProp: 'proposalsForReview' },
+  { id: '2', description: 'Review submitted proposals of SK', action: 'Review Now', actionType: 'review', badgeProp: 'proposalsForReview', viewFilter: 'submitted' },
   { id: '3', description: 'Follow up near deadline submission', action: 'Send Reminder', actionType: 'reminder', badgeProp: 'approachingDeadlines' },
-  { id: '4', description: 'Review returned proposals of SK', action: 'Review Now', actionType: 'review', badgeProp: 'forRevision' },
+  { id: '4', description: 'Review returned proposals of SK', action: 'Review Now', actionType: 'review', badgeProp: 'forRevision', viewFilter: 'revision' },
 ];
 
 const QUICK_ACTIONS = [
-  { id: 'consultation', label: 'Consultation', badgeProp: 'proposalsForReview', color: COLORS.navy, icon: '💬', route: '/(tabs)/lydo-monitor' },
+  { id: 'consultation', label: 'Consultation', badgeProp: 'proposalsForReview', color: COLORS.navy, icon: '💬', route: '/(tabs)/lydo-monitor', viewFilter: 'submitted' },
   { id: 'budget', label: 'View Budget', color: '#1A2332', icon: '📊', route: '/(tabs)/lydo-monitor-budget' },
   { id: 'export', label: 'Export  Reports', color: COLORS.navy, icon: '⬇', route: '/(tabs)/lydo-monitor-report' },
   { id: 'calendar', label: 'View Deadline Calendar', color: '#F97316', icon: '📅', route: null },
@@ -662,280 +662,283 @@ export default function LYDOHomeScreen() {
     return () => clearInterval(interval);
   }, []);
 
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        // Get all barangays with their IDs
-        const { data: brgyData, count: brgyCount } = await supabase
-          .from('barangays')
-          .select('barangay_id', { count: 'exact' });
-        if (brgyCount) setTotalBarangays(brgyCount);
+  // Fetch data when screen is focused - always load latest
+  useFocusEffect(
+    React.useCallback(() => {
+      const fetchData = async () => {
+        try {
+          // Get all barangays with their IDs
+          const { data: brgyData, count: brgyCount } = await supabase
+            .from('barangays')
+            .select('barangay_id', { count: 'exact' });
+          if (brgyCount) setTotalBarangays(brgyCount);
 
-        // Get full barangay data for compliance calculation
-        const { data: allBarangays } = await supabase
-          .from('barangays')
-          .select('barangay_id');
+          // Get full barangay data for compliance calculation
+          const { data: allBarangays } = await supabase
+            .from('barangays')
+            .select('barangay_id');
 
-        const barangayList = allBarangays || [];
+          const barangayList = allBarangays || [];
 
-        // Fetch compliance data from documents table
-        const { data: docsData } = await supabase
-          .from('documents')
-          .select('status');
+          // Fetch compliance data from documents table
+          const { data: docsData } = await supabase
+            .from('documents')
+            .select('status');
 
-        if (docsData) {
-          const total = docsData.length;
-          setTotalDocuments(total);
+          if (docsData) {
+            const total = docsData.length;
+            setTotalDocuments(total);
 
-          const submitted = docsData.filter(d => d.status === 'submitted').length;
-          const approvedCount = docsData.filter(d => d.status === 'approved').length;
-          const returned = docsData.filter(d => d.status === 'returned').length;
-          const drafts = docsData.filter(d => d.status === 'draft' || d.status === 'saved').length;
+            const submitted = docsData.filter(d => d.status === 'submitted').length;
+            const approvedCount = docsData.filter(d => d.status === 'approved').length;
+            const returned = docsData.filter(d => d.status === 'returned').length;
+            const drafts = docsData.filter(d => d.status === 'draft' || d.status === 'saved').length;
 
-          setApproved(approvedCount);
-          setForRevision(returned);
-          setMissingDocs(total - submitted - approvedCount - returned);
+            setApproved(approvedCount);
+            setForRevision(returned);
+            setMissingDocs(total - submitted - approvedCount - returned);
 
-          // Submission Progress: submitted+approved = submitted, returned = incomplete, rest = awaiting
-          const submittedTotal = submitted + approvedCount;
-          const incompleteTotal = returned;
-          const awaitingTotal = Math.max(0, total - submittedTotal - incompleteTotal);
-          setProgressData({
-            submitted: submittedTotal,
-            awaiting: awaitingTotal,
-            incomplete: incompleteTotal,
-            total: total || 1, // avoid division by zero
+            // Submission Progress: submitted+approved = submitted, returned = incomplete, rest = awaiting
+            const submittedTotal = submitted + approvedCount;
+            const incompleteTotal = returned;
+            const awaitingTotal = Math.max(0, total - submittedTotal - incompleteTotal);
+            setProgressData({
+              submitted: submittedTotal,
+              awaiting: awaitingTotal,
+              incomplete: incompleteTotal,
+              total: total || 1, // avoid division by zero
+            });
+          }
+
+          // Calculate compliance data based on actual barangay document status
+          // Fetch all documents with barangay info
+          const { data: allDocs } = await supabase
+            .from('documents')
+            .select('document_id, status, title, document_type, barangay_id, barangays(barangay_name)');
+
+          // Fetch all deadlines to determine required documents
+          const { data: allDeadlines } = await supabase
+            .from('submission_deadlines')
+            .select('deadline_id, document_type, description, deadline_date, barangay_id, is_met, barangays(barangay_name)');
+
+          // Get missing documents: barangays that haven't submitted based on deadlines
+          const missingDocsWithBrgy = [];
+
+          // Group deadlines by document type and barangay
+          const deadlineMap = {};
+          (allDeadlines || []).forEach(d => {
+            const key = `${d.barangay_id}-${d.document_type}`;
+            if (!deadlineMap[key]) {
+              deadlineMap[key] = {
+                barangay_id: d.barangay_id,
+                barangay: d.barangays?.barangay_name || 'Unknown',
+                document_type: d.document_type,
+                description: d.description,
+                is_met: d.is_met,
+              };
+            }
           });
-        }
 
-        // Calculate compliance data based on actual barangay document status
-        // Fetch all documents with barangay info
-        const { data: allDocs } = await supabase
-          .from('documents')
-          .select('document_id, status, title, document_type, barangay_id, barangays(barangay_name)');
-
-        // Fetch all deadlines to determine required documents
-        const { data: allDeadlines } = await supabase
-          .from('submission_deadlines')
-          .select('deadline_id, document_type, description, deadline_date, barangay_id, is_met, barangays(barangay_name)');
-
-        // Get missing documents: barangays that haven't submitted based on deadlines
-        const missingDocsWithBrgy = [];
-
-        // Group deadlines by document type and barangay
-        const deadlineMap = {};
-        (allDeadlines || []).forEach(d => {
-          const key = `${d.barangay_id}-${d.document_type}`;
-          if (!deadlineMap[key]) {
-            deadlineMap[key] = {
-              barangay_id: d.barangay_id,
-              barangay: d.barangays?.barangay_name || 'Unknown',
-              document_type: d.document_type,
-              description: d.description,
-              is_met: d.is_met,
-            };
-          }
-        });
-
-        // For each deadline, check if the document was submitted
-        Object.values(deadlineMap).forEach(deadline => {
-          if (!deadline.is_met) {
-            // Check if there's a submitted/approved document for this barangay and document type
-            const submittedDoc = (allDocs || []).find(doc =>
-              doc.barangay_id === deadline.barangay_id &&
-              doc.document_type === deadline.document_type &&
-              (doc.status === 'submitted' || doc.status === 'approved')
-            );
-
-            if (!submittedDoc) {
-              missingDocsWithBrgy.push({
-                id: `${deadline.barangay_id}-${deadline.document_type}`,
-                title: deadline.description || deadline.document_type,
-                barangay: deadline.barangay,
-                status: 'Not Submitted',
-              });
-            }
-          }
-        });
-
-        setMissingDocsList(missingDocsWithBrgy);
-
-        const barangayStats = {};
-
-        // Initialize stats for each barangay
-        barangayList.forEach(brgy => {
-          barangayStats[brgy.barangay_id] = {
-            hasSubmitted: false,
-            hasApproved: false,
-            hasMissing: false,
-            hasOverdue: false,
-            hasNearDeadline: false,
-          };
-        });
-
-        // Check document statuses per barangay
-        allDocs?.forEach(doc => {
-          if (doc.barangay_id && barangayStats[doc.barangay_id]) {
-            if (doc.status === 'submitted' || doc.status === 'approved') {
-              barangayStats[doc.barangay_id].hasSubmitted = true;
-            }
-            if (doc.status === 'approved') {
-              barangayStats[doc.barangay_id].hasApproved = true;
-            }
-          }
-        });
-
-        // Check deadline status per barangay - use deadlines to determine missing documents
-        const today = new Date();
-        const threeDaysFromNow = new Date(today.getTime() + (3 * 24 * 60 * 60 * 1000));
-
-        // Track which barangays have unfulfilled deadlines (missing documents)
-        const barangaysWithMissing = new Set();
-
-        allDeadlines?.forEach(deadline => {
-          if (deadline.barangay_id && barangayStats[deadline.barangay_id]) {
-            const deadlineDate = new Date(deadline.deadline_date);
-
-            // Check if this deadline is not met (missing document)
+          // For each deadline, check if the document was submitted
+          Object.values(deadlineMap).forEach(deadline => {
             if (!deadline.is_met) {
-              // Check if there's a submitted/approved document for this deadline
-              const hasDocument = (allDocs || []).some(doc =>
+              // Check if there's a submitted/approved document for this barangay and document type
+              const submittedDoc = (allDocs || []).find(doc =>
                 doc.barangay_id === deadline.barangay_id &&
                 doc.document_type === deadline.document_type &&
                 (doc.status === 'submitted' || doc.status === 'approved')
               );
 
-              if (!hasDocument) {
-                barangayStats[deadline.barangay_id].hasMissing = true;
-                barangaysWithMissing.add(deadline.barangay_id);
-              }
-
-              if (deadlineDate < today) {
-                barangayStats[deadline.barangay_id].hasOverdue = true;
-              } else if (deadlineDate <= threeDaysFromNow) {
-                barangayStats[deadline.barangay_id].hasNearDeadline = true;
+              if (!submittedDoc) {
+                missingDocsWithBrgy.push({
+                  id: `${deadline.barangay_id}-${deadline.document_type}`,
+                  title: deadline.description || deadline.document_type,
+                  barangay: deadline.barangay,
+                  status: 'Not Submitted',
+                });
               }
             }
-          }
-        });
+          });
 
-        // Count barangays in each category
-        let fullyCompliant = 0;
-        let withMissingDocs = 0;
-        let nearDeadline = 0;
-        let overdue = 0;
+          setMissingDocsList(missingDocsWithBrgy);
 
-        Object.values(barangayStats).forEach(stats => {
-          if (stats.hasSubmitted || stats.hasApproved) {
-            if (!stats.hasMissing && !stats.hasOverdue && !stats.hasNearDeadline) {
-              fullyCompliant++;
-            }
-          }
-          if (stats.hasMissing) {
-            withMissingDocs++;
-          }
-          if (stats.hasNearDeadline && !stats.hasOverdue) {
-            nearDeadline++;
-          }
-          if (stats.hasOverdue) {
-            overdue++;
-          }
-        });
+          const barangayStats = {};
 
-        setComplianceData([
-          { label: 'Fully Compliant', count: fullyCompliant, color: COLORS.green },
-          { label: 'With Missing Documents', count: withMissingDocs, color: COLORS.orange },
-          { label: 'Near Deadline', count: nearDeadline, color: COLORS.yellow },
-          { label: 'Overdue', count: overdue, color: COLORS.red },
-        ]);
-
-        // Fetch proposals awaiting review (submitted status) - these need LYDO review
-        const { count: submittedCount } = await supabase
-          .from('documents')
-          .select('*', { count: 'exact', head: true })
-          .eq('status', 'submitted');
-        setProposalsForReview(submittedCount || 0);
-
-        // Fetch consultations/meetings that need attention
-        const { count: consultCount } = await supabase
-          .from('consultations')
-          .select('*', { count: 'exact', head: true })
-          .eq('status', 'pending');
-        setConsultationsCount(consultCount || 0);
-
-        const { data: docsData2 } = await supabase
-          .from('documents')
-          .select(`document_id, title, status, created_at, saved_at, submitted_at, barangay:barangays(barangay_name)`)
-          .order('created_at', { ascending: false })
-          .limit(10);
-
-        if (docsData) {
-          const formatted = docsData.map(doc => {
-            let actionLabel = 'Created document';
-            let actionType = 'create';
-            let icon = '✎';
-            if (doc.status === 'submitted' || doc.status === 'approved') {
-              actionLabel = doc.status === 'approved' ? 'Approved Annual Budget' : 'Sent the ABYIP Template';
-              actionType = 'approved';
-              icon = doc.status === 'approved' ? '✔' : '▷';
-            } else if (doc.status === 'returned') {
-              actionLabel = 'Returned ABYIP Proposal';
-              actionType = 'returned';
-              icon = '↩';
-            }
-            const date = doc.submitted_at || doc.saved_at || doc.created_at;
-            return {
-              id: doc.document_id,
-              label: actionLabel,
-              barangay: doc.barangay?.barangay_name || 'Unknown Barangay',
-              time: toPhilippineTime(date, { hour: '2-digit', minute: '2-digit' }),
-              date: toPhilippineDate(date, { month: 'long', day: 'numeric', year: 'numeric' }),
-              type: actionType,
-              icon,
+          // Initialize stats for each barangay
+          barangayList.forEach(brgy => {
+            barangayStats[brgy.barangay_id] = {
+              hasSubmitted: false,
+              hasApproved: false,
+              hasMissing: false,
+              hasOverdue: false,
+              hasNearDeadline: false,
             };
           });
-          setActivities(formatted);
-        }
 
-        // Fetch LYDO activity logs for Recent Activity section
-        const { data: lydoLogs, error: lydoLogsError } = await supabase
-          .from('lydo_activity_logs')
-          .select(`
-            id,
-            action,
-            description,
-            created_at,
-            performed_by:users!lydo_activity_logs_user_id_fkey (
-              first_name,
-              last_name
-            )
-          `)
-          .order('created_at', { ascending: false })
-          .limit(10);
+          // Check document statuses per barangay
+          allDocs?.forEach(doc => {
+            if (doc.barangay_id && barangayStats[doc.barangay_id]) {
+              if (doc.status === 'submitted' || doc.status === 'approved') {
+                barangayStats[doc.barangay_id].hasSubmitted = true;
+              }
+              if (doc.status === 'approved') {
+                barangayStats[doc.barangay_id].hasApproved = true;
+              }
+            }
+          });
 
-        if (lydoLogsError) {
-          console.error('Error fetching LYDO activity logs:', lydoLogsError);
-        } else if (lydoLogs) {
-          const formattedLogs = lydoLogs.map(log => ({
-            id: log.id,
-            label: log.action || 'Action',
-            description: log.description || '',
-            performedBy: log.performed_by
-              ? `${log.performed_by.first_name} ${log.performed_by.last_name}`
-              : 'LYDO Officer',
-            time: toPhilippineTime(log.created_at, { hour: '2-digit', minute: '2-digit' }),
-            date: toPhilippineDate(log.created_at, { month: 'long', day: 'numeric', year: 'numeric' }),
-            type: getActivityType(log.action),
-            icon: getActivityIcon(log.action),
-          }));
-          setLydoActivities(formattedLogs);
+          // Check deadline status per barangay - use deadlines to determine missing documents
+          const today = new Date();
+          const threeDaysFromNow = new Date(today.getTime() + (3 * 24 * 60 * 60 * 1000));
+
+          // Track which barangays have unfulfilled deadlines (missing documents)
+          const barangaysWithMissing = new Set();
+
+          allDeadlines?.forEach(deadline => {
+            if (deadline.barangay_id && barangayStats[deadline.barangay_id]) {
+              const deadlineDate = new Date(deadline.deadline_date);
+
+              // Check if this deadline is not met (missing document)
+              if (!deadline.is_met) {
+                // Check if there's a submitted/approved document for this deadline
+                const hasDocument = (allDocs || []).some(doc =>
+                  doc.barangay_id === deadline.barangay_id &&
+                  doc.document_type === deadline.document_type &&
+                  (doc.status === 'submitted' || doc.status === 'approved')
+                );
+
+                if (!hasDocument) {
+                  barangayStats[deadline.barangay_id].hasMissing = true;
+                  barangaysWithMissing.add(deadline.barangay_id);
+                }
+
+                if (deadlineDate < today) {
+                  barangayStats[deadline.barangay_id].hasOverdue = true;
+                } else if (deadlineDate <= threeDaysFromNow) {
+                  barangayStats[deadline.barangay_id].hasNearDeadline = true;
+                }
+              }
+            }
+          });
+
+          // Count barangays in each category
+          let fullyCompliant = 0;
+          let withMissingDocs = 0;
+          let nearDeadline = 0;
+          let overdue = 0;
+
+          Object.values(barangayStats).forEach(stats => {
+            if (stats.hasSubmitted || stats.hasApproved) {
+              if (!stats.hasMissing && !stats.hasOverdue && !stats.hasNearDeadline) {
+                fullyCompliant++;
+              }
+            }
+            if (stats.hasMissing) {
+              withMissingDocs++;
+            }
+            if (stats.hasNearDeadline && !stats.hasOverdue) {
+              nearDeadline++;
+            }
+            if (stats.hasOverdue) {
+              overdue++;
+            }
+          });
+
+          setComplianceData([
+            { label: 'Fully Compliant', count: fullyCompliant, color: COLORS.green },
+            { label: 'With Missing Documents', count: withMissingDocs, color: COLORS.orange },
+            { label: 'Near Deadline', count: nearDeadline, color: COLORS.yellow },
+            { label: 'Overdue', count: overdue, color: COLORS.red },
+          ]);
+
+          // Fetch proposals awaiting review (submitted status) - these need LYDO review
+          const { count: submittedCount } = await supabase
+            .from('documents')
+            .select('*', { count: 'exact', head: true })
+            .eq('status', 'submitted');
+          setProposalsForReview(submittedCount || 0);
+
+          // Fetch consultations/meetings that need attention
+          const { count: consultCount } = await supabase
+            .from('consultations')
+            .select('*', { count: 'exact', head: true })
+            .eq('status', 'pending');
+          setConsultationsCount(consultCount || 0);
+
+          const { data: docsData2 } = await supabase
+            .from('documents')
+            .select(`document_id, title, status, created_at, saved_at, submitted_at, barangay:barangays(barangay_name)`)
+            .order('created_at', { ascending: false })
+            .limit(10);
+
+          if (docsData) {
+            const formatted = docsData.map(doc => {
+              let actionLabel = 'Created document';
+              let actionType = 'create';
+              let icon = '✎';
+              if (doc.status === 'submitted' || doc.status === 'approved') {
+                actionLabel = doc.status === 'approved' ? 'Approved Annual Budget' : 'Sent the ABYIP Template';
+                actionType = 'approved';
+                icon = doc.status === 'approved' ? '✔' : '▷';
+              } else if (doc.status === 'returned') {
+                actionLabel = 'Returned ABYIP Proposal';
+                actionType = 'returned';
+                icon = '↩';
+              }
+              const date = doc.submitted_at || doc.saved_at || doc.created_at;
+              return {
+                id: doc.document_id,
+                label: actionLabel,
+                barangay: doc.barangay?.barangay_name || 'Unknown Barangay',
+                time: toPhilippineTime(date, { hour: '2-digit', minute: '2-digit' }),
+                date: toPhilippineDate(date, { month: 'long', day: 'numeric', year: 'numeric' }),
+                type: actionType,
+                icon,
+              };
+            });
+            setActivities(formatted);
+          }
+
+          // Fetch LYDO activity logs for Recent Activity section
+          const { data: lydoLogs, error: lydoLogsError } = await supabase
+            .from('lydo_activity_logs')
+            .select(`
+              id,
+              action,
+              description,
+              created_at,
+              performed_by:users!lydo_activity_logs_user_id_fkey (
+                first_name,
+                last_name
+              )
+            `)
+            .order('created_at', { ascending: false })
+            .limit(10);
+
+          if (lydoLogsError) {
+            console.error('Error fetching LYDO activity logs:', lydoLogsError);
+          } else if (lydoLogs) {
+            const formattedLogs = lydoLogs.map(log => ({
+              id: log.id,
+              label: log.action || 'Action',
+              description: log.description || '',
+              performedBy: log.performed_by
+                ? `${log.performed_by.first_name} ${log.performed_by.last_name}`
+                : 'LYDO Officer',
+              time: toPhilippineTime(log.created_at, { hour: '2-digit', minute: '2-digit' }),
+              date: toPhilippineDate(log.created_at, { month: 'long', day: 'numeric', year: 'numeric' }),
+              type: getActivityType(log.action),
+              icon: getActivityIcon(log.action),
+            }));
+            setLydoActivities(formattedLogs);
+          }
+        } catch (e) {
+          console.error(e);
         }
-      } catch (e) {
-        console.error(e);
-      }
-    };
-    fetchData();
-  }, []);
+      };
+      fetchData();
+    }, [])
+  );
 
   // ── Update notification count when badge counts change ───────────────────────
   useEffect(() => {
@@ -949,66 +952,68 @@ export default function LYDOHomeScreen() {
   // group those rows by document_type + description + deadline_date and
   // roll them up into submitted/pending counts, matching how the card is
   // meant to be read (e.g. "Submitted: 7/11").
-  useEffect(() => {
-    // Parse a Postgres `date` (YYYY-MM-DD) as a UTC midnight instant, to
-    // avoid local-timezone drift shifting the day by ±1.
-    const parseDateOnly = (dateStr) => {
-      const [y, m, d] = dateStr.toString().slice(0, 10).split('-').map(Number);
-      return Date.UTC(y, m - 1, d);
-    };
+  useFocusEffect(
+    React.useCallback(() => {
+      // Parse a Postgres `date` (YYYY-MM-DD) as a UTC midnight instant, to
+      // avoid local-timezone drift shifting the day by ±1.
+      const parseDateOnly = (dateStr) => {
+        const [y, m, d] = dateStr.toString().slice(0, 10).split('-').map(Number);
+        return Date.UTC(y, m - 1, d);
+      };
 
-    const fetchApproachingDeadlines = async () => {
-      try {
-        const { data, error } = await supabase
-          .from('submission_deadlines')
-          .select('deadline_id, document_type, description, deadline_date, is_met')
-          .order('deadline_date', { ascending: true });
+      const fetchApproachingDeadlines = async () => {
+        try {
+          const { data, error } = await supabase
+            .from('submission_deadlines')
+            .select('deadline_id, document_type, description, deadline_date, is_met')
+            .order('deadline_date', { ascending: true });
 
-        if (error) throw error;
+          if (error) throw error;
 
-        const groups = {};
-        (data || []).forEach((row) => {
-          const key = `${row.document_type}|${row.description}|${row.deadline_date}`;
-          if (!groups[key]) {
-            groups[key] = {
-              id: key,
-              title: row.description || row.document_type,
-              deadline_date: row.deadline_date,
-              total: 0,
-              submitted: 0,
-            };
-          }
-          groups[key].total += 1;
-          if (row.is_met) groups[key].submitted += 1;
-        });
+          const groups = {};
+          (data || []).forEach((row) => {
+            const key = `${row.document_type}|${row.description}|${row.deadline_date}`;
+            if (!groups[key]) {
+              groups[key] = {
+                id: key,
+                title: row.description || row.document_type,
+                deadline_date: row.deadline_date,
+                total: 0,
+                submitted: 0,
+              };
+            }
+            groups[key].total += 1;
+            if (row.is_met) groups[key].submitted += 1;
+          });
 
-        const todayUtc = Date.UTC(new Date().getFullYear(), new Date().getMonth(), new Date().getDate());
-        const approaching = Object.values(groups)
-          .filter((g) => g.submitted < g.total) // only deadlines still pending somewhere
-          .map((g) => {
-            const deadlineUtc = parseDateOnly(g.deadline_date);
-            const daysLeft = Math.round((deadlineUtc - todayUtc) / (24 * 60 * 60 * 1000));
-            return {
-              id: g.id,
-              title: g.title,
-              deadline: new Date(deadlineUtc).toLocaleDateString('en-PH', { timeZone: 'UTC', month: 'long', day: 'numeric', year: 'numeric' }),
-              daysLeft,
-              submitted: g.submitted,
-              total: g.total,
-              pending: g.total - g.submitted,
-              urgent: daysLeft <= 3,
-            };
-          })
-          .sort((a, b) => a.daysLeft - b.daysLeft);
+          const todayUtc = Date.UTC(new Date().getFullYear(), new Date().getMonth(), new Date().getDate());
+          const approaching = Object.values(groups)
+            .filter((g) => g.submitted < g.total) // only deadlines still pending somewhere
+            .map((g) => {
+              const deadlineUtc = parseDateOnly(g.deadline_date);
+              const daysLeft = Math.round((deadlineUtc - todayUtc) / (24 * 60 * 60 * 1000));
+              return {
+                id: g.id,
+                title: g.title,
+                deadline: new Date(deadlineUtc).toLocaleDateString('en-PH', { timeZone: 'UTC', month: 'long', day: 'numeric', year: 'numeric' }),
+                daysLeft,
+                submitted: g.submitted,
+                total: g.total,
+                pending: g.total - g.submitted,
+                urgent: daysLeft <= 3,
+              };
+            })
+            .sort((a, b) => a.daysLeft - b.daysLeft);
 
-        setApproachingDeadlines(approaching);
-      } catch (err) {
-        console.error('Error fetching approaching deadlines:', err);
-      }
-    };
+          setApproachingDeadlines(approaching);
+        } catch (err) {
+          console.error('Error fetching approaching deadlines:', err);
+        }
+      };
 
-    fetchApproachingDeadlines();
-  }, []);
+      fetchApproachingDeadlines();
+    }, [])
+  );
 
   const today = toPhilippineDate(new Date(), { weekday: undefined, month: 'long', day: 'numeric', year: 'numeric' });
 
@@ -1025,6 +1030,19 @@ export default function LYDOHomeScreen() {
   const handleLogout = () => { logout(); router.replace('/'); };
 
   const handleSendReminder = () => Alert.alert('Reminder Sent', 'All non-compliant barangays have been notified.');
+
+  // Handle monitoring task button click
+  const handleMonitoringTask = (task) => {
+    if (task.actionType === 'reminder') {
+      handleSendReminder();
+    } else if (task.actionType === 'review' && task.viewFilter) {
+      // Navigate to lydo-monitor with the appropriate filter
+      router.push({
+        pathname: '/(tabs)/lydo-monitor',
+        params: { viewFilter: task.viewFilter },
+      });
+    }
+  };
 
   // ── SIDEBAR ──
   const NAV_ITEMS = [
@@ -1324,7 +1342,7 @@ export default function LYDOHomeScreen() {
                         )}
                         <TouchableOpacity
                           style={styles.taskBtn}
-                          onPress={task.actionType === 'reminder' ? handleSendReminder : undefined}
+                          onPress={() => handleMonitoringTask(task)}
                           activeOpacity={0.8}
                         >
                           <Text style={styles.taskBtnText}>{task.action}</Text>
@@ -1382,7 +1400,11 @@ export default function LYDOHomeScreen() {
                       onPress={() => {
                         if (action.id === 'calendar') setCalendarVisible(true);
                         else if (action.id === 'missing') setMissingDocsModalVisible(true);
-                        else if (action.route) router.push(action.route);
+                        else if (action.route) {
+                          // Pass viewFilter param if defined
+                          const params = action.viewFilter ? { viewFilter: action.viewFilter } : {};
+                          router.push({ pathname: action.route, params });
+                        }
                       }}
                     >
                       <View style={[styles.quickIconBox, { backgroundColor: action.color + '18' }]}>
