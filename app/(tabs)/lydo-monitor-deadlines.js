@@ -622,11 +622,84 @@ export default function LYDOMonitorDeadlinesScreen() {
 
     if (error) throw error;
 
-    return (data || []).map(row => ({
-      ...row,
-      barangayName:  row.barangays?.barangay_name ?? '—',
-      createdByName: getFullName(row.creator),
-    }));
+    // Get all document types to map short codes to IDs
+    const { data: docTypes } = await supabase
+      .from('document_types')
+      .select('id, document_type');
+
+    // Build a map of document_type names/shortcodes to IDs
+    const docTypeToId = {};
+    (docTypes || []).forEach(dt => {
+      const name = (dt.document_type || '').trim().toLowerCase();
+      docTypeToId[name] = String(dt.id);
+      // Also try to extract short code from name (e.g., "Annual Budget Youth Investment Program" -> "ABYIP")
+      const shortMatch = name.match(/\b\w/g);
+      if (shortMatch) {
+        docTypeToId[shortMatch.join('')] = String(dt.id);
+      }
+    });
+
+    // Get all documents with approved status
+    const { data: docs } = await supabase
+      .from('documents')
+      .select('document_id, barangay_id, document_type, status, title')
+      .eq('status', 'approved');
+
+    // Build a map: barangay_id + document_type_id -> exists
+    const approvedDocsMap = {};
+    (docs || []).forEach(d => {
+      const key = `${d.barangay_id}_${d.document_type}`;
+      approvedDocsMap[key] = d;
+    });
+
+    // Process each deadline and check if there's an approved document
+    const now = new Date().toISOString();
+    const updatedDeadlines = [];
+
+    for (const row of (data || [])) {
+      // Determine the document_type ID to look for
+      // The deadline stores either a short code (ABYIP) or description
+      const docTypeFromDeadline = row.document_type || '';
+      const descFromDeadline = (row.description || '').toLowerCase().trim();
+
+      // Try to find the matching document type ID
+      let docTypeId = docTypeToId[docTypeFromDeadline.toUpperCase()] ||
+                      docTypeToId[docTypeFromDeadline.toLowerCase()] ||
+                      docTypeToId[descFromDeadline];
+
+      // Fallback: try to match by description in document_types table
+      if (!docTypeId) {
+        const matched = (docTypes || []).find(dt =>
+          (dt.document_type || '').toLowerCase().includes(descFromDeadline) ||
+          descFromDeadline.includes((dt.document_type || '').toLowerCase().trim())
+        );
+        if (matched) {
+          docTypeId = String(matched.id);
+        }
+      }
+
+      // Check if there's an approved document for this deadline
+      const docKey = `${row.barangay_id}_${docTypeId}`;
+      const hasApprovedDoc = !!approvedDocsMap[docKey];
+
+      // If the deadline says not met but there's an approved doc, update it
+      if (!row.is_met && hasApprovedDoc) {
+        await supabase
+          .from('submission_deadlines')
+          .update({ is_met: true, met_at: now })
+          .eq('deadline_id', row.deadline_id);
+        row.is_met = true;
+        row.met_at = now;
+      }
+
+      updatedDeadlines.push({
+        ...row,
+        barangayName:  row.barangays?.barangay_name ?? '—',
+        createdByName: getFullName(row.creator),
+      });
+    }
+
+    return updatedDeadlines;
   }, []);
 
   const getFullName = (u) => {
