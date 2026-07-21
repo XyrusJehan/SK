@@ -224,17 +224,15 @@ export default function SKPlanningScreen() {
   const [templates, setTemplates]                = useState([]);
   const [budgetData, setBudgetData]               = useState(null);
   const [viewerModal, setViewerModal]             = useState({ visible: false, fileUrl: null, title: '' });
-  const [downloadModalVisible, setDownloadModalVisible] = useState(false);
-  const [documentToDownload, setDocumentToDownload]   = useState(null);
 
-  // Fetch templates distributed to this barangay
+  // Fetch templates for this barangay (from distributions + direct from templates table)
   useEffect(() => {
     const fetchTemplates = async () => {
       if (!barangayId) return;
 
       try {
-        // Get templates distributed to this barangay
-        const { data: distributions, error } = await supabase
+        // First, get templates distributed to this barangay
+        const { data: distributions, error: distError } = await supabase
           .from('template_distributions')
           .select(`
             distribution_id,
@@ -255,22 +253,69 @@ export default function SKPlanningScreen() {
           `)
           .eq('barangay_id', barangayId);
 
-        if (error) {
-          console.error('Error fetching templates:', error);
-          return;
+        if (distError) {
+          console.error('Error fetching template distributions:', distError);
         }
 
-        const formattedTemplates = distributions?.map(d => ({
-          id: d.templates?.template_id,
-          name: d.templates?.title || 'Untitled Template',
-          type: d.templates?.template_category || 'Unknown',
-          source: 'LYDO',
-          dateReceived: new Date(d.templates?.created_at || d.distributed_at).toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' }),
-          fileUrl: d.templates?.file_url || '',
-          version: d.templates?.version || 1,
-        })) || [];
+        // Then, also fetch all active templates directly (for planning category)
+        const { data: allTemplates, error: templateError } = await supabase
+          .from('templates')
+          .select(`
+            template_id,
+            title,
+            description,
+            template_category,
+            document_type,
+            status,
+            created_at,
+            file_url,
+            version
+          `)
+          .eq('status', 'active')
+          .eq('template_category', 'planning');
 
-        setTemplates(formattedTemplates);
+        if (templateError) {
+          console.error('Error fetching templates:', templateError);
+        }
+
+        // Combine and deduplicate templates
+        const templateMap = new Map();
+
+        // Add distributed templates
+        if (distributions) {
+          distributions.forEach(d => {
+            if (d.templates && d.templates.template_id) {
+              templateMap.set(d.templates.template_id, {
+                id: d.templates.template_id,
+                name: d.templates.title || 'Untitled Template',
+                type: d.templates.template_category || 'Unknown',
+                source: 'LYDO',
+                dateReceived: new Date(d.templates.created_at || d.distributed_at).toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' }),
+                fileUrl: d.templates.file_url || '',
+                version: d.templates.version || 1,
+              });
+            }
+          });
+        }
+
+        // Add direct templates (if not already in map)
+        if (allTemplates) {
+          allTemplates.forEach(t => {
+            if (!templateMap.has(t.template_id) && t.file_url) {
+              templateMap.set(t.template_id, {
+                id: t.template_id,
+                name: t.title || 'Untitled Template',
+                type: t.template_category || 'Unknown',
+                source: 'LYDO',
+                dateReceived: new Date(t.created_at).toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' }),
+                fileUrl: t.file_url || '',
+                version: t.version || 1,
+              });
+            }
+          });
+        }
+
+        setTemplates(Array.from(templateMap.values()));
       } catch (error) {
         console.error('Error:', error);
       }
@@ -394,25 +439,14 @@ export default function SKPlanningScreen() {
     setShowEditModal(false);
   };
 
-  const handleDownloadTemplate = () => {
+  const handleDownloadTemplate = async () => {
     if (!selectedItem?.fileUrl) {
       Alert.alert('No File', 'This template has no file to download.');
       return;
     }
-    setDocumentToDownload(selectedItem);
-    setDownloadModalVisible(true);
     setShowEditModal(false);
-  };
-
-  const handleDownloadConfirm = async () => {
-    if (!documentToDownload?.fileUrl) {
-      Alert.alert('No File', 'This template does not have an attached file.');
-      return;
-    }
-    setDownloadModalVisible(false);
-    setDocumentToDownload(null);
     try {
-      await Linking.openURL(documentToDownload.fileUrl);
+      await Linking.openURL(selectedItem.fileUrl);
     } catch (error) {
       console.error('Download error:', error);
       Alert.alert('Download Failed', `Could not open the file: ${error.message}`);
@@ -481,9 +515,12 @@ export default function SKPlanningScreen() {
               <Text style={styles.viewerCloseText}>← Back</Text>
             </TouchableOpacity>
             <Text style={styles.viewerTitle} numberOfLines={1}>{viewerModal.title}</Text>
-            <TouchableOpacity onPress={() => {
-              setDocumentToDownload({ fileUrl: viewerModal.fileUrl, title: viewerModal.title });
-              setDownloadModalVisible(true);
+            <TouchableOpacity onPress={async () => {
+              try {
+                await Linking.openURL(viewerModal.fileUrl);
+              } catch (error) {
+                Alert.alert('Download Failed', `Could not open the file: ${error.message}`);
+              }
             }}>
               <Text style={styles.viewerDownloadText}>⬇</Text>
             </TouchableOpacity>
@@ -501,34 +538,6 @@ export default function SKPlanningScreen() {
       </Modal>
     );
   };
-
-  // ── Download Confirm Modal ───────────────────────────────────────────────────
-  const renderDownloadModal = () => (
-    <Modal visible={downloadModalVisible} transparent animationType="fade" onRequestClose={() => setDownloadModalVisible(false)}>
-      <View style={styles.downloadModalBackdrop}>
-        <View style={styles.downloadModalCard}>
-          <Text style={styles.downloadModalTitle}>Download Document</Text>
-          <Text style={styles.downloadModalText}>
-            Do you want to download "{documentToDownload?.name}"?
-          </Text>
-          <View style={styles.downloadModalActions}>
-            <TouchableOpacity
-              style={[styles.downloadModalBtn, { backgroundColor: COLORS.lightGray }]}
-              onPress={() => { setDownloadModalVisible(false); setDocumentToDownload(null); }}
-            >
-              <Text style={styles.downloadModalBtnText}>Cancel</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.downloadModalBtn, { backgroundColor: COLORS.navy }]}
-              onPress={handleDownloadConfirm}
-            >
-              <Text style={[styles.downloadModalBtnText, { color: COLORS.white }]}>Download</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </View>
-    </Modal>
-  );
 
   // ── Main Content ──
   const renderContent = () => (
@@ -694,7 +703,6 @@ export default function SKPlanningScreen() {
 
       {renderEditModal()}
       {renderViewerModal()}
-      {renderDownloadModal()}
 
       <View style={styles.layout}>
         {isMobile && sidebarVisible && (
@@ -1025,13 +1033,4 @@ const styles = StyleSheet.create({
   viewerFallbackText: { fontSize: 14, color: COLORS.subText, marginBottom: 16 },
   viewerFallbackBtn: { backgroundColor: COLORS.navy, paddingHorizontal: 20, paddingVertical: 12, borderRadius: 8 },
   viewerFallbackBtnText: { fontSize: 14, fontWeight: '700', color: COLORS.white },
-
-  // ── Download Modal ──
-  downloadModalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', alignItems: 'center', justifyContent: 'center' },
-  downloadModalCard: { backgroundColor: COLORS.white, borderRadius: 16, padding: 24, width: '100%', maxWidth: 340 },
-  downloadModalTitle: { fontSize: 16, fontWeight: '800', color: COLORS.darkText, marginBottom: 12, textAlign: 'center' },
-  downloadModalText: { fontSize: 13, color: COLORS.subText, marginBottom: 20, textAlign: 'center', lineHeight: 18 },
-  downloadModalActions: { flexDirection: 'row', gap: 10 },
-  downloadModalBtn: { flex: 1, paddingVertical: 12, borderRadius: 10, alignItems: 'center' },
-  downloadModalBtnText: { fontSize: 13, fontWeight: '700', color: COLORS.darkText },
 });
