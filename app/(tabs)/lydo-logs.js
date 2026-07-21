@@ -9,11 +9,102 @@ import { useNav } from './navContext';
 import { useAuth } from './authContext';
 import { supabase } from '../../utils/supabase';
 
+// Supabase returns timestamps without a timezone suffix (e.g. '2026-05-28 03:50:28').
+// JS treats that as local time, not UTC, causing an 8-hour display error in PHT.
+// This helper forces correct UTC parsing before any display conversion.
+const toUtcDate = (dateStr) => {
+  if (!dateStr) return new Date();
+  const iso = dateStr.toString().replace(' ', 'T').replace(/Z?$/, 'Z');
+  return new Date(iso);
+};
+
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const isMobile = SCREEN_WIDTH < 768;
 
 // ─── NAV TABS ─────────────────────────────────────────────────────────────────
 const NAV_TABS = ['Dashboard', 'Documents', 'Monitor', 'Barangay', 'Logs'];
+
+// ─── SIDEBAR NAV ICONS (pure React Native Views — no react-native-svg) ────────
+
+// Dashboard: 2×2 grid of rounded squares
+const NavDashboardIcon = ({ color = '#fff', size = 16 }) => {
+  const s = size * 0.38, gap = size * 0.12, r = size * 0.12;
+  const box = { width: s, height: s, borderRadius: r, backgroundColor: color };
+  return (
+    <View style={{ width: size, height: size, justifyContent: 'center', alignItems: 'center' }}>
+      <View style={{ flexDirection: 'row', gap }}><View style={box} /><View style={box} /></View>
+      <View style={{ height: gap }} />
+      <View style={{ flexDirection: 'row', gap }}><View style={box} /><View style={box} /></View>
+    </View>
+  );
+};
+
+// Documents: file shape with fold + two lines
+const NavDocumentsIcon = ({ color = '#fff', size = 16 }) => {
+  const w = size * 0.6, h = size * 0.78, fold = size * 0.22;
+  return (
+    <View style={{ width: size, height: size, justifyContent: 'center', alignItems: 'center' }}>
+      <View style={{ width: w, height: h, justifyContent: 'flex-end', paddingBottom: size * 0.08, paddingHorizontal: size * 0.1 }}>
+        <View style={{ position: 'absolute', left: 0, right: 0, top: fold, bottom: 0, borderWidth: 1.5, borderColor: color, borderRadius: size * 0.08 }} />
+        <View style={{ position: 'absolute', top: 0, right: 0, width: fold, height: fold, backgroundColor: color, borderBottomLeftRadius: size * 0.06 }} />
+        <View style={{ position: 'absolute', top: 0, left: 0, width: w - fold, height: fold, borderTopWidth: 1.5, borderLeftWidth: 1.5, borderColor: color, borderTopLeftRadius: size * 0.08 }} />
+        <View style={{ height: 1.5, backgroundColor: color, borderRadius: 1, marginBottom: size * 0.1, width: '80%' }} />
+        <View style={{ height: 1.5, backgroundColor: color, borderRadius: 1, width: '55%' }} />
+      </View>
+    </View>
+  );
+};
+
+// Monitor: simple globe — circle + horizontal line + vertical oval hint
+const NavMonitorIcon = ({ color = '#fff', size = 16 }) => (
+  <View style={{ width: size, height: size, justifyContent: 'center', alignItems: 'center' }}>
+    <View style={{ width: size * 0.82, height: size * 0.82, borderRadius: size * 0.41, borderWidth: 1.5, borderColor: color, justifyContent: 'center', alignItems: 'center', overflow: 'hidden' }}>
+      <View style={{ position: 'absolute', height: 1.5, width: '100%', backgroundColor: color }} />
+      <View style={{ width: size * 0.38, height: size * 0.78, borderRadius: size * 0.19, borderWidth: 1.5, borderColor: color, backgroundColor: 'transparent' }} />
+    </View>
+  </View>
+);
+
+// Barangay: building/institution icon — base + columns hint
+const NavBarangayIcon = ({ color = '#fff', size = 16 }) => {
+  const bw = 1.5;
+  return (
+    <View style={{ width: size, height: size, justifyContent: 'center', alignItems: 'center' }}>
+      {/* roof / triangle top */}
+      <View style={{ width: size * 0.82, height: size * 0.22, borderLeftWidth: bw, borderRightWidth: bw, borderTopWidth: bw, borderColor: color, borderTopLeftRadius: size * 0.06, borderTopRightRadius: size * 0.06 }} />
+      {/* body */}
+      <View style={{ width: size * 0.82, height: size * 0.52, borderLeftWidth: bw, borderRightWidth: bw, borderBottomWidth: bw, borderColor: color, flexDirection: 'row', justifyContent: 'space-around', alignItems: 'center', paddingHorizontal: size * 0.08, paddingBottom: size * 0.06 }}>
+        {[0, 1, 2].map(i => (
+          <View key={i} style={{ width: size * 0.1, height: size * 0.36, backgroundColor: color, borderRadius: size * 0.03 }} />
+        ))}
+      </View>
+    </View>
+  );
+};
+
+// Logs: clipboard with lines
+const NavLogsIcon = ({ color = '#fff', size = 16 }) => (
+  <View style={{ width: size, height: size, justifyContent: 'center', alignItems: 'center' }}>
+    <View style={{ width: size * 0.75, height: size * 0.85, borderWidth: 1.5, borderColor: color, borderRadius: size * 0.1, paddingHorizontal: size * 0.1, paddingVertical: size * 0.1, justifyContent: 'space-around' }}>
+      <View style={{ position: 'absolute', top: -size * 0.08, alignSelf: 'center', width: size * 0.3, height: size * 0.14, backgroundColor: color, borderRadius: size * 0.04 }} />
+      {[0, 1, 2].map(i => (
+        <View key={i} style={{ flexDirection: 'row', alignItems: 'center', gap: size * 0.08, marginTop: i === 0 ? size * 0.1 : 0 }}>
+          <View style={{ width: size * 0.1, height: size * 0.1, borderRadius: size * 0.05, backgroundColor: color }} />
+          <View style={{ flex: 1, height: 1.5, backgroundColor: color, borderRadius: 1 }} />
+        </View>
+      ))}
+    </View>
+  </View>
+);
+
+// Logout: door with arrow
+const NavLogoutIcon = ({ color = '#fff', size = 16 }) => (
+  <View style={{ width: size, height: size, justifyContent: 'center', alignItems: 'center' }}>
+    <View style={{ position: 'absolute', left: 0, top: 0, width: size * 0.55, height: size, borderWidth: 1.5, borderColor: color, borderRadius: size * 0.08 }} />
+    <View style={{ position: 'absolute', right: size * 0.02, width: size * 0.52, height: 1.8, backgroundColor: color, borderRadius: 1 }} />
+    <View style={{ position: 'absolute', right: size * 0.02, width: size * 0.2, height: size * 0.2, borderTopWidth: 1.8, borderRightWidth: 1.8, borderColor: color, transform: [{ rotate: '45deg' }], marginTop: -size * 0.01 }} />
+  </View>
+);
 
 // ─── COLORS ───────────────────────────────────────────────────────────────────
 const COLORS = {
@@ -223,7 +314,7 @@ export default function LYDOLogsScreen() {
             id: row.id,
             action: row.action || 'Forward template',
             description: row.description || '',
-            createdAt: new Date(row.created_at),
+            createdAt: toUtcDate(row.created_at),
             performedBy: row.performed_by
               ? `${row.performed_by.first_name} ${row.performed_by.last_name}`
               : 'LYDO Officer',
@@ -296,12 +387,20 @@ export default function LYDOLogsScreen() {
   const handleLogout = () => { logout(); router.replace('/'); };
 
   const formatDate = (date) =>
-    new Date(date).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' });
+    new Date(date).toLocaleDateString('en-PH', { timeZone: 'Asia/Manila', month: 'short', day: 'numeric', year: 'numeric' });
 
   const formatTime = (date) =>
-    new Date(date).toLocaleTimeString('en-PH', { hour: 'numeric', minute: '2-digit', hour12: true });
+    new Date(date).toLocaleTimeString('en-PH', { timeZone: 'Asia/Manila', hour: 'numeric', minute: '2-digit', hour12: true });
 
   // ── Sidebar ────────────────────────────────────────────────────────────────
+  const NAV_ITEMS = [
+    { tab: 'Dashboard', IconComponent: NavDashboardIcon },
+    { tab: 'Documents', IconComponent: NavDocumentsIcon },
+    { tab: 'Monitor',   IconComponent: NavMonitorIcon   },
+    { tab: 'Barangay',  IconComponent: NavBarangayIcon  },
+    { tab: 'Logs',      IconComponent: NavLogsIcon      },
+  ];
+
   const renderSidebar = () => (
     <View style={styles.sidebar}>
       <View style={styles.logoPill}>
@@ -312,8 +411,9 @@ export default function LYDOLogsScreen() {
         />
       </View>
       <View style={styles.sidebarSpacer} />
-      {NAV_TABS.map((tab) => {
+      {NAV_ITEMS.map(({ tab, IconComponent }) => {
         const active = activeTab === tab;
+        const iconColor = active ? '#133E75' : 'rgba(255,255,255,0.85)';
         return (
           <TouchableOpacity
             key={tab}
@@ -321,13 +421,19 @@ export default function LYDOLogsScreen() {
             onPress={() => handleNav(tab)}
             activeOpacity={0.8}
           >
-            <Text style={[styles.navLabel, active && styles.navLabelActive]}>{tab}</Text>
+            <View style={styles.navItemInner}>
+              <IconComponent color={iconColor} size={16} />
+              <Text style={[styles.navLabel, active && styles.navLabelActive]}>{tab}</Text>
+            </View>
           </TouchableOpacity>
         );
       })}
       <View style={{ flex: 1 }} />
       <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout} activeOpacity={0.8}>
-        <Text style={styles.logoutText}>Logout</Text>
+        <View style={styles.navItemInner}>
+          <NavLogoutIcon color="rgba(255,255,255,0.85)" size={16} />
+          <Text style={styles.logoutText}>Logout</Text>
+        </View>
       </TouchableOpacity>
     </View>
   );
@@ -587,6 +693,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 5,
   },
   sidebarSpacer: { height: 28 },
+  navItemInner: { flexDirection: 'row', alignItems: 'center', gap: 10 },
 
   // ── Sidebar elements
   logoPill: {

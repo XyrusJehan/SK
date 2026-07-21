@@ -1,5 +1,5 @@
 import { Feather } from '@expo/vector-icons';
-import { useFocusEffect, useRouter } from 'expo-router';
+import { useFocusEffect, useRouter, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -22,6 +22,48 @@ import {
 import { supabase } from '../../utils/supabase';
 import { useAuth } from './authContext';
 import { useNav } from './navContext';
+
+// ─── Mark matching deadline(s) as met when a document is approved ─────────────
+// `documents.document_type` is a full title like
+// "Annual Barangay Youth Investment Program (ABYIP)" — the short code is
+// extracted from the trailing "(...)" and compared against
+// `submission_deadlines.document_type`, which stores just the short code.
+function extractDocCode(fullDocumentType) {
+  if (!fullDocumentType) return null;
+  const match = fullDocumentType.match(/\(([^)]+)\)\s*$/);
+  return match ? match[1].trim() : fullDocumentType.trim();
+}
+
+async function markDeadlineMetForApprovedDocument({ barangayId, documentType, year }) {
+  const code = extractDocCode(documentType);
+  if (!code || !barangayId || !year) return;
+
+  const from = `${year}-01-01`;
+  const to   = `${year}-12-31`;
+
+  try {
+    const { data: matches, error: findError } = await supabase
+      .from('submission_deadlines')
+      .select('deadline_id')
+      .eq('barangay_id', barangayId)
+      .eq('document_type', code)
+      .eq('is_met', false)
+      .gte('deadline_date', from)
+      .lte('deadline_date', to);
+
+    if (findError) { console.error('Error finding matching deadlines:', findError); return; }
+    if (!matches || matches.length === 0) return;
+
+    const { error: updateError } = await supabase
+      .from('submission_deadlines')
+      .update({ is_met: true, met_at: new Date().toISOString() })
+      .in('deadline_id', matches.map((m) => m.deadline_id));
+
+    if (updateError) console.error('Error marking deadline(s) met:', updateError);
+  } catch (e) {
+    console.error('markDeadlineMetForApprovedDocument unexpected:', e);
+  }
+}
 
 // Supabase timestamps have no 'Z' suffix — JS mis-parses them as local time.
 // toUtcDate forces correct UTC parsing before PHT display.
@@ -76,7 +118,89 @@ const COLORS = {
 };
 
 const NAV_TABS     = ['Dashboard', 'Documents', 'Monitor', 'Barangay', 'Logs'];
-const MONITOR_TABS = ['Consultation', 'Budget', 'Report'];
+const MONITOR_TABS = ['Consultation', 'Budget', 'Report', 'Deadlines'];
+
+// ─── SIDEBAR NAV ICONS (pure React Native Views — no react-native-svg) ────────
+
+// Dashboard: 2×2 grid of rounded squares
+const DashboardIcon = ({ color = '#fff', size = 16 }) => {
+  const s = size * 0.38, gap = size * 0.12, r = size * 0.12;
+  const box = { width: s, height: s, borderRadius: r, backgroundColor: color };
+  return (
+    <View style={{ width: size, height: size, justifyContent: 'center', alignItems: 'center' }}>
+      <View style={{ flexDirection: 'row', gap }}><View style={box} /><View style={box} /></View>
+      <View style={{ height: gap }} />
+      <View style={{ flexDirection: 'row', gap }}><View style={box} /><View style={box} /></View>
+    </View>
+  );
+};
+
+// Documents: file shape with fold + two lines
+const DocumentsIcon = ({ color = '#fff', size = 16 }) => {
+  const w = size * 0.6, h = size * 0.78, fold = size * 0.22;
+  return (
+    <View style={{ width: size, height: size, justifyContent: 'center', alignItems: 'center' }}>
+      <View style={{ width: w, height: h, justifyContent: 'flex-end', paddingBottom: size * 0.08, paddingHorizontal: size * 0.1 }}>
+        <View style={{ position: 'absolute', left: 0, right: 0, top: fold, bottom: 0, borderWidth: 1.5, borderColor: color, borderRadius: size * 0.08 }} />
+        <View style={{ position: 'absolute', top: 0, right: 0, width: fold, height: fold, backgroundColor: color, borderBottomLeftRadius: size * 0.06 }} />
+        <View style={{ position: 'absolute', top: 0, left: 0, width: w - fold, height: fold, borderTopWidth: 1.5, borderLeftWidth: 1.5, borderColor: color, borderTopLeftRadius: size * 0.08 }} />
+        <View style={{ height: 1.5, backgroundColor: color, borderRadius: 1, marginBottom: size * 0.1, width: '80%' }} />
+        <View style={{ height: 1.5, backgroundColor: color, borderRadius: 1, width: '55%' }} />
+      </View>
+    </View>
+  );
+};
+
+// Monitor: simple globe — circle + horizontal line + vertical oval hint
+const MonitorIcon = ({ color = '#fff', size = 16 }) => (
+  <View style={{ width: size, height: size, justifyContent: 'center', alignItems: 'center' }}>
+    <View style={{ width: size * 0.82, height: size * 0.82, borderRadius: size * 0.41, borderWidth: 1.5, borderColor: color, justifyContent: 'center', alignItems: 'center', overflow: 'hidden' }}>
+      <View style={{ position: 'absolute', height: 1.5, width: '100%', backgroundColor: color }} />
+      <View style={{ width: size * 0.38, height: size * 0.78, borderRadius: size * 0.19, borderWidth: 1.5, borderColor: color, backgroundColor: 'transparent' }} />
+    </View>
+  </View>
+);
+
+// Barangay: building/institution icon — base + columns hint
+const BarangayIcon = ({ color = '#fff', size = 16 }) => {
+  const bw = 1.5;
+  return (
+    <View style={{ width: size, height: size, justifyContent: 'center', alignItems: 'center' }}>
+      {/* roof / triangle top */}
+      <View style={{ width: size * 0.82, height: size * 0.22, borderLeftWidth: bw, borderRightWidth: bw, borderTopWidth: bw, borderColor: color, borderTopLeftRadius: size * 0.06, borderTopRightRadius: size * 0.06 }} />
+      {/* body */}
+      <View style={{ width: size * 0.82, height: size * 0.52, borderLeftWidth: bw, borderRightWidth: bw, borderBottomWidth: bw, borderColor: color, flexDirection: 'row', justifyContent: 'space-around', alignItems: 'center', paddingHorizontal: size * 0.08, paddingBottom: size * 0.06 }}>
+        {[0, 1, 2].map(i => (
+          <View key={i} style={{ width: size * 0.1, height: size * 0.36, backgroundColor: color, borderRadius: size * 0.03 }} />
+        ))}
+      </View>
+    </View>
+  );
+};
+
+// Logs: clipboard with lines
+const LogsIcon = ({ color = '#fff', size = 16 }) => (
+  <View style={{ width: size, height: size, justifyContent: 'center', alignItems: 'center' }}>
+    <View style={{ width: size * 0.75, height: size * 0.85, borderWidth: 1.5, borderColor: color, borderRadius: size * 0.1, paddingHorizontal: size * 0.1, paddingVertical: size * 0.1, justifyContent: 'space-around' }}>
+      <View style={{ position: 'absolute', top: -size * 0.08, alignSelf: 'center', width: size * 0.3, height: size * 0.14, backgroundColor: color, borderRadius: size * 0.04 }} />
+      {[0, 1, 2].map(i => (
+        <View key={i} style={{ flexDirection: 'row', alignItems: 'center', gap: size * 0.08, marginTop: i === 0 ? size * 0.1 : 0 }}>
+          <View style={{ width: size * 0.1, height: size * 0.1, borderRadius: size * 0.05, backgroundColor: color }} />
+          <View style={{ flex: 1, height: 1.5, backgroundColor: color, borderRadius: 1 }} />
+        </View>
+      ))}
+    </View>
+  </View>
+);
+
+// Logout: door with arrow
+const LogoutNavIcon = ({ color = '#fff', size = 16 }) => (
+  <View style={{ width: size, height: size, justifyContent: 'center', alignItems: 'center' }}>
+    <View style={{ position: 'absolute', left: 0, top: 0, width: size * 0.55, height: size, borderWidth: 1.5, borderColor: color, borderRadius: size * 0.08 }} />
+    <View style={{ position: 'absolute', right: size * 0.02, width: size * 0.52, height: 1.8, backgroundColor: color, borderRadius: 1 }} />
+    <View style={{ position: 'absolute', right: size * 0.02, width: size * 0.2, height: size * 0.2, borderTopWidth: 1.8, borderRightWidth: 1.8, borderColor: color, transform: [{ rotate: '45deg' }], marginTop: -size * 0.01 }} />
+  </View>
+);
 
 const TABLE_DATA = {
   Budget: [
@@ -375,6 +499,12 @@ const DocumentViewer = ({ item, onClose, onApproved, onRefreshDocs }) => {
         status: 'approved', reviewed_at: new Date().toISOString(), reviewed_by: user?.userId || null,
       }).eq('document_id', item.id);
       if (docError) { setApproveModalVisible(false); Alert.alert('Error', 'Failed to approve document.'); setApproving(false); return; }
+      // Mark any matching, still-unmet submission deadline as met
+      await markDeadlineMetForApprovedDocument({
+        barangayId:   item.barangayId,
+        documentType: item.documentType,
+        year:         item.year,
+      });
       // Log the approval activity
       await logActivity('Approve proposal', `Approved "${item.document}" from ${item.barangay}`);
       setApproveModalVisible(false);
@@ -988,11 +1118,14 @@ const TableRow = ({ item, isEven, viewFilter, onView }) => {
 // ─── MAIN SCREEN ──────────────────────────────────────────────────────────────
 export default function LYDOMonitorScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams();
   const { activeTab, setActiveTab } = useNav();
   const { logout } = useAuth();
 
   const [activeMonitorTab, setActiveMonitorTab] = useState('Consultation');
-  const [viewFilter, setViewFilter]             = useState('submitted');
+  const [viewFilter, setViewFilter]             = useState(
+    ['submitted', 'approved', 'revision'].includes(params?.viewFilter) ? params.viewFilter : 'submitted'
+  );
   const [searchText, setSearchText]             = useState('');
   const [barangayFilter, setBarangayFilter]     = useState('');
   const [documentFilter, setDocumentFilter]     = useState('');
@@ -1004,6 +1137,13 @@ export default function LYDOMonitorScreen() {
   const [returnedDocs, setReturnedDocs]         = useState([]);
 
   const [viewingItem, setViewingItem] = useState(null);
+
+  // Sync viewFilter when params change (e.g., navigating from dashboard)
+  useEffect(() => {
+    if (params?.viewFilter && ['submitted', 'approved', 'revision'].includes(params.viewFilter)) {
+      setViewFilter(params.viewFilter);
+    }
+  }, [params?.viewFilter]);
 
   const today = new Date().toLocaleDateString('en-PH', {
     timeZone: 'Asia/Manila', month: 'long', day: 'numeric', year: 'numeric',
@@ -1053,7 +1193,10 @@ export default function LYDOMonitorScreen() {
         return {
           id:            doc.document_id.toString(),
           barangay:      doc.barangay?.barangay_name || 'Unknown Barangay',
+          barangayId:    doc.barangay?.barangay_id ?? null,
           document:      doc.title || 'Untitled Document',
+          documentType:  doc.document_type || null,
+          year:          doc.year || null,
           time:          toPhilippineTime(date, { hour: '2-digit', minute: '2-digit' }),
           submittedDate: doc.submitted_at ? toPhilippineDate(doc.submitted_at, { month: '2-digit', day: '2-digit', year: '2-digit' }) : null,
           feedbackDate:  doc.submitted_at ? toPhilippineDate(doc.submitted_at, { month: '2-digit', day: '2-digit', year: '2-digit' }) : null,
@@ -1194,24 +1337,39 @@ export default function LYDOMonitorScreen() {
 
   const rows = getRows();
 
+  const NAV_ITEMS = [
+    { tab: 'Dashboard', IconComponent: DashboardIcon },
+    { tab: 'Documents', IconComponent: DocumentsIcon },
+    { tab: 'Monitor',   IconComponent: MonitorIcon   },
+    { tab: 'Barangay',  IconComponent: BarangayIcon  },
+    { tab: 'Logs',      IconComponent: LogsIcon      },
+  ];
+
   const renderSidebar = () => (
     <View style={styles.sidebar}>
       <View style={styles.logoPill}>
         <Image source={require('./../../assets/images/lydo-logo.png')} style={styles.logoImage} resizeMode="contain" />
       </View>
-      <View style={{ height: 28 }} />
-      {NAV_TABS.map(tab => {
+      <View style={styles.sidebarSpacer} />
+      {NAV_ITEMS.map(({ tab, IconComponent }) => {
         const active = activeTab === tab;
+        const iconColor = active ? '#133E75' : 'rgba(255,255,255,0.85)';
         return (
           <TouchableOpacity key={tab} style={[styles.navItem, active && styles.navItemActive]}
             onPress={() => handleNavPress(tab)} activeOpacity={0.8}>
-            <Text style={[styles.navLabel, active && styles.navLabelActive]}>{tab}</Text>
+            <View style={styles.navItemInner}>
+              <IconComponent color={iconColor} size={16} />
+              <Text style={[styles.navLabel, active && styles.navLabelActive]}>{tab}</Text>
+            </View>
           </TouchableOpacity>
         );
       })}
       <View style={{ flex: 1 }} />
       <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout} activeOpacity={0.8}>
-        <Text style={styles.logoutText}>Logout</Text>
+        <View style={styles.navItemInner}>
+          <LogoutNavIcon color="rgba(255,255,255,0.85)" size={16} />
+          <Text style={styles.logoutText}>Logout</Text>
+        </View>
       </TouchableOpacity>
     </View>
   );
@@ -1279,6 +1437,7 @@ export default function LYDOMonitorScreen() {
               onPress={() =>
                 tab === 'Budget' ? router.push('/(tabs)/lydo-monitor-budget')
                 : tab === 'Report' ? router.push('/(tabs)/lydo-monitor-report')
+                : tab === 'Deadlines' ? router.push('/(tabs)/lydo-monitor-deadlines')
                 : setActiveMonitorTab(tab)
               }
               activeOpacity={0.8}>
@@ -1399,6 +1558,8 @@ const styles = StyleSheet.create({
   sidebarOverlay: { position: 'absolute', left: 0, top: 0, bottom: 0, right: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 5 },
   logoPill: { marginTop: 20, width: 70, height: 70, borderRadius: 35, backgroundColor: 'rgba(255,255,255,0.15)', alignItems: 'center', justifyContent: 'center', marginBottom: 8, borderWidth: 2, borderColor: 'rgba(255,255,255,0.3)' },
   logoImage: { width: 110, height: 110 },
+  sidebarSpacer: { height: 28 },
+  navItemInner: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   navItem: { width: '100%', paddingVertical: 12, paddingHorizontal: 12, borderRadius: 24, marginBottom: 8, alignItems: 'center', borderWidth: 1.5, borderColor: COLORS.white, backgroundColor: COLORS.navy },
   navItemActive: { backgroundColor: COLORS.white, borderColor: COLORS.white },
   navLabel: { fontSize: 13, fontWeight: '600', color: 'rgba(255,255,255,0.8)', letterSpacing: 0.3 },

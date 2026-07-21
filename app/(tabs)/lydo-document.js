@@ -133,6 +133,88 @@ const DOCUMENT_GROUPS = [
 const NAV_TABS = ['Dashboard', 'Documents', 'Monitor', 'Barangay', 'Logs'];
 const DOCUMENT_TABS = ['Barangay Folders', 'Reports', 'Templates'];
 
+// ─── SIDEBAR NAV ICONS (pure React Native Views — no react-native-svg) ────────
+
+// Dashboard: 2×2 grid of rounded squares
+const DashboardIcon = ({ color = '#fff', size = 16 }) => {
+  const s = size * 0.38, gap = size * 0.12, r = size * 0.12;
+  const box = { width: s, height: s, borderRadius: r, backgroundColor: color };
+  return (
+    <View style={{ width: size, height: size, justifyContent: 'center', alignItems: 'center' }}>
+      <View style={{ flexDirection: 'row', gap }}><View style={box} /><View style={box} /></View>
+      <View style={{ height: gap }} />
+      <View style={{ flexDirection: 'row', gap }}><View style={box} /><View style={box} /></View>
+    </View>
+  );
+};
+
+// Documents: file shape with fold + two lines
+const DocumentsIcon = ({ color = '#fff', size = 16 }) => {
+  const w = size * 0.6, h = size * 0.78, fold = size * 0.22;
+  return (
+    <View style={{ width: size, height: size, justifyContent: 'center', alignItems: 'center' }}>
+      <View style={{ width: w, height: h, justifyContent: 'flex-end', paddingBottom: size * 0.08, paddingHorizontal: size * 0.1 }}>
+        <View style={{ position: 'absolute', left: 0, right: 0, top: fold, bottom: 0, borderWidth: 1.5, borderColor: color, borderRadius: size * 0.08 }} />
+        <View style={{ position: 'absolute', top: 0, right: 0, width: fold, height: fold, backgroundColor: color, borderBottomLeftRadius: size * 0.06 }} />
+        <View style={{ position: 'absolute', top: 0, left: 0, width: w - fold, height: fold, borderTopWidth: 1.5, borderLeftWidth: 1.5, borderColor: color, borderTopLeftRadius: size * 0.08 }} />
+        <View style={{ height: 1.5, backgroundColor: color, borderRadius: 1, marginBottom: size * 0.1, width: '80%' }} />
+        <View style={{ height: 1.5, backgroundColor: color, borderRadius: 1, width: '55%' }} />
+      </View>
+    </View>
+  );
+};
+
+// Monitor: simple globe — circle + horizontal line + vertical oval hint
+const MonitorIcon = ({ color = '#fff', size = 16 }) => (
+  <View style={{ width: size, height: size, justifyContent: 'center', alignItems: 'center' }}>
+    <View style={{ width: size * 0.82, height: size * 0.82, borderRadius: size * 0.41, borderWidth: 1.5, borderColor: color, justifyContent: 'center', alignItems: 'center', overflow: 'hidden' }}>
+      <View style={{ position: 'absolute', height: 1.5, width: '100%', backgroundColor: color }} />
+      <View style={{ width: size * 0.38, height: size * 0.78, borderRadius: size * 0.19, borderWidth: 1.5, borderColor: color, backgroundColor: 'transparent' }} />
+    </View>
+  </View>
+);
+
+// Barangay: building/institution icon — base + columns hint
+const BarangayIcon = ({ color = '#fff', size = 16 }) => {
+  const bw = 1.5;
+  return (
+    <View style={{ width: size, height: size, justifyContent: 'center', alignItems: 'center' }}>
+      {/* roof / triangle top */}
+      <View style={{ width: size * 0.82, height: size * 0.22, borderLeftWidth: bw, borderRightWidth: bw, borderTopWidth: bw, borderColor: color, borderTopLeftRadius: size * 0.06, borderTopRightRadius: size * 0.06 }} />
+      {/* body */}
+      <View style={{ width: size * 0.82, height: size * 0.52, borderLeftWidth: bw, borderRightWidth: bw, borderBottomWidth: bw, borderColor: color, flexDirection: 'row', justifyContent: 'space-around', alignItems: 'center', paddingHorizontal: size * 0.08, paddingBottom: size * 0.06 }}>
+        {[0, 1, 2].map(i => (
+          <View key={i} style={{ width: size * 0.1, height: size * 0.36, backgroundColor: color, borderRadius: size * 0.03 }} />
+        ))}
+      </View>
+    </View>
+  );
+};
+
+// Logs: clipboard with lines
+const LogsIcon = ({ color = '#fff', size = 16 }) => (
+  <View style={{ width: size, height: size, justifyContent: 'center', alignItems: 'center' }}>
+    <View style={{ width: size * 0.75, height: size * 0.85, borderWidth: 1.5, borderColor: color, borderRadius: size * 0.1, paddingHorizontal: size * 0.1, paddingVertical: size * 0.1, justifyContent: 'space-around' }}>
+      <View style={{ position: 'absolute', top: -size * 0.08, alignSelf: 'center', width: size * 0.3, height: size * 0.14, backgroundColor: color, borderRadius: size * 0.04 }} />
+      {[0, 1, 2].map(i => (
+        <View key={i} style={{ flexDirection: 'row', alignItems: 'center', gap: size * 0.08, marginTop: i === 0 ? size * 0.1 : 0 }}>
+          <View style={{ width: size * 0.1, height: size * 0.1, borderRadius: size * 0.05, backgroundColor: color }} />
+          <View style={{ flex: 1, height: 1.5, backgroundColor: color, borderRadius: 1 }} />
+        </View>
+      ))}
+    </View>
+  </View>
+);
+
+// Logout: door with arrow
+const LogoutNavIcon = ({ color = '#fff', size = 16 }) => (
+  <View style={{ width: size, height: size, justifyContent: 'center', alignItems: 'center' }}>
+    <View style={{ position: 'absolute', left: 0, top: 0, width: size * 0.55, height: size, borderWidth: 1.5, borderColor: color, borderRadius: size * 0.08 }} />
+    <View style={{ position: 'absolute', right: size * 0.02, width: size * 0.52, height: 1.8, backgroundColor: color, borderRadius: 1 }} />
+    <View style={{ position: 'absolute', right: size * 0.02, width: size * 0.2, height: size * 0.2, borderTopWidth: 1.8, borderRightWidth: 1.8, borderColor: color, transform: [{ rotate: '45deg' }], marginTop: -size * 0.01 }} />
+  </View>
+);
+
 // ─── ICON COMPONENTS ──────────────────────────────────────────────────────────
 const BellIcon = ({ hasNotif }) => (
   <View style={styles.bellWrapper}>
@@ -275,7 +357,7 @@ const DocumentCard = ({ group, onItemPress }) => {
 export default function LYDODocumentsScreen({ navigation }) {
   const router = useRouter();
   const { activeTab, setActiveTab } = useNav();
-  const { logout } = useAuth();
+  const { logout, user } = useAuth();
 
   const [view, setView]                           = useState('folders'); // 'folders' | 'years' | 'doctypes'
   const [selectedBarangay, setSelectedBarangay]   = useState(null);
@@ -294,6 +376,21 @@ export default function LYDODocumentsScreen({ navigation }) {
   // Viewer state
   const [viewerModal, setViewerModal] = useState({ visible: false, fileUrl: null, title: '' });
   const [webViewLoading, setWebViewLoading] = useState(false);
+
+  // Add Folder modal state
+  const [addFolderVisible, setAddFolderVisible] = useState(false);
+  const [newFolderYear, setNewFolderYear] = useState('');
+  const [addFolderError, setAddFolderError] = useState('');
+
+  // Add Document Type modal state
+  const [addDocTypeVisible, setAddDocTypeVisible] = useState(false);
+  const [newDocTypeName, setNewDocTypeName] = useState('');
+  const [newDocTypeCategory, setNewDocTypeCategory] = useState('');
+  const [newDocTypeYear, setNewDocTypeYear] = useState('');
+  const [addDocTypeError, setAddDocTypeError] = useState('');
+
+  // Document categories (from document_category table)
+  const [docCategories, setDocCategories] = useState([]);
 
   // Handle view press - open document viewer
   const handleViewPress = (doc) => {
@@ -343,18 +440,29 @@ export default function LYDODocumentsScreen({ navigation }) {
           setBarangays(barangayData || []);
         }
 
-        // Fetch all distinct years from documents with approved status
+        // Fetch fiscal years from folder_year table
         const { data: yearData, error: yearError } = await supabase
-          .from('documents')
-          .select('year')
-          .eq('status', 'approved')
-          .order('year', { ascending: false });
+          .from('folder_year')
+          .select('id, fiscal_year')
+          .order('fiscal_year', { ascending: true });
 
         if (yearError) {
           console.error('Error fetching years:', yearError);
         } else {
-          const years = [...new Set(yearData?.map(d => d.year).filter(Boolean))];
+          const years = yearData?.map(d => d.fiscal_year).filter(Boolean).sort((a, b) => a - b) || [];
           setDocumentYears(years);
+        }
+
+        // Fetch document categories
+        const { data: catData, error: catError } = await supabase
+          .from('document_category')
+          .select('id, document_category')
+          .order('document_category');
+
+        if (catError) {
+          console.error('Error fetching categories:', catError);
+        } else {
+          setDocCategories(catData || []);
         }
       } catch (error) {
         console.error('Error:', error);
@@ -383,21 +491,65 @@ export default function LYDODocumentsScreen({ navigation }) {
 
     const fetchDocTypesForYear = async () => {
       try {
-        const { data, error } = await supabase
+        // First, get the folder_year ID for this fiscal year
+        const { data: yearData, error: yearDataError } = await supabase
+          .from('folder_year')
+          .select('id')
+          .eq('fiscal_year', year)
+          .single();
+
+        if (yearDataError) {
+          console.error('Error fetching folder year:', yearDataError);
+          return;
+        }
+
+        const folderYearId = yearData?.id;
+        if (!folderYearId) {
+          console.error('No folder year found for:', year);
+          return;
+        }
+
+        // Fetch all document types - we'll filter locally by year
+        const { data: allDocTypes, error: typesError } = await supabase
+          .from('document_types')
+          .select('id, document_type, category, year')
+          .order('document_type');
+
+        if (typesError) { console.error('Error fetching doc types:', typesError); return; }
+
+        // Filter: include types that are either (specific to this year) or (no specific year / null)
+        const allTypes = (allDocTypes || []).filter(dt => {
+          const dtYear = dt.year?.toString();
+          return dtYear === year.toString() || dtYear === null || dtYear === undefined;
+        });
+
+        // Get counts from actual documents for this year using folder_year id
+        const { data: docsData } = await supabase
           .from('documents')
           .select('document_type')
-          .eq('year', year)
+          .eq('year', folderYearId)
           .eq('status', 'approved');
 
-        if (error) { console.error('Error fetching doc types:', error); return; }
-
-        // Get unique document_types with count
         const countMap = new Map();
-        data?.forEach(doc => {
-          if (doc.document_type) {
-            countMap.set(doc.document_type, (countMap.get(doc.document_type) || 0) + 1);
+
+        // First, add document types from document_types table
+        allTypes.forEach(docType => {
+          if (docType.document_type) {
+            // Count how many documents exist for this type
+            const count = docsData?.filter(d => d.document_type === docType.id.toString()).length || 0;
+            countMap.set(docType.document_type, count);
           }
         });
+
+        // If countMap is empty (no documents yet), still show all document types with count 0
+        if (countMap.size === 0 && allTypes.length > 0) {
+          allTypes.forEach(docType => {
+            if (docType.document_type && !countMap.has(docType.document_type)) {
+              countMap.set(docType.document_type, 0);
+            }
+          });
+        }
+
         const types = Array.from(countMap.entries()).map(([document_type, count]) => ({ document_type, count }));
         types.sort((a, b) => a.document_type.localeCompare(b.document_type));
         setDocTypesForYear(types);
@@ -417,11 +569,53 @@ export default function LYDODocumentsScreen({ navigation }) {
 
     const fetchDocsForType = async () => {
       try {
+        // First, get the folder_year ID for the selected fiscal year
+        const { data: yearData, error: yearError } = await supabase
+          .from('folder_year')
+          .select('id')
+          .eq('fiscal_year', selectedYear)
+          .single();
+
+        if (yearError) {
+          console.error('Error fetching folder year:', yearError);
+          return;
+        }
+
+        const folderYearId = yearData?.id;
+        if (!folderYearId) {
+          console.error('No folder year found for:', selectedYear);
+          return;
+        }
+
+        // Then, find the document type ID from document_types table
+        const { data: typeData, error: typeError } = await supabase
+          .from('document_types')
+          .select('id')
+          .eq('document_type', docType)
+          .single();
+
+        if (typeError) {
+          console.error('Error finding document type:', typeError);
+          // Fallback: try querying directly with the docType string
+          const { data, error } = await supabase
+            .from('documents')
+            .select('document_id, title, document_type, status, submitted_at, file_url, barangay_id, barangays(barangay_id, barangay_name)')
+            .eq('year', folderYearId)
+            .eq('document_type', docType)
+            .eq('status', 'approved');
+
+          if (error) { console.error('Error fetching docs:', error); return; }
+          setDocsForType(data || []);
+          return;
+        }
+
+        // Query documents using the found type ID and folder_year id
+        const typeId = typeData?.id?.toString();
         const { data, error } = await supabase
           .from('documents')
           .select('document_id, title, document_type, status, submitted_at, file_url, barangay_id, barangays(barangay_id, barangay_name)')
-          .eq('year', selectedYear)
-          .eq('document_type', docType)
+          .eq('year', folderYearId)
+          .eq('document_type', typeId)
           .eq('status', 'approved');
 
         if (error) { console.error('Error fetching docs:', error); return; }
@@ -462,6 +656,110 @@ export default function LYDODocumentsScreen({ navigation }) {
     setActiveDocumentTab(tab);
   };
 
+  const handleAddFolder = async () => {
+    const trimmed = newFolderYear.trim();
+
+    // Validate: 4-digit year, reasonable range
+    if (!/^\d{4}$/.test(trimmed)) {
+      setAddFolderError('Please enter a valid 4-digit year (e.g. 2026).');
+      return;
+    }
+    const yearNum = parseInt(trimmed, 10);
+    if (yearNum < 2000 || yearNum > 2100) {
+      setAddFolderError('Year must be between 2000 and 2100.');
+      return;
+    }
+    if (documentYears.includes(yearNum) || documentYears.includes(trimmed)) {
+      setAddFolderError(`Folder for ${trimmed} already exists.`);
+      return;
+    }
+
+    try {
+      // Insert new fiscal year into folder_year table
+      const { data: inserted, error } = await supabase
+        .from('folder_year')
+        .insert({
+          fiscal_year: yearNum,
+          created_at: new Date().toISOString(),
+        })
+        .select('fiscal_year')
+        .single();
+
+      if (error) {
+        setAddFolderError(`Error: ${error.message}`);
+        console.error('Insert year folder error:', error);
+        return;
+      }
+
+      // Update local state sorted ascending
+      const updated = [yearNum, ...documentYears].sort((a, b) => a - b);
+      setDocumentYears(updated);
+
+      setAddFolderVisible(false);
+      setNewFolderYear('');
+      setAddFolderError('');
+    } catch (err) {
+      setAddFolderError(`Unexpected error: ${err.message}`);
+      console.error(err);
+    }
+  };
+
+  const handleAddDocType = async () => {
+    const trimmed = newDocTypeName.trim();
+
+    // Validate: name is required
+    if (!trimmed) {
+      setAddDocTypeError('Document type name is required.');
+      return;
+    }
+
+    if (!newDocTypeCategory) {
+      setAddDocTypeError('Please select a category.');
+      return;
+    }
+
+    try {
+      // Prepare the insert payload
+      const insertPayload = {
+        document_type: trimmed,
+        category: newDocTypeCategory,
+        created_at: new Date().toISOString(),
+      };
+
+      // Add year if specified (null means applies to all years)
+      if (newDocTypeYear && newDocTypeYear !== 'all') {
+        insertPayload.year = newDocTypeYear;
+      }
+
+      const { data: inserted, error } = await supabase
+        .from('document_types')
+        .insert(insertPayload)
+        .select('id, document_type')
+        .single();
+
+      if (error) {
+        setAddDocTypeError(`Error: ${error.message}`);
+        console.error('Insert document type error:', error);
+        return;
+      }
+
+      // Close modal and reset
+      setAddDocTypeVisible(false);
+      setNewDocTypeName('');
+      setNewDocTypeCategory('');
+      setNewDocTypeYear('');
+      setAddDocTypeError('');
+
+      // Refresh the document types for the current year
+      if (selectedYear) {
+        goToYears(selectedYear);
+      }
+    } catch (err) {
+      setAddDocTypeError(`Unexpected error: ${err.message}`);
+      console.error(err);
+    }
+  };
+
   // ── Filtered data ──
   const filteredYears = documentYears.filter(y =>
     y.toString().includes(searchText)
@@ -483,6 +781,14 @@ export default function LYDODocumentsScreen({ navigation }) {
   );
 
   // ── Sidebar ──
+  const NAV_ITEMS = [
+    { tab: 'Dashboard', IconComponent: DashboardIcon },
+    { tab: 'Documents', IconComponent: DocumentsIcon },
+    { tab: 'Monitor',   IconComponent: MonitorIcon   },
+    { tab: 'Barangay',  IconComponent: BarangayIcon  },
+    { tab: 'Logs',      IconComponent: LogsIcon      },
+  ];
+
   const renderSidebar = () => (
     <View style={styles.sidebar}>
       <View style={styles.logoPill}>
@@ -492,9 +798,10 @@ export default function LYDODocumentsScreen({ navigation }) {
           resizeMode="contain"
         />
       </View>
-      <View style={{ height: 28 }} />
-      {NAV_TABS.map(tab => {
+      <View style={styles.sidebarSpacer} />
+      {NAV_ITEMS.map(({ tab, IconComponent }) => {
         const active = activeTab === tab;
+        const iconColor = active ? '#133E75' : 'rgba(255,255,255,0.85)';
         return (
           <TouchableOpacity
             key={tab}
@@ -502,17 +809,19 @@ export default function LYDODocumentsScreen({ navigation }) {
             onPress={() => handleNavPress(tab)}
             activeOpacity={0.8}
           >
-            <Text style={[styles.navLabel, active && styles.navLabelActive]}>{tab}</Text>
+            <View style={styles.navItemInner}>
+              <IconComponent color={iconColor} size={16} />
+              <Text style={[styles.navLabel, active && styles.navLabelActive]}>{tab}</Text>
+            </View>
           </TouchableOpacity>
         );
       })}
       <View style={{ flex: 1 }} />
-      <TouchableOpacity
-        style={styles.logoutBtn}
-        onPress={handleLogout}
-        activeOpacity={0.8}
-      >
-        <Text style={styles.logoutText}>Logout</Text>
+      <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout} activeOpacity={0.8}>
+        <View style={styles.navItemInner}>
+          <LogoutNavIcon color="rgba(255,255,255,0.85)" size={16} />
+          <Text style={styles.logoutText}>Logout</Text>
+        </View>
       </TouchableOpacity>
     </View>
   );
@@ -595,8 +904,8 @@ export default function LYDODocumentsScreen({ navigation }) {
       {/* ── VIEW: ROOT FOLDERS (years) ── */}
       {view === 'folders' && (
         <>
-          {/* Search */}
-          <View style={styles.searchRow}>
+          {/* Search + Add Folder button row */}
+          <View style={[styles.searchRow, { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 }]}>
             <View style={styles.searchBox}>
               <Text style={{ fontSize: 13, marginRight: 6 }}>🔍</Text>
               <TextInput
@@ -612,26 +921,281 @@ export default function LYDODocumentsScreen({ navigation }) {
                 </TouchableOpacity>
               )}
             </View>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <TouchableOpacity
+                style={styles.addFolderBtn}
+                onPress={() => {
+                  setNewFolderYear('');
+                  setAddFolderError('');
+                  setAddFolderVisible(true);
+                }}
+                activeOpacity={0.8}
+              >
+                {/* Mini folder icon */}
+                <View style={styles.addFolderBtnIconWrap}>
+                  <View style={styles.addFolderBtnFolderTab} />
+                  <View style={styles.addFolderBtnFolderBody}>
+                    <Text style={styles.addFolderBtnPlus}>+</Text>
+                  </View>
+                </View>
+                <Text style={styles.addFolderBtnText}>Add Folder</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.addFolderBtn}
+                onPress={() => {
+                  setNewDocTypeName('');
+                  setNewDocTypeCategory('');
+                  setNewDocTypeYear('all');
+                  setAddDocTypeError('');
+                  setAddDocTypeVisible(true);
+                }}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.addFolderBtnText}>➕ Document Type</Text>
+              </TouchableOpacity>
+            </View>
           </View>
 
           {/* Container box for year folders */}
           <View style={styles.folderContainer}>
             <Text style={styles.allDocsLabel}>All Documents</Text>
 
-            <View style={isMobile ? styles.folderGridMobile : styles.folderGrid}>
-              {filteredYears.map((year, idx) => (
-                <TouchableOpacity
-                  key={idx}
-                  style={styles.folderCard}
-                  onPress={() => goToYears(year)}
-                  activeOpacity={0.75}
-                >
-                  <YearFolderIcon size={isMobile ? 60 : 68} />
-                  <Text style={styles.folderName}>{year}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
+            {filteredYears.length === 0 ? (
+              <View style={styles.emptyState}>
+                <Text style={{ fontSize: 32, marginBottom: 8 }}>📁</Text>
+                <Text style={styles.emptyText}>No year folders yet.</Text>
+                <Text style={{ fontSize: 12, color: COLORS.midGray, marginTop: 4 }}>
+                  Tap "+ Add Folder" to create one.
+                </Text>
+              </View>
+            ) : (
+              <View style={isMobile ? styles.folderGridMobile : styles.folderGrid}>
+                {filteredYears.map((year, idx) => (
+                  <TouchableOpacity
+                    key={idx}
+                    style={styles.folderCard}
+                    onPress={() => goToYears(year)}
+                    activeOpacity={0.75}
+                  >
+                    <YearFolderIcon size={isMobile ? 60 : 68} />
+                    <Text style={styles.folderName}>{year}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
           </View>
+
+          {/* ── ADD FOLDER MODAL ── */}
+          <Modal
+            visible={addFolderVisible}
+            transparent
+            animationType="fade"
+            onRequestClose={() => setAddFolderVisible(false)}
+          >
+            <TouchableOpacity
+              style={styles.addFolderOverlay}
+              activeOpacity={1}
+              onPress={() => setAddFolderVisible(false)}
+            />
+            <View style={styles.addFolderModalWrap} pointerEvents="box-none">
+              <View style={styles.addFolderModal}>
+                {/* Header */}
+                <View style={styles.addFolderModalHeader}>
+                  <View style={styles.addFolderModalHeaderLeft}>
+                    <View style={styles.addFolderModalIconWrap}>
+                      <Text style={{ fontSize: 20 }}>📁</Text>
+                    </View>
+                    <Text style={styles.addFolderModalTitle}>New Year Folder</Text>
+                  </View>
+                  <TouchableOpacity
+                    onPress={() => setAddFolderVisible(false)}
+                    style={styles.addFolderCloseBtn}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={styles.addFolderCloseBtnText}>✕</Text>
+                  </TouchableOpacity>
+                </View>
+
+                <View style={styles.addFolderModalDivider} />
+
+                {/* Body */}
+                <View style={styles.addFolderModalBody}>
+                  <Text style={styles.addFolderModalLabel}>Year</Text>
+                  <TextInput
+                    style={[styles.addFolderInput, addFolderError ? styles.addFolderInputError : null]}
+                    placeholder={`e.g. ${new Date().getFullYear()}`}
+                    placeholderTextColor={COLORS.midGray}
+                    value={newFolderYear}
+                    onChangeText={t => { setNewFolderYear(t.replace(/[^0-9]/g, '')); setAddFolderError(''); }}
+                    keyboardType="number-pad"
+                    maxLength={4}
+                    autoFocus
+                  />
+                  {addFolderError ? (
+                    <Text style={styles.addFolderErrorText}>{addFolderError}</Text>
+                  ) : (
+                    <Text style={styles.addFolderHint}>
+                      A new folder will be created for this fiscal year.
+                    </Text>
+                  )}
+                </View>
+
+                {/* Footer buttons */}
+                <View style={styles.addFolderModalFooter}>
+                  <TouchableOpacity
+                    style={styles.addFolderCancelBtn}
+                    onPress={() => setAddFolderVisible(false)}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={styles.addFolderCancelText}>Cancel</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.addFolderConfirmBtn, !newFolderYear.trim() && styles.addFolderConfirmBtnDisabled]}
+                    onPress={handleAddFolder}
+                    activeOpacity={0.8}
+                    disabled={!newFolderYear.trim()}
+                  >
+                    <Text style={styles.addFolderConfirmText}>Create Folder</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </View>
+          </Modal>
+
+          {/* ── ADD DOCUMENT TYPE MODAL ── */}
+          <Modal
+            visible={addDocTypeVisible}
+            transparent
+            animationType="fade"
+            onRequestClose={() => setAddDocTypeVisible(false)}
+          >
+            <TouchableOpacity
+              style={styles.addFolderOverlay}
+              activeOpacity={1}
+              onPress={() => setAddDocTypeVisible(false)}
+            />
+            <View style={styles.addFolderModalWrap} pointerEvents="box-none">
+              <View style={styles.addFolderModal}>
+                {/* Header */}
+                <View style={styles.addFolderModalHeader}>
+                  <View style={styles.addFolderModalHeaderLeft}>
+                    <View style={styles.addFolderModalIconWrap}>
+                      <Text style={{ fontSize: 20 }}>📄</Text>
+                    </View>
+                    <Text style={styles.addFolderModalTitle}>New Document Type</Text>
+                  </View>
+                  <TouchableOpacity
+                    onPress={() => setAddDocTypeVisible(false)}
+                    style={styles.addFolderCloseBtn}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={styles.addFolderCloseBtnText}>✕</Text>
+                  </TouchableOpacity>
+                </View>
+
+                <View style={styles.addFolderModalDivider} />
+
+                {/* Body */}
+                <View style={styles.addFolderModalBody}>
+                  <Text style={styles.addFolderModalLabel}>Document Type Name</Text>
+                  <TextInput
+                    style={[styles.addFolderInput, addDocTypeError && !newDocTypeName.trim() ? styles.addFolderInputError : null]}
+                    placeholder="e.g. Annual Report"
+                    placeholderTextColor={COLORS.midGray}
+                    value={newDocTypeName}
+                    onChangeText={t => { setNewDocTypeName(t); setAddDocTypeError(''); }}
+                    autoFocus
+                  />
+
+                  <Text style={[styles.addFolderModalLabel, { marginTop: 12 }]}>Category</Text>
+                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 4 }}>
+                    {docCategories.map(cat => (
+                      <TouchableOpacity
+                        key={cat.id}
+                        style={[
+                          styles.categoryChip,
+                          newDocTypeCategory === cat.id.toString() && styles.categoryChipActive
+                        ]}
+                        onPress={() => { setNewDocTypeCategory(cat.id.toString()); setAddDocTypeError(''); }}
+                      >
+                        <Text style={[
+                          styles.categoryChipText,
+                          newDocTypeCategory === cat.id.toString() && styles.categoryChipTextActive
+                        ]}>
+                          {cat.document_category}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+
+                  <Text style={[styles.addFolderModalLabel, { marginTop: 12 }]}>Year Specific (Optional)</Text>
+                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 4 }}>
+                    <TouchableOpacity
+                      style={[
+                        styles.categoryChip,
+                        (newDocTypeYear === '' || newDocTypeYear === 'all') && styles.categoryChipActive
+                      ]}
+                      onPress={() => { setNewDocTypeYear('all'); setAddDocTypeError(''); }}
+                    >
+                      <Text style={[
+                        styles.categoryChipText,
+                        (newDocTypeYear === '' || newDocTypeYear === 'all') && styles.categoryChipTextActive
+                      ]}>
+                        All Years
+                      </Text>
+                    </TouchableOpacity>
+                    {documentYears.map(y => (
+                      <TouchableOpacity
+                        key={y}
+                        style={[
+                          styles.categoryChip,
+                          newDocTypeYear === y.toString() && styles.categoryChipActive
+                        ]}
+                        onPress={() => { setNewDocTypeYear(y.toString()); setAddDocTypeError(''); }}
+                      >
+                        <Text style={[
+                          styles.categoryChipText,
+                          newDocTypeYear === y.toString() && styles.categoryChipTextActive
+                        ]}>
+                          {y}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+
+                  {addDocTypeError ? (
+                    <Text style={styles.addFolderErrorText}>{addDocTypeError}</Text>
+                  ) : (
+                    <Text style={styles.addFolderHint}>
+                      This document type will be available for the selected category and year(s).
+                    </Text>
+                  )}
+                </View>
+
+                {/* Footer buttons */}
+                <View style={styles.addFolderModalFooter}>
+                  <TouchableOpacity
+                    style={styles.addFolderCancelBtn}
+                    onPress={() => setAddDocTypeVisible(false)}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={styles.addFolderCancelText}>Cancel</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[
+                      styles.addFolderConfirmBtn,
+                      (!newDocTypeName.trim() || !newDocTypeCategory) && styles.addFolderConfirmBtnDisabled
+                    ]}
+                    onPress={handleAddDocType}
+                    activeOpacity={0.8}
+                    disabled={!newDocTypeName.trim() || !newDocTypeCategory}
+                  >
+                    <Text style={styles.addFolderConfirmText}>Add Type</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </View>
+          </Modal>
         </>
       )}
 
@@ -657,23 +1221,25 @@ export default function LYDODocumentsScreen({ navigation }) {
             <Text style={styles.breadcrumbCurrent}>{selectedYear} Documents</Text>
           </View>
 
-          {/* Search row + label */}
+          {/* Search row + label + Add Doc Type button */}
           <View style={styles.tableTopRow}>
             <Text style={styles.allDocsLabel}>All Documents</Text>
-            <View style={styles.searchBox}>
-              <Text style={{ fontSize: 13, marginRight: 6 }}>🔍</Text>
-              <TextInput
-                style={styles.searchInput}
-                placeholder="Search"
-                placeholderTextColor={COLORS.midGray}
-                value={searchText}
-                onChangeText={setSearchText}
-              />
-              {searchText.length > 0 && (
-                <TouchableOpacity onPress={() => setSearchText('')}>
-                  <Text style={{ color: COLORS.midGray, fontSize: 13 }}>✕</Text>
-                </TouchableOpacity>
-              )}
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <View style={styles.searchBox}>
+                <Text style={{ fontSize: 13, marginRight: 6 }}>🔍</Text>
+                <TextInput
+                  style={styles.searchInput}
+                  placeholder="Search"
+                  placeholderTextColor={COLORS.midGray}
+                  value={searchText}
+                  onChangeText={setSearchText}
+                />
+                {searchText.length > 0 && (
+                  <TouchableOpacity onPress={() => setSearchText('')}>
+                    <Text style={{ color: COLORS.midGray, fontSize: 13 }}>✕</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
             </View>
           </View>
 
@@ -1048,6 +1614,8 @@ const styles = StyleSheet.create({
     width: 110,
     height: 110,
   },
+  sidebarSpacer: { height: 28 },
+  navItemInner: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   navItem: {
     width: '100%', paddingVertical: 12, paddingHorizontal: 12,
     borderRadius: 24, marginBottom: 8, alignItems: 'center',
@@ -1332,6 +1900,126 @@ const styles = StyleSheet.create({
 
   emptyState: { flex: 1, alignItems: 'center', marginTop: 60 },
   emptyText: { fontSize: 14, color: COLORS.midGray },
+
+  // ── Add Folder Button ──
+  addFolderBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    backgroundColor: COLORS.navy,
+    paddingVertical: 8, paddingHorizontal: 14,
+    borderRadius: 20,
+    shadowColor: COLORS.navy,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.3, shadowRadius: 6, elevation: 4,
+  },
+  addFolderBtnIconWrap: {
+    width: 22, height: 18,
+    justifyContent: 'flex-end',
+  },
+  addFolderBtnFolderTab: {
+    position: 'absolute', top: 0, left: 0,
+    width: 9, height: 5,
+    backgroundColor: 'rgba(255,255,255,0.5)',
+    borderTopLeftRadius: 2, borderTopRightRadius: 3,
+  },
+  addFolderBtnFolderBody: {
+    position: 'absolute', top: 3, left: 0,
+    width: 22, height: 15,
+    backgroundColor: 'rgba(255,255,255,0.25)',
+    borderRadius: 3, borderTopRightRadius: 3, borderTopLeftRadius: 1,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  addFolderBtnPlus: {
+    fontSize: 12, fontWeight: '900', color: COLORS.white, lineHeight: 14,
+  },
+  addFolderBtnText: { fontSize: 13, fontWeight: '700', color: COLORS.white, letterSpacing: 0.2 },
+
+  // ── Add Folder Modal ──
+  addFolderOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+  },
+  addFolderModalWrap: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: 'center', alignItems: 'center',
+  },
+  addFolderModal: {
+    width: isMobile ? '88%' : 400,
+    backgroundColor: COLORS.white,
+    borderRadius: 16,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.18, shadowRadius: 24, elevation: 12,
+  },
+  addFolderModalHeader: {
+    flexDirection: 'row', alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20, paddingVertical: 16,
+  },
+  addFolderModalHeaderLeft: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  addFolderModalIconWrap: {
+    width: 38, height: 38, borderRadius: 10,
+    backgroundColor: '#EFF6FF',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  addFolderModalTitle: { fontSize: 16, fontWeight: '800', color: COLORS.darkText },
+  addFolderCloseBtn: {
+    width: 30, height: 30, borderRadius: 15,
+    backgroundColor: COLORS.lightGray,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  addFolderCloseBtnText: { fontSize: 13, color: COLORS.subText, fontWeight: '700' },
+  addFolderModalDivider: { height: 1, backgroundColor: COLORS.lightGray },
+  addFolderModalBody: { paddingHorizontal: 20, paddingVertical: 20, gap: 6 },
+  addFolderModalLabel: { fontSize: 13, fontWeight: '700', color: COLORS.darkText, marginBottom: 4 },
+  addFolderInput: {
+    borderWidth: 1.5, borderColor: COLORS.lightGray,
+    borderRadius: 10, paddingHorizontal: 14, paddingVertical: 11,
+    fontSize: 15, fontWeight: '700', color: COLORS.darkText,
+    backgroundColor: COLORS.offWhite,
+    letterSpacing: 2,
+  },
+  addFolderInputError: { borderColor: '#EF4444' },
+  addFolderErrorText: { fontSize: 12, color: '#EF4444', fontWeight: '500', marginTop: 4 },
+  addFolderHint: { fontSize: 12, color: COLORS.subText, marginTop: 4, lineHeight: 17 },
+  addFolderModalFooter: {
+    flexDirection: 'row', gap: 10,
+    paddingHorizontal: 20, paddingBottom: 20, paddingTop: 4,
+  },
+  addFolderCancelBtn: {
+    flex: 1, paddingVertical: 12, borderRadius: 10,
+    borderWidth: 1.5, borderColor: COLORS.lightGray,
+    alignItems: 'center',
+  },
+  addFolderCancelText: { fontSize: 14, fontWeight: '700', color: COLORS.subText },
+  addFolderConfirmBtn: {
+    flex: 2, paddingVertical: 12, borderRadius: 10,
+    backgroundColor: COLORS.navy, alignItems: 'center',
+  },
+  addFolderConfirmBtnDisabled: { backgroundColor: COLORS.midGray },
+  addFolderConfirmText: { fontSize: 14, fontWeight: '700', color: COLORS.white },
+
+  // Category chips
+  categoryChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    borderWidth: 1.5,
+    borderColor: COLORS.lightGray,
+    backgroundColor: COLORS.white,
+  },
+  categoryChipActive: {
+    backgroundColor: COLORS.navy,
+    borderColor: COLORS.navy,
+  },
+  categoryChipText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: COLORS.subText,
+  },
+  categoryChipTextActive: {
+    color: COLORS.white,
+  },
 
   // ── Barangay-by-year table ──
   tableTopRow: {
