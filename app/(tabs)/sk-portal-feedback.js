@@ -224,28 +224,10 @@ export default function SKPortalFeedbackScreen() {
     if (!barangayId) return;
 
     try {
-      // Fetch resident comments with user info and website post info
+      // Fetch resident comments
       const { data: feedback, error } = await supabase
         .from('resident_comments')
-        .select(`
-          comment_id,
-          website_post_id,
-          resident_id,
-          content,
-          is_read,
-          is_flagged,
-          created_at,
-          barangay_id,
-          reply,
-          user:users!resident_id(
-            first_name,
-            last_name,
-            middle_initial
-          ),
-          website_post:website_posts!website_post_id(
-            title
-          )
-        `)
+        .select('*')
         .eq('barangay_id', barangayId)
         .order('created_at', { ascending: false });
 
@@ -254,21 +236,64 @@ export default function SKPortalFeedbackScreen() {
         return;
       }
 
+      // Fetch user info and post info separately
+      const userIds = [...new Set(feedback?.map(f => f.resident_id).filter(Boolean) || [])];
+      const postIds = [...new Set(feedback?.map(f => f.website_post_id).filter(Boolean) || [])];
+
+      let userMap = {};
+      let postMap = {};
+
+      if (userIds.length > 0) {
+        const { data: users } = await supabase
+          .from('users')
+          .select('user_id, first_name, last_name, middle_initial')
+          .in('user_id', userIds);
+        userMap = users?.reduce((acc, u) => ({ ...acc, [u.user_id]: u }), {}) || {};
+      }
+
+      if (postIds.length > 0) {
+        const { data: posts } = await supabase
+          .from('website_posts')
+          .select('website_post_id, title')
+          .in('website_post_id', postIds);
+        postMap = posts?.reduce((acc, p) => ({ ...acc, [p.website_post_id]: p }), {}) || {};
+      }
+
+      // Fetch replies
+      const commentIds = feedback?.map(f => f.comment_id).filter(Boolean) || [];
+      let replyMap = {};
+      if (commentIds.length > 0) {
+        const { data: replies } = await supabase
+          .from('sk_replies')
+          .select('*')
+          .in('comment_id', commentIds)
+          .order('created_at', { ascending: true });
+
+        // Map replies by comment_id (get latest reply per comment)
+        replies?.forEach(r => {
+          if (!replyMap[r.comment_id]) {
+            replyMap[r.comment_id] = r.content;
+          }
+        });
+      }
+
       const formattedFeedback = feedback?.map(f => {
-        const firstName = f.user?.first_name || '';
-        const lastName = f.user?.last_name || '';
-        const middleInitial = f.user?.middle_initial || '';
+        const user = userMap[f.resident_id] || {};
+        const post = postMap[f.website_post_id] || {};
+        const firstName = user.first_name || '';
+        const lastName = user.last_name || '';
+        const middleInitial = user.middle_initial || '';
         const name = `${firstName} ${middleInitial ? middleInitial + '. ' : ''}${lastName}`.trim() || 'Anonymous';
 
         return {
           id: f.comment_id,
           residentId: f.resident_id,
           name: name,
-          document: f.website_post?.title || 'Unknown Document',
+          document: post.title || 'Unknown Document',
           comment: f.content || '',
           date: f.created_at ? new Date(f.created_at).toLocaleDateString() : '',
           status: f.is_read ? 'Read' : 'Unread',
-          reply: f.reply || '',
+          reply: replyMap[f.comment_id] || '',
           postId: f.website_post_id,
         };
       }) || [];
@@ -326,16 +351,31 @@ export default function SKPortalFeedbackScreen() {
   const handleSendReply = async () => {
     if (!replyText.trim() || !selectedFeedback) return;
 
-    // Save reply to database
+    const userId = user?.userId;
+    if (!userId) {
+      console.error('User not logged in');
+      return;
+    }
+
+    // Insert reply to sk_replies table
     const { error } = await supabase
-      .from('resident_comments')
-      .update({ reply: replyText.trim(), is_read: true })
-      .eq('comment_id', selectedFeedback.id);
+      .from('sk_replies')
+      .insert({
+        comment_id: selectedFeedback.id,
+        replied_by: userId,
+        content: replyText.trim(),
+      });
 
     if (error) {
       console.error('Error saving reply:', error);
       return;
     }
+
+    // Also mark comment as read
+    await supabase
+      .from('resident_comments')
+      .update({ is_read: true })
+      .eq('comment_id', selectedFeedback.id);
 
     setFeedbackList(prev => prev.map(f =>
       f.id === selectedFeedback.id ? { ...f, reply: replyText.trim(), status: 'Read' } : f

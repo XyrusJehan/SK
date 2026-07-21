@@ -1,20 +1,29 @@
-import React, { useState, useRef, useMemo, useEffect, useCallback } from 'react';
+import { Feather } from '@expo/vector-icons';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  View, Text, TextInput, ScrollView, TouchableOpacity,
-  StyleSheet, SafeAreaView, StatusBar, Dimensions, Image, Modal,
-  Linking, ActivityIndicator, Alert, KeyboardAvoidingView, Animated,
+  ActivityIndicator, Alert,
+  Animated,
+  Dimensions, Image,
+  Linking,
+  Modal,
+  Platform,
+  SafeAreaView,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text, TextInput,
+  TouchableOpacity,
+  View
 } from 'react-native';
-import { Platform } from 'react-native';
+import { supabase } from '../../utils/supabase';
+import { useAuth } from './authContext';
+import { useNav } from './navContext';
 // WebView: use react-native-webview on native, iframe on web
 let WebView = null;
 if (Platform.OS !== 'web') {
   WebView = require('react-native-webview').WebView;
 }
-import { useRouter, useFocusEffect, useLocalSearchParams } from 'expo-router';
-import { Feather } from '@expo/vector-icons';
-import { useNav } from './navContext';
-import { useAuth } from './authContext';
-import { supabase } from '../../utils/supabase';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const isMobile = SCREEN_WIDTH < 768;
@@ -956,24 +965,7 @@ export default function SKDocumentManagementScreen() {
         </View>
       )}
 
-      {/* Search Bar */}
-      <View style={styles.searchRow}>
-        <View style={styles.searchBox}>
-          <Text style={styles.searchIcon}>🔍</Text>
-          <TextInput
-            style={styles.searchInput}
-            placeholder="Search"
-            placeholderTextColor={COLORS.midGray}
-            value={searchText}
-            onChangeText={setSearchText}
-          />
-          {searchText.length > 0 && (
-            <TouchableOpacity onPress={() => setSearchText('')}>
-              <Text style={{ color: COLORS.midGray, fontSize: 12 }}>✕</Text>
-            </TouchableOpacity>
-          )}
-        </View>
-      </View>
+      
 
       {/* Category label */}
       <View style={styles.categoryRow}>
@@ -1003,6 +995,25 @@ export default function SKDocumentManagementScreen() {
               </TouchableOpacity>
             );
           })}
+        </View>
+      </View>
+
+      {/* Search Bar */}
+      <View style={styles.searchRow}>
+        <View style={styles.searchBox}>
+          <Text style={styles.searchIcon}>🔍</Text>
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Search"
+            placeholderTextColor={COLORS.midGray}
+            value={searchText}
+            onChangeText={setSearchText}
+          />
+          {searchText.length > 0 && (
+            <TouchableOpacity onPress={() => setSearchText('')}>
+              <Text style={{ color: COLORS.midGray, fontSize: 12 }}>✕</Text>
+            </TouchableOpacity>
+          )}
         </View>
       </View>
 
