@@ -235,13 +235,14 @@ export default function LYDODocumentTemplatesScreen() {
   const [addEntries, setAddEntries]             = useState([{ id: 1, name: '', file: null, docType: '', docCategory: '', docTypeOpen: false }]);
   const [selectedTemplate, setSelectedTemplate] = useState(null);
   const [showReplaceModal, setShowReplaceModal] = useState(false);
-  const [checkedTemplates, setCheckedTemplates] = useState({});
-  const [dropdownOpen, setDropdownOpen]         = useState(false);
+  const [selectedReplaceTemplate, setSelectedReplaceTemplate] = useState(null);
   const [uploadedFiles, setUploadedFiles]       = useState({});
   const [showForwardModal, setShowForwardModal] = useState(false);
   const [forwardChecked, setForwardChecked]     = useState({});
   const [uploading, setUploading]               = useState(false);
   const [loadingMessage, setLoadingMessage]     = useState('');
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [successDetails, setSuccessDetails]     = useState({ replacedName: '', newVersion: 0, forwardedTo: '' });
 
   // ── Dynamic template + archive state ──
   const [templates, setTemplates]           = useState([]);
@@ -259,6 +260,12 @@ export default function LYDODocumentTemplatesScreen() {
   ]);
   const [documentTypes, setDocumentTypes] = useState([]);
   const [categoryFilters, setCategoryFilters] = useState(['All Categories']);
+
+  // Barangay state for forward modal
+  const [barangays, setBarangays] = useState([]);
+  const [selectedBarangays, setSelectedBarangays] = useState([]);
+  const [showBarangayDropdown, setShowBarangayDropdown] = useState(false);
+  const [forwardToAll, setForwardToAll] = useState(true);
 
   // Helper function to log LYDO activity
   const logActivity = async (action, description) => {
@@ -301,9 +308,10 @@ export default function LYDODocumentTemplatesScreen() {
   // Fetch categories and document types from database
   useEffect(() => {
     const fetchDocTypes = async () => {
-      const [catRes, typeRes] = await Promise.all([
+      const [catRes, typeRes, brgyRes] = await Promise.all([
         supabase.from('document_category').select('id, document_category').order('id'),
         supabase.from('document_types').select('id, document_type, category').order('document_type'),
+        supabase.from('barangays').select('barangay_id, barangay_name').order('barangay_name'),
       ]);
 
       if (catRes.data) {
@@ -323,6 +331,10 @@ export default function LYDODocumentTemplatesScreen() {
           grouped[catId].types.push(dt.document_type.trim());
         });
         setDocumentTypes(Object.values(grouped));
+      }
+
+      if (brgyRes.data) {
+        setBarangays(brgyRes.data);
       }
     };
     fetchDocTypes();
@@ -711,20 +723,23 @@ export default function LYDODocumentTemplatesScreen() {
                   <View style={[styles.checklistPanel, { maxHeight: 220 }]}>
                     <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" nestedScrollEnabled={true}>
                       {(() => {
-                        const existingTypes = new Set(
-                          templates.filter(t => t.status !== 'Archived').map(t => t.documentType).filter(Boolean)
-                        );
+                        // Exclude document types already picked by another row in this modal,
+                        // AND exclude document types that already have an existing (non-archived)
+                        // template in the system — those must go through "Replace" instead.
                         const takenByOtherEntries = new Set(
                           addEntries.filter(e => e.id !== entry.id && e.docType).map(e => e.docType)
                         );
+                        const existingDocTypes = new Set(
+                          templates.filter(t => t.status !== 'Archived').map(t => t.documentType)
+                        );
                         const available = documentTypes.flatMap(g =>
                           g.types.map(t => ({ docType: t, categoryId: g.categoryId }))
-                        ).filter(item => !existingTypes.has(item.docType) && !takenByOtherEntries.has(item.docType));
+                        ).filter(item => !takenByOtherEntries.has(item.docType) && !existingDocTypes.has(item.docType));
 
                         if (available.length === 0) {
                           return (
                             <View style={{ padding: 16, alignItems: 'center' }}>
-                              <Text style={{ fontSize: 13, color: COLORS.midGray }}>All document types already exist</Text>
+                              <Text style={{ fontSize: 13, color: COLORS.midGray }}>No document types available</Text>
                             </View>
                           );
                         }
@@ -831,14 +846,7 @@ export default function LYDODocumentTemplatesScreen() {
                   const lydoUserId = authUser.userId;
                   const allowedCategories = ['planning', 'financial', 'governance', 'performance'];
 
-                  const existingDocTypes = new Set(
-                    templates.filter(t => t.status !== 'Archived').map(t => t.documentType).filter(Boolean)
-                  );
-                  const duplicate = addEntries.find(e => e.docType && existingDocTypes.has(e.docType));
-                  if (duplicate) {
-                    throw new Error(`"${duplicate.docType}" already exists. Use Replace instead.`);
-                  }
-
+                  // Allow all document types - duplicates are allowed for versioning
                   const insertRows = [];
                   for (const entry of addEntries) {
                     if (!entry.name || !entry.docType) continue;
@@ -933,21 +941,40 @@ export default function LYDODocumentTemplatesScreen() {
         onPress={() => setSelectedTemplate(null)}
       >
         <View style={styles.modalCard} onStartShouldSetResponder={() => true}>
-          <Text style={styles.modalTitle}>{selectedTemplate?.name}</Text>
-          <View style={{ marginBottom: 12 }}>
+          <View style={styles.replaceModalHeader}>
+            <View style={styles.replaceHeaderLeft}>
+              <View style={styles.replaceHeaderIconCircle}>
+                <Text style={styles.replaceHeaderIconText}>📄</Text>
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.modalTitle, { marginBottom: 2 }]} numberOfLines={2}>{selectedTemplate?.name}</Text>
+                <Text style={styles.replaceHeaderSubtitle}>{getDisplayCategory(selectedTemplate?.category)}</Text>
+              </View>
+            </View>
+            <TouchableOpacity
+              style={styles.replaceCloseBtn}
+              onPress={() => setSelectedTemplate(null)}
+            >
+              <Text style={styles.replaceCloseX}>✕</Text>
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.replaceLabelRow}>
+            <Text style={styles.replaceLabel}>Status</Text>
+          </View>
+          <View style={{ marginBottom: 4 }}>
             <StatusBadge status={selectedTemplate?.status} />
           </View>
-          <Text style={styles.modalLabel}>Category: <Text style={styles.modalValue}>{getDisplayCategory(selectedTemplate?.category)}</Text></Text>
 
           <View style={styles.actionRow}>
             <TouchableOpacity
               style={[styles.actionBtn, { backgroundColor: '#EAF0FB' }]}
               onPress={() => {
-                setShowReplaceModal(true);
-                // Pre-select this template
+                // Pre-select this template for replacement
                 if (selectedTemplate) {
-                  setCheckedTemplates(prev => ({ ...prev, [selectedTemplate.id]: true }));
+                  setSelectedReplaceTemplate(selectedTemplate.id);
                 }
+                setShowReplaceModal(true);
                 setSelectedTemplate(null);
               }}
             >
@@ -990,155 +1017,172 @@ export default function LYDODocumentTemplatesScreen() {
             </TouchableOpacity>
           </View>
 
-          <TouchableOpacity
-            style={[styles.modalBtn, { backgroundColor: COLORS.lightGray, alignSelf: 'flex-end', marginTop: 8 }]}
-            onPress={() => setSelectedTemplate(null)}
-          >
-            <Text style={{ color: COLORS.darkText, fontWeight: '600' }}>Close</Text>
-          </TouchableOpacity>
+          <View style={[styles.modalRow, styles.replaceFooter]}>
+            <TouchableOpacity
+              style={[styles.modalBtn, styles.replaceCancelBtn, { flex: 1 }]}
+              onPress={() => setSelectedTemplate(null)}
+            >
+              <Text style={{ color: COLORS.darkText, fontWeight: '700' }}>Close</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       </TouchableOpacity>
     </Modal>
   );
 
   // ── Replace Template Modal ──
-  const toggleTemplateCheck = (id) => {
-    setCheckedTemplates(prev => ({ ...prev, [id]: !prev[id] }));
-  };
-
-  const checkedCount = Object.values(checkedTemplates).filter(Boolean).length;
 
   const renderReplaceModal = () => {
     const activeTemplates = templates.filter(t => t.status !== 'Archived');
-    const checkedItems    = activeTemplates.filter(t => checkedTemplates[t.id]);
-    const dropdownLabel   = checkedCount === 0
-      ? 'Select templates…'
-      : checkedItems.map(t => t.name).join(', ');
+    const selectedTemplate = activeTemplates.find(t => t.id === selectedReplaceTemplate);
 
     return (
       <Modal
         visible={showReplaceModal}
         transparent
         animationType="fade"
-        onRequestClose={() => setShowReplaceModal(false)}
+        onRequestClose={() => { setShowReplaceModal(false); setSelectedReplaceTemplate(null); setUploadedFiles({}); }}
       >
         <TouchableOpacity
           style={styles.modalOverlay}
           activeOpacity={1}
-          onPress={() => { setShowReplaceModal(false); setDropdownOpen(false); }}
+          onPress={() => { setShowReplaceModal(false); setSelectedReplaceTemplate(null); setUploadedFiles({}); }}
         >
           <View style={[styles.modalCard, { maxHeight: '90%' }]} onStartShouldSetResponder={() => true}>
             {/* Header */}
             <View style={styles.replaceModalHeader}>
-              <Text style={styles.modalTitle}>Replace Template</Text>
-              <TouchableOpacity onPress={() => { setShowReplaceModal(false); setDropdownOpen(false); }}>
+              <View style={styles.replaceHeaderLeft}>
+                <View style={styles.replaceHeaderIconCircle}>
+                  <Text style={styles.replaceHeaderIconText}>↔</Text>
+                </View>
+                <View>
+                  <Text style={[styles.modalTitle, { marginBottom: 2 }]}>Replace Template</Text>
+                  <Text style={styles.replaceHeaderSubtitle}>Swap in a newer version of an existing template</Text>
+                </View>
+              </View>
+              <TouchableOpacity
+                style={styles.replaceCloseBtn}
+                onPress={() => { setShowReplaceModal(false); setSelectedReplaceTemplate(null); setUploadedFiles({}); }}
+              >
                 <Text style={styles.replaceCloseX}>✕</Text>
               </TouchableOpacity>
             </View>
 
             <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-              <Text style={styles.replaceLabel}>Document Type</Text>
+              <View style={styles.replaceLabelRow}>
+                <Text style={styles.replaceLabel}>Select Template to Replace</Text>
+                <Text style={styles.replaceCountBadge}>{activeTemplates.length} available</Text>
+              </View>
 
-              {/* Trigger */}
-              <TouchableOpacity
-                style={[styles.dropdownTrigger, dropdownOpen && styles.dropdownTriggerOpen]}
-                onPress={() => setDropdownOpen(v => !v)}
-                activeOpacity={0.8}
-              >
-                <Text style={[styles.dropdownTriggerText, checkedCount === 0 && { color: COLORS.midGray }]} numberOfLines={1}>
-                  {dropdownLabel}
-                </Text>
-                <Text style={styles.dropdownCaret}>{dropdownOpen ? '▲' : '▼'}</Text>
-              </TouchableOpacity>
-
-              {/* Checklist panel */}
-              {dropdownOpen && (
-                <View style={styles.checklistPanel}>
-                  {activeTemplates.map((t, idx) => (
-                    <View key={t.id}>
-                      <TouchableOpacity
-                        style={styles.checklistRow}
-                        onPress={() => toggleTemplateCheck(t.id)}
-                        activeOpacity={0.7}
-                      >
-                        <View style={[styles.checkbox, checkedTemplates[t.id] && styles.checkboxChecked]}>
-                          {checkedTemplates[t.id] && <Text style={styles.checkmark}>✓</Text>}
+              {/* Single selection list */}
+              <View style={styles.replaceTemplateList}>
+                {activeTemplates.map((t) => {
+                  const selected = selectedReplaceTemplate === t.id;
+                  return (
+                    <TouchableOpacity
+                      key={t.id}
+                      style={[styles.replaceTemplateItem, selected && styles.replaceTemplateItemSelected]}
+                      onPress={() => { setSelectedReplaceTemplate(t.id); setUploadedFiles({}); }}
+                      activeOpacity={0.7}
+                    >
+                      <View style={[styles.radioCircle, selected && styles.radioCircleChecked]}>
+                        {selected && <View style={styles.radioInner} />}
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text
+                          style={[styles.replaceTemplateName, selected && styles.replaceTemplateNameSelected]}
+                          numberOfLines={2}
+                        >
+                          {t.name}
+                        </Text>
+                        <View style={styles.replaceTemplateMetaRow}>
+                          <View style={[styles.replaceVersionBadge, selected && styles.replaceVersionBadgeSelected]}>
+                            <Text style={[styles.replaceVersionBadgeText, selected && styles.replaceVersionBadgeTextSelected]}>
+                              v{t.version || 1}
+                            </Text>
+                          </View>
+                          <Text style={styles.replaceTemplateCategory} numberOfLines={1}>
+                            {t.category || 'Uncategorized'}
+                          </Text>
                         </View>
-                        <Text style={styles.checklistText} numberOfLines={2}>{t.name}</Text>
-                      </TouchableOpacity>
-                      {idx < activeTemplates.length - 1 && <View style={styles.checklistDivider} />}
-                    </View>
-                  ))}
+                      </View>
+                      {selected && (
+                        <View style={styles.replaceSelectedCheck}>
+                          <Text style={styles.replaceSelectedCheckText}>✓</Text>
+                        </View>
+                      )}
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+
+              {/* Upload slot for selected template */}
+              {selectedTemplate && (
+                <View style={styles.replaceUploadSection}>
+                  <Text style={styles.replaceLabel}>Replace: {selectedTemplate.name}</Text>
+                  <TouchableOpacity
+                    style={[styles.uploadBox, uploadedFiles[selectedTemplate.id] && styles.uploadBoxDone]}
+                    activeOpacity={0.75}
+                    onPress={async () => {
+                      try {
+                        const result = await DocumentPicker.getDocumentAsync({
+                          type: ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'],
+                          copyToCacheDirectory: true,
+                        });
+                        if (!result.canceled) {
+                          const file = result.assets[0];
+                          setUploadedFiles({
+                            [selectedTemplate.id]: { uri: file.uri, name: file.name, type: file.mimeType || 'application/octet-stream' },
+                          });
+                        }
+                      } catch (err) {
+                        Alert.alert('Error', 'Failed to pick file');
+                      }
+                    }}
+                  >
+                    {uploadedFiles[selectedTemplate.id] ? (
+                      <>
+                        <Text style={styles.uploadDoneIcon}>✓</Text>
+                        <Text style={styles.uploadDoneText} numberOfLines={1}>{uploadedFiles[selectedTemplate.id].name}</Text>
+                        <TouchableOpacity onPress={() => setUploadedFiles({})}>
+                          <Text style={styles.uploadRemove}>✕</Text>
+                        </TouchableOpacity>
+                      </>
+                    ) : (
+                      <>
+                        <Text style={styles.uploadIcon}>⬆</Text>
+                        <Text style={styles.uploadText}>Upload New Version</Text>
+                      </>
+                    )}
+                  </TouchableOpacity>
                 </View>
               )}
 
-              {checkedCount > 0 && !dropdownOpen && (
-                <Text style={styles.selectedCountText}>{checkedCount} template{checkedCount > 1 ? 's' : ''} selected</Text>
-              )}
-
-              {/* Upload slots */}
-              {checkedItems.length > 0 && (
-                <View style={{ marginTop: 16 }}>
-                  {checkedItems.map(t => (
-                    <View key={t.id} style={{ marginBottom: 14 }}>
-                      <Text style={styles.replaceLabel}>{t.name}</Text>
-                      <TouchableOpacity
-                        style={[styles.uploadBox, uploadedFiles[t.id] && styles.uploadBoxDone]}
-                        activeOpacity={0.75}
-                        onPress={async () => {
-                          try {
-                            const result = await DocumentPicker.getDocumentAsync({
-                              type: ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'],
-                              copyToCacheDirectory: true,
-                            });
-                            if (!result.canceled) {
-                              const file = result.assets[0];
-                              setUploadedFiles(prev => ({
-                                ...prev,
-                                [t.id]: { uri: file.uri, name: file.name, type: file.mimeType || 'application/octet-stream' },
-                              }));
-                            }
-                          } catch (err) {
-                            Alert.alert('Error', 'Failed to pick file');
-                          }
-                        }}
-                      >
-                        {uploadedFiles[t.id] ? (
-                          <>
-                            <Text style={styles.uploadDoneIcon}>✓</Text>
-                            <Text style={styles.uploadDoneText} numberOfLines={1}>{uploadedFiles[t.id].name}</Text>
-                            <TouchableOpacity onPress={() => setUploadedFiles(prev => { const n = {...prev}; delete n[t.id]; return n; })}>
-                              <Text style={styles.uploadRemove}>✕</Text>
-                            </TouchableOpacity>
-                          </>
-                        ) : (
-                          <>
-                            <Text style={styles.uploadIcon}>⬆</Text>
-                            <Text style={styles.uploadText}>Upload New Version</Text>
-                          </>
-                        )}
-                      </TouchableOpacity>
-                    </View>
-                  ))}
+              {!selectedTemplate && (
+                <View style={styles.replaceHintBox}>
+                  <Text style={styles.replaceHintIcon}>ⓘ</Text>
+                  <Text style={styles.replaceHint}>Select a template above to replace.</Text>
                 </View>
-              )}
-
-              {checkedItems.length === 0 && (
-                <Text style={styles.replaceHint}>Select templates above to upload replacements.</Text>
               )}
             </ScrollView>
 
             {/* Footer */}
-            <View style={[styles.modalRow, { marginTop: 16 }]}>
+            <View style={[styles.modalRow, styles.replaceFooter]}>
               <TouchableOpacity
-                style={[styles.modalBtn, { backgroundColor: COLORS.lightGray, flex: 1 }]}
-                onPress={() => { setShowReplaceModal(false); setCheckedTemplates({}); setUploadedFiles({}); setDropdownOpen(false); }}
+                style={[styles.modalBtn, styles.replaceCancelBtn, { flex: 1 }]}
+                onPress={() => { setShowReplaceModal(false); setSelectedReplaceTemplate(null); setUploadedFiles({}); }}
+                activeOpacity={0.8}
               >
                 <Text style={{ color: COLORS.darkText, fontWeight: '600' }}>Cancel</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[styles.modalBtn, { backgroundColor: (checkedCount > 0 && !uploading) ? COLORS.navy : COLORS.midGray, flex: 1 }]}
-                disabled={checkedCount === 0 || uploading}
+                style={[
+                  styles.modalBtn,
+                  styles.replaceConfirmBtn,
+                  { backgroundColor: (selectedReplaceTemplate && uploadedFiles[selectedReplaceTemplate] && !uploading) ? COLORS.navy : COLORS.midGray, flex: 1 },
+                ]}
+                activeOpacity={0.85}
+                disabled={!selectedReplaceTemplate || !uploadedFiles[selectedReplaceTemplate] || uploading}
                 onPress={async () => {
                   let resultMsg = null;
                   let isSuccess = false;
@@ -1150,37 +1194,37 @@ export default function LYDODocumentTemplatesScreen() {
                     setLoadingMessage('Replacing template…');
                     setUploading(true);
                     setShowReplaceModal(false);
-                    setDropdownOpen(false);
 
-                    for (const templateId of Object.keys(checkedTemplates)) {
-                      if (!checkedTemplates[templateId]) continue;
-
-                      const currentTemplate = templates.find(t => t.id === templateId);
-                      if (!currentTemplate) continue;
-
-                      let fileUrl = currentTemplate.fileUrl || 'no_file_attached';
-                      if (uploadedFiles[templateId]?.uri) {
-                        const uploaded = await uploadFileToStorage(uploadedFiles[templateId], currentTemplate.name);
-                        if (uploaded) fileUrl = uploaded;
-                      }
-
-                      await supabase
-                        .from('templates')
-                        .update({ status: 'archived' })
-                        .eq('template_id', parseInt(templateId));
-
-                      await supabase.from('templates').insert({
-                        title: currentTemplate.name,
-                        description: '',
-                        file_url: fileUrl,
-                        status: 'active',
-                        template_category: currentTemplate.category,
-                        document_type: currentTemplate.documentType,
-                        uploaded_by: lydoUserId,
-                        version: (currentTemplate.version || 1) + 1,
-                        replaces_id: parseInt(templateId),
-                      });
+                    const templateId = selectedReplaceTemplate;
+                    const currentTemplate = templates.find(t => t.id === templateId);
+                    if (!currentTemplate) {
+                      throw new Error('Template not found');
                     }
+
+                    let fileUrl = currentTemplate.fileUrl || 'no_file_attached';
+                    if (uploadedFiles[templateId]?.uri) {
+                      const uploaded = await uploadFileToStorage(uploadedFiles[templateId], currentTemplate.name);
+                      if (uploaded) fileUrl = uploaded;
+                    }
+
+                    // Archive the old template
+                    await supabase
+                      .from('templates')
+                      .update({ status: 'archived' })
+                      .eq('template_id', parseInt(templateId));
+
+                    // Insert new version
+                    await supabase.from('templates').insert({
+                      title: currentTemplate.name,
+                      description: '',
+                      file_url: fileUrl,
+                      status: 'active',
+                      template_category: currentTemplate.category,
+                      document_type: currentTemplate.documentType,
+                      uploaded_by: lydoUserId,
+                      version: (currentTemplate.version || 1) + 1,
+                      replaces_id: parseInt(templateId),
+                    });
 
                     const { data: newData } = await supabase
                       .from('templates')
@@ -1214,23 +1258,29 @@ export default function LYDODocumentTemplatesScreen() {
                         })));
                     }
 
-                    const count = Object.values(checkedTemplates).filter(Boolean).length;
                     isSuccess = true;
                     // Log the replace template activity
-                    const replacedNames = checkedItems.map(t => t.name).join(', ');
-                    await logActivity('Replace template', `Replaced template(s): ${replacedNames}`);
-                    resultMsg = `${count} template${count > 1 ? 's' : ''} replaced successfully!`;
+                    const replacedName = currentTemplate?.name || 'Unknown';
+                    const newVersion = (currentTemplate?.version || 1) + 1;
+                    await logActivity('Replace template', `Replaced template: ${replacedName}`);
+
+                    // Set success details and show modal
+                    setSuccessDetails({
+                      replacedName: replacedName,
+                      newVersion: newVersion,
+                      forwardedTo: '', // Forwarding is a separate action
+                    });
+                    setShowReplaceModal(false);
+                    setShowSuccessModal(true);
+                    return;
                   } catch (err) {
                     console.error('Error replacing templates:', err);
                     isSuccess = false;
-                    resultMsg = err.message || 'Failed to replace template';
+                    Alert.alert('Error', err.message || 'Failed to replace template');
                   } finally {
-                    setCheckedTemplates({});
+                    setSelectedReplaceTemplate(null);
                     setUploadedFiles({});
                     setUploading(false);
-                    setTimeout(() => {
-                      Alert.alert(isSuccess ? 'Success' : 'Error', resultMsg);
-                    }, 500);
                   }
                 }}
               >
@@ -1243,31 +1293,140 @@ export default function LYDODocumentTemplatesScreen() {
     );
   };
 
+  // ── Success Confirmation Modal ──
+  const renderSuccessModal = () => {
+    const { replacedName, newVersion, forwardedTo } = successDetails;
+    const isReplace = replacedName && newVersion > 0;
+    const isForward = forwardedTo;
+
+    return (
+      <Modal
+        visible={showSuccessModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowSuccessModal(false)}
+      >
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setShowSuccessModal(false)}
+        >
+          <View style={[styles.modalCard, { alignItems: 'center', paddingVertical: 30 }]} onStartShouldSetResponder={() => true}>
+            {/* Success Icon */}
+            <View style={[styles.successIconCircle, { backgroundColor: '#D4EDDA', width: 80, height: 80, borderRadius: 40, alignItems: 'center', justifyContent: 'center', marginBottom: 20 }]}>
+              <Text style={{ fontSize: 40, color: '#28A745' }}>✓</Text>
+            </View>
+
+            <Text style={[styles.modalTitle, { marginBottom: 20, fontSize: 20 }]}>Success!</Text>
+
+            {/* Replace: Replaced Successfully */}
+            {isReplace && (
+              <View style={styles.successDetailRow}>
+                <Text style={styles.successDetailLabel}>✓ Replaced:</Text>
+                <Text style={styles.successDetailValue}>{replacedName}</Text>
+              </View>
+            )}
+
+            {/* Replace: New Template Added */}
+            {isReplace && (
+              <View style={styles.successDetailRow}>
+                <Text style={styles.successDetailLabel}>✓ New Version:</Text>
+                <Text style={styles.successDetailValue}>v{newVersion}</Text>
+              </View>
+            )}
+
+            {/* Forward: Forwarded To */}
+            {isForward && (
+              <View style={styles.successDetailRow}>
+                <Text style={styles.successDetailLabel}>✓ Forwarded to:</Text>
+                <Text style={styles.successDetailValue}>{forwardedTo}</Text>
+              </View>
+            )}
+
+            {/* Fallback for empty cases */}
+            {!isReplace && !isForward && (
+              <Text style={{ color: COLORS.subText, fontSize: 14, marginTop: 10 }}>Operation completed successfully!</Text>
+            )}
+
+            <TouchableOpacity
+              style={[styles.modalBtn, { backgroundColor: COLORS.navy, marginTop: 25, width: '80%' }]}
+              onPress={() => setShowSuccessModal(false)}
+            >
+              <Text style={{ color: COLORS.white, fontWeight: '700' }}>Done</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+    );
+  };
+
   // ── Forward Template Modal ──
   const toggleForwardCheck = (id) => {
     setForwardChecked(prev => ({ ...prev, [id]: !prev[id] }));
   };
 
+  const toggleBarangayCheck = (id) => {
+    setSelectedBarangays(prev => {
+      if (prev.includes(id)) {
+        return prev.filter(b => b !== id);
+      } else {
+        return [...prev, id];
+      }
+    });
+  };
+
   const forwardCheckedCount = Object.values(forwardChecked).filter(Boolean).length;
 
-  const renderForwardModal = () => (
+  const renderForwardModal = () => {
+    // A template is only offered for forwarding if there's at least one currently-
+    // targeted barangay that doesn't already have that exact template version
+    // distributed to it. Once every target barangay already has it, it drops out
+    // of the selection. A newer version (a different, not-yet-distributed
+    // template_id) is unaffected and will still show up normally — forwarding it
+    // will replace the old version's distribution record at that barangay.
+    const forwardTargetIds = forwardToAll
+      ? barangays.map(b => b.barangay_id)
+      : selectedBarangays;
+
+    const forwardableTemplates = templates.filter(t => t.status !== 'Archived').filter(t => {
+      if (forwardTargetIds.length === 0) return true; // no target chosen yet
+      const distributedSet = new Set(
+        distributions
+          .filter(d => d.template_id?.toString() === t.id.toString())
+          .map(d => d.barangay_id)
+      );
+      return forwardTargetIds.some(bid => !distributedSet.has(bid));
+    });
+
+    return (
     <Modal
       visible={showForwardModal}
       transparent
       animationType="fade"
-      onRequestClose={() => { setShowForwardModal(false); setForwardChecked({}); }}
+      onRequestClose={() => { setShowForwardModal(false); setForwardChecked({}); setSelectedBarangays([]); setForwardToAll(true); }}
     >
       <TouchableOpacity
         style={styles.modalOverlay}
         activeOpacity={1}
-        onPress={() => { setShowForwardModal(false); setForwardChecked({}); }}
+        onPress={() => { setShowForwardModal(false); setForwardChecked({}); setSelectedBarangays([]); setForwardToAll(true); }}
       >
         <View style={[styles.modalCard, { maxHeight: '90%' }]} onStartShouldSetResponder={() => true}>
 
           {/* Header */}
           <View style={styles.replaceModalHeader}>
-            <Text style={styles.modalTitle}>Forward Templates</Text>
-            <TouchableOpacity onPress={() => { setShowForwardModal(false); setForwardChecked({}); }}>
+            <View style={styles.replaceHeaderLeft}>
+              <View style={styles.replaceHeaderIconCircle}>
+                <Text style={styles.replaceHeaderIconText}>→</Text>
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.modalTitle, { marginBottom: 2 }]}>Forward Templates</Text>
+                <Text style={styles.replaceHeaderSubtitle}>Distribute a template to one or more barangays</Text>
+              </View>
+            </View>
+            <TouchableOpacity
+              style={styles.replaceCloseBtn}
+              onPress={() => { setShowForwardModal(false); setForwardChecked({}); setSelectedBarangays([]); setForwardToAll(true); }}
+            >
               <Text style={styles.replaceCloseX}>✕</Text>
             </TouchableOpacity>
           </View>
@@ -1278,7 +1437,13 @@ export default function LYDODocumentTemplatesScreen() {
           {/* Checklist box */}
           <ScrollView showsVerticalScrollIndicator={false} style={{ marginBottom: 8 }}>
             <View style={styles.forwardChecklistBox}>
-              {templates.filter(t => t.status !== 'Archived').map((t, idx, arr) => (
+              {forwardableTemplates.length === 0 ? (
+                <View style={{ padding: 16, alignItems: 'center' }}>
+                  <Text style={{ fontSize: 13, color: COLORS.midGray }}>
+                    All templates are already distributed to the selected barangay(s)
+                  </Text>
+                </View>
+              ) : forwardableTemplates.map((t, idx, arr) => (
                 <View key={t.id}>
                   <TouchableOpacity
                     style={styles.checklistRow}
@@ -1296,20 +1461,87 @@ export default function LYDODocumentTemplatesScreen() {
             </View>
           </ScrollView>
 
+          {/* Forward to All / Select Barangay */}
+          <Text style={[styles.replaceLabel, { marginBottom: 10, marginTop: 8 }]}>Distribute To</Text>
+
+          {/* Forward to All checkbox */}
+          <TouchableOpacity
+            style={styles.checklistRow}
+            onPress={() => { setForwardToAll(true); setSelectedBarangays([]); }}
+            activeOpacity={0.7}
+          >
+            <View style={[styles.forwardCheckbox, forwardToAll && styles.forwardCheckboxChecked]}>
+              {forwardToAll && <Text style={styles.checkmark}>✓</Text>}
+            </View>
+            <Text style={styles.checklistText}>All Barangays</Text>
+          </TouchableOpacity>
+
+          {/* Select Specific Barangay */}
+          <TouchableOpacity
+            style={[styles.checklistRow, { borderTopWidth: 0 }]}
+            onPress={() => setForwardToAll(false)}
+            activeOpacity={0.7}
+          >
+            <View style={[styles.forwardCheckbox, !forwardToAll && styles.forwardCheckboxChecked]}>
+              {!forwardToAll && <Text style={styles.checkmark}>✓</Text>}
+            </View>
+            <Text style={styles.checklistText}>Select Specific Barangay</Text>
+          </TouchableOpacity>
+
+          {/* Barangay dropdown */}
+          {!forwardToAll && (
+            <View style={{ marginTop: 8 }}>
+              <TouchableOpacity
+                style={[styles.dropdownTrigger, showBarangayDropdown && styles.dropdownTriggerOpen]}
+                onPress={() => setShowBarangayDropdown(v => !v)}
+                activeOpacity={0.8}
+              >
+                <Text style={[styles.dropdownTriggerText, selectedBarangays.length === 0 && { color: COLORS.midGray }]}>
+                  {selectedBarangays.length === 0
+                    ? 'Select barangays...'
+                    : `${selectedBarangays.length} barangay${selectedBarangays.length > 1 ? 's' : ''} selected`}
+                </Text>
+                <Text style={styles.dropdownCaret}>{showBarangayDropdown ? '▲' : '▼'}</Text>
+              </TouchableOpacity>
+
+              {showBarangayDropdown && (
+                <View style={[styles.checklistPanel, { maxHeight: 180 }]}>
+                  <ScrollView showsVerticalScrollIndicator={false} nestedScrollEnabled={true}>
+                    {barangays.map((brgy, idx) => (
+                      <View key={brgy.barangay_id}>
+                        <TouchableOpacity
+                          style={styles.checklistRow}
+                          onPress={() => toggleBarangayCheck(brgy.barangay_id)}
+                          activeOpacity={0.7}
+                        >
+                          <View style={[styles.checkbox, selectedBarangays.includes(brgy.barangay_id) && styles.checkboxChecked]}>
+                            {selectedBarangays.includes(brgy.barangay_id) && <Text style={styles.checkmark}>✓</Text>}
+                          </View>
+                          <Text style={styles.checklistText}>{brgy.barangay_name}</Text>
+                        </TouchableOpacity>
+                        {idx < barangays.length - 1 && <View style={styles.checklistDivider} />}
+                      </View>
+                    ))}
+                  </ScrollView>
+                </View>
+              )}
+            </View>
+          )}
+
           {/* Footer */}
-          <View style={[styles.modalRow, { marginTop: 12 }]}>
+          <View style={[styles.modalRow, styles.replaceFooter]}>
             <TouchableOpacity
-              style={[styles.modalBtn, { backgroundColor: COLORS.lightGray, flex: 1 }]}
-              onPress={() => { setShowForwardModal(false); setForwardChecked({}); }}
+              style={[styles.modalBtn, styles.replaceCancelBtn, { flex: 1 }]}
+              onPress={() => { setShowForwardModal(false); setForwardChecked({}); setSelectedBarangays([]); setForwardToAll(true); }}
             >
-              <Text style={{ color: COLORS.darkText, fontWeight: '600' }}>Cancel</Text>
+              <Text style={{ color: COLORS.darkText, fontWeight: '700' }}>Cancel</Text>
             </TouchableOpacity>
             <TouchableOpacity
-              style={[styles.modalBtn, {
-                backgroundColor: forwardCheckedCount > 0 ? COLORS.navy : COLORS.midGray,
+              style={[styles.modalBtn, styles.replaceConfirmBtn, {
+                backgroundColor: (forwardCheckedCount > 0 && (forwardToAll || selectedBarangays.length > 0)) ? COLORS.navy : COLORS.midGray,
                 flex: 1,
               }]}
-              disabled={forwardCheckedCount === 0}
+              disabled={forwardCheckedCount === 0 || (!forwardToAll && selectedBarangays.length === 0)}
               onPress={async () => {
                 let resultMsg = null;
                 let isSuccess = false;
@@ -1323,14 +1555,51 @@ export default function LYDODocumentTemplatesScreen() {
                   setUploading(true);
                   setShowForwardModal(false);
 
-                  const { data: barangays } = await supabase
-                    .from('barangays')
-                    .select('barangay_id');
+                  // Get target barangays
+                  let targetBarangays = [];
+                  if (forwardToAll) {
+                    const { data: allBarangays } = await supabase
+                      .from('barangays')
+                      .select('barangay_id');
+                    targetBarangays = allBarangays || [];
+                  } else {
+                    targetBarangays = barangays.filter(b => selectedBarangays.includes(b.barangay_id));
+                  }
 
                   for (const templateId of Object.keys(forwardChecked)) {
                     if (!forwardChecked[templateId]) continue;
 
-                    for (const brgy of barangays || []) {
+                    // Find every template_id (including older/archived versions) that
+                    // shares this template's document type, so a newer version being
+                    // forwarded can replace an older version already sitting on a
+                    // barangay's copy, rather than piling up as a duplicate entry.
+                    const currentTemplateForForward = templates.find(t => t.id === templateId);
+                    const docTypeForForward = currentTemplateForForward?.documentType;
+                    let sameDocTypeIds = [templateId];
+                    if (docTypeForForward) {
+                      const { data: sameTypeRows } = await supabase
+                        .from('templates')
+                        .select('template_id')
+                        .eq('document_type', docTypeForForward);
+                      if (sameTypeRows) {
+                        sameDocTypeIds = sameTypeRows.map(r => r.template_id.toString());
+                      }
+                    }
+                    const olderVersionIds = sameDocTypeIds
+                      .filter(id => id !== templateId)
+                      .map(id => parseInt(id));
+
+                    for (const brgy of targetBarangays) {
+                      // Replace: drop any older version of this document type already
+                      // distributed to this barangay before adding the new version.
+                      if (olderVersionIds.length > 0) {
+                        await supabase
+                          .from('template_distributions')
+                          .delete()
+                          .eq('barangay_id', brgy.barangay_id)
+                          .in('template_id', olderVersionIds);
+                      }
+
                       await supabase.from('template_distributions').insert({
                         template_id: parseInt(templateId),
                         barangay_id: brgy.barangay_id,
@@ -1350,18 +1619,26 @@ export default function LYDODocumentTemplatesScreen() {
                   isSuccess = true;
                   // Log the forward template activity
                   const forwardedNames = templates.filter(t => forwardChecked[t.id]).map(t => t.name).join(', ');
-                  await logActivity('Forward template', `Forwarded template(s) to all barangays: ${forwardedNames}`);
-                  resultMsg = `${count} template${count > 1 ? 's' : ''} forwarded to all barangays successfully!`;
+                  const targetText = forwardToAll ? 'all barangays' : `${selectedBarangays.length} specific barangay(s)`;
+                  await logActivity('Forward template', `Forwarded template(s) to ${targetText}: ${forwardedNames}`);
+
+                  // Set success details and show modal
+                  setSuccessDetails({
+                    replacedName: '',
+                    newVersion: 0,
+                    forwardedTo: forwardToAll ? 'All Barangays' : `${selectedBarangays.length} Barangay(s)`,
+                  });
+                  setShowForwardModal(false);
+                  setShowSuccessModal(true);
+                  return;
                 } catch (err) {
                   console.error('Error forwarding templates:', err);
-                  isSuccess = false;
-                  resultMsg = err.message || 'Failed to forward templates';
+                  Alert.alert('Error', err.message || 'Failed to forward templates');
                 } finally {
                   setForwardChecked({});
+                  setSelectedBarangays([]);
+                  setForwardToAll(true);
                   setUploading(false);
-                  setTimeout(() => {
-                    Alert.alert(isSuccess ? 'Success' : 'Error', resultMsg);
-                  }, 500);
                 }
               }}
             >
@@ -1372,7 +1649,8 @@ export default function LYDODocumentTemplatesScreen() {
         </View>
       </TouchableOpacity>
     </Modal>
-  );
+    );
+  };
 
   // ── Main Content ──
   const renderContent = () => (
@@ -1660,6 +1938,7 @@ export default function LYDODocumentTemplatesScreen() {
       {renderAddModal()}
       {renderDetailModal()}
       {renderReplaceModal()}
+      {renderSuccessModal()}
       {renderForwardModal()}
       {renderLoadingOverlay()}
 
@@ -2074,16 +2353,98 @@ const styles = StyleSheet.create({
   // Replace Modal
   replaceModalHeader: {
     flexDirection: 'row', justifyContent: 'space-between',
-    alignItems: 'center', marginBottom: 16,
+    alignItems: 'flex-start', marginBottom: 18,
   },
-  replaceCloseX: { fontSize: 18, color: COLORS.subText, padding: 4 },
+  replaceHeaderLeft: { flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1, paddingRight: 8 },
+  replaceHeaderIconCircle: {
+    width: 40, height: 40, borderRadius: 12,
+    backgroundColor: '#EAF0FB', alignItems: 'center', justifyContent: 'center',
+  },
+  replaceHeaderIconText: { fontSize: 18, fontWeight: '800', color: '#5B8DD9' },
+  replaceHeaderSubtitle: { fontSize: 12, color: COLORS.subText, lineHeight: 16 },
+  replaceCloseBtn: {
+    width: 30, height: 30, borderRadius: 15,
+    backgroundColor: COLORS.offWhite, alignItems: 'center', justifyContent: 'center',
+  },
+  replaceCloseX: { fontSize: 14, color: COLORS.subText },
+  replaceLabelRow: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    marginBottom: 10,
+  },
   replaceLabel: {
     fontSize: 12, fontWeight: '700', color: COLORS.subText,
-    textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6,
+    textTransform: 'uppercase', letterSpacing: 0.5,
   },
+  replaceCountBadge: {
+    fontSize: 11, fontWeight: '600', color: COLORS.subText,
+    backgroundColor: COLORS.offWhite, borderRadius: 10,
+    paddingHorizontal: 8, paddingVertical: 3,
+    borderWidth: 1, borderColor: COLORS.lightGray,
+  },
+
+  // Replace: selectable template list (card style)
+  replaceTemplateList: {
+    borderRadius: 12,
+    backgroundColor: COLORS.offWhite,
+    padding: 6,
+    borderWidth: 1,
+    borderColor: COLORS.lightGray,
+    maxHeight: 260,
+  },
+  replaceTemplateItem: {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    backgroundColor: COLORS.white,
+    borderRadius: 10,
+    borderWidth: 1.5, borderColor: 'transparent',
+    paddingHorizontal: 12, paddingVertical: 12,
+    marginBottom: 6,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04, shadowRadius: 3, elevation: 1,
+  },
+  replaceTemplateItemSelected: {
+    borderColor: COLORS.navy,
+    backgroundColor: '#EAF0FB',
+    shadowOpacity: 0.08,
+  },
+  replaceTemplateName: { fontSize: 13, fontWeight: '500', color: COLORS.darkText, lineHeight: 18 },
+  replaceTemplateNameSelected: { fontWeight: '700', color: COLORS.navy },
+  replaceTemplateMetaRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 5,
+  },
+  replaceVersionBadge: {
+    backgroundColor: COLORS.lightGray, borderRadius: 6,
+    paddingHorizontal: 6, paddingVertical: 2,
+  },
+  replaceVersionBadgeSelected: { backgroundColor: '#D6E2F7' },
+  replaceVersionBadgeText: { fontSize: 10, fontWeight: '800', color: COLORS.subText },
+  replaceVersionBadgeTextSelected: { color: COLORS.navy },
+  replaceTemplateCategory: { fontSize: 11, color: COLORS.subText, textTransform: 'capitalize', flexShrink: 1 },
+  replaceSelectedCheck: {
+    width: 22, height: 22, borderRadius: 11,
+    backgroundColor: COLORS.navy, alignItems: 'center', justifyContent: 'center',
+  },
+  replaceSelectedCheckText: { fontSize: 11, color: COLORS.white, fontWeight: '900' },
+
+  replaceUploadSection: { marginTop: 18 },
+  replaceHintBox: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
+    marginTop: 14, paddingVertical: 10,
+  },
+  replaceHintIcon: { fontSize: 13, color: COLORS.midGray },
   replaceHint: {
     fontSize: 13, color: COLORS.midGray, textAlign: 'center',
-    marginTop: 12, fontStyle: 'italic',
+  },
+  replaceFooter: {
+    marginTop: 18, paddingTop: 16,
+    borderTopWidth: 1, borderTopColor: COLORS.lightGray,
+  },
+  replaceCancelBtn: {
+    backgroundColor: COLORS.white,
+    borderWidth: 1.5, borderColor: COLORS.lightGray,
+  },
+  replaceConfirmBtn: {
+    shadowColor: COLORS.navy, shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.25, shadowRadius: 6, elevation: 3,
   },
   // Dropdown trigger
   dropdownTrigger: {
@@ -2129,6 +2490,33 @@ const styles = StyleSheet.create({
   },
   checkboxChecked: { backgroundColor: COLORS.navy, borderColor: COLORS.navy },
   checkmark: { fontSize: 12, color: COLORS.white, fontWeight: '900' },
+
+  // Radio button for single selection
+  radioCircle: {
+    width: 20, height: 20, borderRadius: 10,
+    borderWidth: 2, borderColor: COLORS.midGray,
+    alignItems: 'center', justifyContent: 'center',
+    backgroundColor: COLORS.white,
+  },
+  radioCircleChecked: {
+    borderColor: COLORS.navy,
+    backgroundColor: COLORS.navy,
+  },
+  radioInner: {
+    width: 8, height: 8, borderRadius: 4,
+    backgroundColor: COLORS.white,
+  },
+
+  // Checklist row for selected state
+  checklistRowSelected: {
+    backgroundColor: '#EAF4FF',
+    borderRadius: 8,
+    borderWidth: 2,
+    borderColor: COLORS.navy,
+    marginHorizontal: 2,
+    marginVertical: 2,
+  },
+
   uploadBox: {
     borderWidth: 1.5, borderColor: '#BBC8E6', borderStyle: 'dashed',
     borderRadius: 10, backgroundColor: '#EEF2FB',
@@ -2146,6 +2534,27 @@ const styles = StyleSheet.create({
   uploadDoneIcon: { fontSize: 16, color: '#3AAA5C', fontWeight: '900' },
   uploadDoneText: { flex: 1, fontSize: 13, color: '#2E7D32', fontWeight: '600' },
   uploadRemove: { fontSize: 14, color: COLORS.subText, paddingHorizontal: 4 },
+
+  // Success Modal styles
+  successIconCircle: {},
+  successDetailRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: 6,
+    width: '90%',
+  },
+  successDetailLabel: {
+    fontSize: 14,
+    color: COLORS.subText,
+    fontWeight: '600',
+    marginRight: 8,
+  },
+  successDetailValue: {
+    fontSize: 14,
+    color: COLORS.darkText,
+    fontWeight: '500',
+    flex: 1,
+  },
 
   // Add Modal specific
   addNameInput: {

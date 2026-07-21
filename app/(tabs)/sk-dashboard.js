@@ -13,6 +13,29 @@ import { DOC_FULL_NAMES } from './reportsApi';
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const isMobile = SCREEN_WIDTH < 768;
 
+// Supabase timestamps have no 'Z' suffix — JS mis-parses them as local time.
+// toUtcDate forces correct UTC parsing before PHT display.
+const toUtcDate = (dateStr) => {
+  if (!dateStr) return new Date();
+  if (dateStr instanceof Date) return dateStr;
+  const iso = String(dateStr).replace(' ', 'T').replace(/Z?$/, 'Z');
+  return new Date(iso);
+};
+
+const toPhilippineDate = (dateStr, options) => {
+  if (!dateStr) return '';
+  const d = toUtcDate(dateStr);
+  if (isNaN(d.getTime())) return '';
+  return d.toLocaleDateString('en-PH', { timeZone: 'Asia/Manila', ...options });
+};
+
+const toPhilippineTime = (dateStr, options) => {
+  if (!dateStr) return '';
+  const d = toUtcDate(dateStr);
+  if (isNaN(d.getTime())) return '';
+  return d.toLocaleTimeString('en-PH', { timeZone: 'Asia/Manila', ...options });
+};
+
 const COLORS = {
   maroon: '#8B0000', maroonDark: '#6B0000', maroonLight: '#A50000',
   gold: '#E8C547', accent: '#D4A017', calGold: '#E8A020',
@@ -585,8 +608,8 @@ export default function HomeScreen({ navigation }) {
           id: doc.title + date,
           label,
           role,
-          time: new Date(doc.created_at).toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit' }),
-          date: new Date(doc.created_at).toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' }),
+          time: toPhilippineTime(doc.created_at, { hour: '2-digit', minute: '2-digit' }),
+          date: toPhilippineDate(doc.created_at, { month: 'long', day: 'numeric', year: 'numeric' }),
           type: actionType,
         };
       });
@@ -731,8 +754,9 @@ export default function HomeScreen({ navigation }) {
       // Build a map: document_type_id -> exists
       const approvedDocsSet = new Set((docs || []).map(d => d.document_type));
 
-      // Set deadlines count for badge
-      setDeadlinesCount(deadlines?.length || 0);
+      // Set deadlines count for badge (only count pending/partially met deadlines)
+      const notMetCount = (deadlines || []).filter(d => !d.is_met).length;
+      setDeadlinesCount(notMetCount);
 
       const now = new Date().toISOString();
       const taskList = [];

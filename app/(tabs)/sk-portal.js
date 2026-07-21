@@ -193,14 +193,69 @@ const UploadIcon = () => (
 );
 
 // ─── DOCUMENT CARD ────────────────────────────────────────────────────────────
-const DocumentCard = ({ item, onPress }) => (
+// Small helper so each action button gets a bigger invisible tap target
+// without changing its visual size (better usability, esp. on mobile).
+const BTN_HIT_SLOP = { top: 8, bottom: 8, left: 8, right: 8 };
+
+const DocCardActionBtn = ({ icon, label, color, bg, onPress }) => (
   <TouchableOpacity
-    style={styles.docCard}
-    onPress={() => onPress && onPress(item)}
-    activeOpacity={0.75}
+    style={[styles.docCardActionBtn, { backgroundColor: bg }, isMobile && styles.docCardActionBtnCompact]}
+    onPress={onPress}
+    activeOpacity={0.7}
+    hitSlop={BTN_HIT_SLOP}
+    accessibilityRole="button"
+    accessibilityLabel={label}
   >
-    <Text style={styles.docCardTitle} numberOfLines={2}>{item.title}</Text>
+    <Feather name={icon} size={14} color={color} />
+    {!isMobile && <Text style={[styles.docCardActionText, { color }]}>{label}</Text>}
   </TouchableOpacity>
+);
+
+const DocumentCard = ({ item, onView, onDownload, onUnpublish }) => (
+  <View style={styles.docCard}>
+    <View style={styles.docCardBody}>
+      <Text style={styles.docCardTitle} numberOfLines={2}>{item.title}</Text>
+
+      <View style={styles.docCardMetaRow}>
+        {!!item.category && item.category !== 'Unknown' && (
+          <View style={styles.docCardBadge}>
+            <Text style={styles.docCardBadgeText} numberOfLines={1}>{item.category}</Text>
+          </View>
+        )}
+        {!!item.year && <Text style={styles.docCardMetaText}>{item.year}</Text>}
+        {!!item.uploadedAt && (
+          <>
+            <Text style={styles.docCardMetaDot}>•</Text>
+            <Text style={styles.docCardMetaText}>Posted {item.uploadedAt}</Text>
+          </>
+        )}
+      </View>
+    </View>
+
+    <View style={styles.docCardActions}>
+      <DocCardActionBtn
+        icon="eye"
+        label="View"
+        color={COLORS.navy}
+        bg="#EAF0FB"
+        onPress={() => onView && onView(item)}
+      />
+      <DocCardActionBtn
+        icon="download"
+        label="Download"
+        color="#2E7D32"
+        bg="#EAFBEA"
+        onPress={() => onDownload && onDownload(item)}
+      />
+      <DocCardActionBtn
+        icon="x-circle"
+        label="Unpublish"
+        color="#B71C1C"
+        bg="#FFEBEE"
+        onPress={() => onUnpublish && onUnpublish(item)}
+      />
+    </View>
+  </View>
 );
 
 // ─── FEEDBACK ROW ─────────────────────────────────────────────────────────────
@@ -255,8 +310,6 @@ export default function SKPortalScreen() {
   const [searchText, setSearchText]           = useState('');
   const [notifCount]                          = useState(2);
   const [sidebarVisible, setSidebarVisible]   = useState(false);
-  const [selectedDoc, setSelectedDoc]         = useState(null);
-  const [showDocModal, setShowDocModal]       = useState(false);
   const [showDocDropdown, setShowDocDropdown] = useState(false);
   const [showYearDropdown, setShowYearDropdown] = useState(false);
   const [showUploadModal, setShowUploadModal]   = useState(false);
@@ -412,7 +465,6 @@ export default function SKPortalScreen() {
 
   const handleLogout = () => { logout(); router.replace('/'); };
 
-  const handleDocPress = (doc) => { setSelectedDoc(doc); setShowDocModal(true); };
 
   // Filter published docs - use fetched data if available, fallback to mock data
   const activeDocs = publishedDocs;
@@ -527,10 +579,10 @@ export default function SKPortalScreen() {
   };
 
   // -- Unpublish handler --
-  const handleUnpublish = () => {
-    // Snapshot values now - selectedDoc may be cleared before the async callback runs
-    const docId = selectedDoc?.id;
-    const docTitle = selectedDoc?.title || 'Document';
+  const handleUnpublish = (doc) => {
+    // Snapshot values now - doc reference stays stable for the async callback
+    const docId = doc?.id;
+    const docTitle = doc?.title || 'Document';
     if (!docId) return;
 
     const doUnpublish = async () => {
@@ -541,66 +593,11 @@ export default function SKPortalScreen() {
       if (error) { Alert.alert('Error', error.message); return; }
       await logActivity('Unpublish document', `Unpublished "${docTitle}" from the transparency portal`);
       setPublishedDocs(prev => prev.filter(d => d.id !== docId));
-      setShowDocModal(false);
       openSuccess('unpublish', docTitle);
     };
 
     openAlert('unpublish', docTitle, () => { closeAlert(); doUnpublish(); });
   };
-
-  // ── Doc Detail Modal ──
-  const renderDocModal = () => (
-    <Modal
-      visible={showDocModal}
-      transparent
-      animationType="fade"
-      onRequestClose={() => setShowDocModal(false)}
-    >
-      <TouchableOpacity
-        style={styles.modalOverlay}
-        activeOpacity={1}
-        onPress={() => setShowDocModal(false)}
-      >
-        <View style={styles.modalCard} onStartShouldSetResponder={() => true}>
-          <Text style={styles.modalTitle}>Document</Text>
-          <Text style={styles.modalSubtitle} numberOfLines={3}>{selectedDoc?.title}</Text>
-          <View style={styles.modalDivider} />
-          <View style={styles.modalMeta}>
-            <Text style={styles.modalMetaLabel}>Category</Text>
-            <Text style={styles.modalMetaValue}>{selectedDoc?.category}</Text>
-          </View>
-          <View style={styles.modalMeta}>
-            <Text style={styles.modalMetaLabel}>Uploaded</Text>
-            <Text style={styles.modalMetaValue}>{selectedDoc?.uploadedAt}</Text>
-          </View>
-          <View style={styles.modalDivider} />
-          <View style={styles.modalActions}>
-            <TouchableOpacity
-              style={[styles.modalActionBtn, { backgroundColor: '#EAF0FB' }]}
-              onPress={() => handleView(selectedDoc?.fileUrl, selectedDoc?.title)}
-            >
-              <Text style={[styles.modalActionText, { color: COLORS.navy }]}>👁  View</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.modalActionBtn, { backgroundColor: '#EAFBEA' }]}
-              onPress={() => handleDownload(selectedDoc?.fileUrl, selectedDoc?.title)}
-            >
-              <Text style={[styles.modalActionText, { color: '#2E7D32' }]}>⬇  Download</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.modalActionBtn, { backgroundColor: '#FFEBEE' }]}
-              onPress={handleUnpublish}
-            >
-              <Text style={[styles.modalActionText, { color: '#B71C1C' }]}>✕  Unpublish</Text>
-            </TouchableOpacity>
-          </View>
-          <TouchableOpacity style={styles.modalCloseBtn} onPress={() => setShowDocModal(false)}>
-            <Text style={styles.modalCloseBtnText}>Close</Text>
-          </TouchableOpacity>
-        </View>
-      </TouchableOpacity>
-    </Modal>
-  );
 
   // ── Upload Modal ──
   const UPLOAD_FOLDER_CATEGORIES = ['Planning', 'Financial', 'Governance', 'Performance'];
@@ -1152,23 +1149,40 @@ export default function SKPortalScreen() {
           </View>
 
           {/* Posted in Public Portal label */}
-          <Text style={styles.postedLabel}>Posted in Public Portal</Text>
+          <View style={styles.postedLabelRow}>
+            <View style={styles.postedLabelLeft}>
+              <Feather name="globe" size={13} color={COLORS.navy} style={{ marginRight: 6 }} />
+              <Text style={styles.postedLabel}>Posted in Public Portal</Text>
+            </View>
+            <View style={styles.postedCountBadge}>
+              <Text style={styles.postedCountBadgeText}>
+                {filteredDocs.length} {filteredDocs.length === 1 ? 'document' : 'documents'}
+              </Text>
+            </View>
+          </View>
 
           {/* Full Disclosure Policy Board section */}
           <View style={styles.disclosureCard}>
             <View style={styles.disclosureHeader}>
+              <Feather name="shield" size={13} color={COLORS.gold} style={{ marginRight: 7 }} />
               <Text style={styles.disclosureHeaderText}>Full Disclosure Policy Board</Text>
             </View>
 
             {filteredDocs.length > 0 ? (
               filteredDocs.map((doc, idx) => (
                 <React.Fragment key={doc.id}>
-                  <DocumentCard item={doc} onPress={handleDocPress} />
+                  <DocumentCard
+                    item={doc}
+                    onView={(d) => handleView(d.fileUrl, d.title)}
+                    onDownload={(d) => handleDownload(d.fileUrl, d.title)}
+                    onUnpublish={(d) => handleUnpublish(d)}
+                  />
                   {idx < filteredDocs.length - 1 && <View style={styles.cardDivider} />}
                 </React.Fragment>
               ))
             ) : (
               <View style={styles.emptyState}>
+                <Feather name="inbox" size={22} color={COLORS.midGray} style={{ marginBottom: 8 }} />
                 <Text style={styles.emptyText}>No documents found</Text>
               </View>
             )}
@@ -1398,7 +1412,6 @@ export default function SKPortalScreen() {
     <SafeAreaView style={styles.safe}>
       <StatusBar barStyle="light-content" backgroundColor={COLORS.navy} />
 
-      {renderDocModal()}
       {renderUploadModal()}
       {renderAlertModal()}
       {renderSuccessModal()}
@@ -1732,9 +1745,24 @@ const styles = StyleSheet.create({
   uploadBtnText: { fontSize: 13, fontWeight: '600', color: COLORS.navy },
 
   // Posted label
-  postedLabel: {
-    fontSize: 13, fontWeight: '700', color: COLORS.navy,
+  postedLabelRow: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     marginBottom: 10,
+  },
+  postedLabelLeft: {
+    flexDirection: 'row', alignItems: 'center',
+  },
+  postedLabel: {
+    fontSize: 13, fontWeight: '700', color: COLORS.navy, letterSpacing: 0.2,
+  },
+  postedCountBadge: {
+    backgroundColor: COLORS.offWhite,
+    borderWidth: 1, borderColor: COLORS.lightGray,
+    borderRadius: 20,
+    paddingHorizontal: 10, paddingVertical: 4,
+  },
+  postedCountBadgeText: {
+    fontSize: 11, fontWeight: '700', color: COLORS.subText,
   },
 
   // Full Disclosure Card
@@ -1743,27 +1771,69 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     borderWidth: 1, borderColor: COLORS.lightGray,
     overflow: 'hidden',
-    shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05, shadowRadius: 4, elevation: 1,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06, shadowRadius: 6, elevation: 2,
     marginBottom: 16,
   },
   disclosureHeader: {
-    paddingHorizontal: 18, paddingVertical: 13,
-    alignItems: 'center',
-    borderBottomWidth: 1, borderBottomColor: COLORS.lightGray,
-    backgroundColor: COLORS.white,
+    flexDirection: 'row',
+    paddingHorizontal: 18, paddingVertical: 14,
+    alignItems: 'center', justifyContent: 'center',
+    backgroundColor: COLORS.navy,
+    borderBottomWidth: 3, borderBottomColor: COLORS.gold,
   },
   disclosureHeaderText: {
-    fontSize: 14, fontWeight: '800', color: COLORS.navy, textAlign: 'center',
+    fontSize: 14, fontWeight: '800', color: COLORS.white,
+    textAlign: 'center', letterSpacing: 0.3,
   },
   docCard: {
-    paddingHorizontal: 18, paddingVertical: 16,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    gap: 12,
+    paddingHorizontal: 18, paddingVertical: 15,
   },
+  docCardBody: { flex: 1, minWidth: 0, paddingRight: 4 },
   docCardTitle: {
-    fontSize: 13, color: COLORS.darkText, fontWeight: '400', lineHeight: 19,
+    fontSize: 13, color: COLORS.darkText, fontWeight: '600', lineHeight: 18,
+  },
+  docCardMetaRow: {
+    flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap',
+    marginTop: 5, gap: 2,
+  },
+  docCardBadge: {
+    backgroundColor: '#EAF0FA',
+    borderRadius: 6,
+    paddingHorizontal: 7, paddingVertical: 2,
+    marginRight: 6,
+  },
+  docCardBadgeText: {
+    fontSize: 10, fontWeight: '700', color: COLORS.navy,
+  },
+  docCardMetaText: {
+    fontSize: 11, color: COLORS.subText,
+  },
+  docCardMetaDot: {
+    fontSize: 11, color: COLORS.midGray, marginHorizontal: 5,
   },
   cardDivider: {
     height: 1, backgroundColor: COLORS.lightGray, marginHorizontal: 18,
+  },
+  // Right-aligned action cluster — sits at the end of the row instead of
+  // stretching full-width beneath the title.
+  docCardActions: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    flexShrink: 0,
+  },
+  docCardActionBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: 5, paddingHorizontal: 10, paddingVertical: 8, borderRadius: 8,
+  },
+  // Compact, icon-only variant used on narrow (mobile) screens so the three
+  // actions fit comfortably on the right without crowding the title.
+  docCardActionBtnCompact: {
+    width: 32, height: 32, paddingHorizontal: 0, paddingVertical: 0,
+  },
+  docCardActionText: {
+    fontSize: 11.5, fontWeight: '700',
   },
 
   // Empty state

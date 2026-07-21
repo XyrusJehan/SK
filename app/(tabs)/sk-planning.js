@@ -225,13 +225,13 @@ export default function SKPlanningScreen() {
   const [budgetData, setBudgetData]               = useState(null);
   const [viewerModal, setViewerModal]             = useState({ visible: false, fileUrl: null, title: '' });
 
-  // Fetch templates for this barangay (from distributions + direct from templates table)
+  // Fetch templates for this barangay from template_distributions based on barangay_id
   useEffect(() => {
     const fetchTemplates = async () => {
       if (!barangayId) return;
 
       try {
-        // First, get templates distributed to this barangay
+        // Get templates distributed to this barangay from template_distributions
         const { data: distributions, error: distError } = await supabase
           .from('template_distributions')
           .select(`
@@ -255,42 +255,21 @@ export default function SKPlanningScreen() {
 
         if (distError) {
           console.error('Error fetching template distributions:', distError);
+          return;
         }
 
-        // Then, also fetch all active templates directly (for planning category)
-        const { data: allTemplates, error: templateError } = await supabase
-          .from('templates')
-          .select(`
-            template_id,
-            title,
-            description,
-            template_category,
-            document_type,
-            status,
-            created_at,
-            file_url,
-            version
-          `)
-          .eq('status', 'active')
-          .eq('template_category', 'planning');
+        // Build templates list from distributions only
+        const templateList = [];
 
-        if (templateError) {
-          console.error('Error fetching templates:', templateError);
-        }
-
-        // Combine and deduplicate templates
-        const templateMap = new Map();
-
-        // Add distributed templates
         if (distributions) {
           distributions.forEach(d => {
             if (d.templates && d.templates.template_id) {
-              templateMap.set(d.templates.template_id, {
+              templateList.push({
                 id: d.templates.template_id,
                 name: d.templates.title || 'Untitled Template',
                 type: d.templates.template_category || 'Unknown',
                 source: 'LYDO',
-                dateReceived: new Date(d.templates.created_at || d.distributed_at).toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' }),
+                dateReceived: new Date(d.distributed_at).toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' }),
                 fileUrl: d.templates.file_url || '',
                 version: d.templates.version || 1,
               });
@@ -298,24 +277,7 @@ export default function SKPlanningScreen() {
           });
         }
 
-        // Add direct templates (if not already in map)
-        if (allTemplates) {
-          allTemplates.forEach(t => {
-            if (!templateMap.has(t.template_id) && t.file_url) {
-              templateMap.set(t.template_id, {
-                id: t.template_id,
-                name: t.title || 'Untitled Template',
-                type: t.template_category || 'Unknown',
-                source: 'LYDO',
-                dateReceived: new Date(t.created_at).toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' }),
-                fileUrl: t.file_url || '',
-                version: t.version || 1,
-              });
-            }
-          });
-        }
-
-        setTemplates(Array.from(templateMap.values()));
+        setTemplates(templateList);
       } catch (error) {
         console.error('Error:', error);
       }
