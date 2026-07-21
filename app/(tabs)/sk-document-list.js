@@ -409,8 +409,8 @@ export default function SKDocumentListScreen() {
       }
       if (params?.subType) {
         setUploadDocType(params.subType);
-        // Also pre-fill the title with the document type
-        setUploadTitle(params.subType);
+        // Pre-fill the title with the docTitle if provided, otherwise use subType
+        setUploadTitle(params.docTitle || params.subType);
       }
       // Open the upload modal
       setUploadModalVisible(true);

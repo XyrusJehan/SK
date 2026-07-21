@@ -1013,20 +1013,6 @@ export default function LYDOMonitorReportScreen() {
           </>
         )}
 
-        {/* ── Bottom Download PDF button ── */}
-        <View style={styles.bottomActions}>
-          <TouchableOpacity
-            style={styles.pdfBtn}
-            onPress={openReportPreview}
-            activeOpacity={0.85}
-          >
-            <View style={styles.pdfBtnIconWrap}>
-              <View style={styles.pdfBtnArrow} />
-              <View style={styles.pdfBtnArrowBase} />
-            </View>
-            <Text style={styles.pdfBtnText}>Download PDF</Text>
-          </TouchableOpacity>
-        </View>
       </View>
       )}
 

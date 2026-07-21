@@ -8,6 +8,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { useNav } from './navContext';
 import { useAuth } from './authContext';
 import { supabase } from '../../utils/supabase';
+import { DOC_FULL_NAMES } from './reportsApi';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const isMobile = SCREEN_WIDTH < 768;
@@ -646,12 +647,24 @@ export default function HomeScreen({ navigation }) {
     if (task.isMet) return;
 
     try {
+      // First, find the matching document type ID from document_types table
+      // The description/document_type from submission_deadlines may be the full name or shorthand
+      const { data: docTypeRecords } = await supabase
+        .from('document_types')
+        .select('id, document_type')
+        .or(`document_type.ilike.%${task.description}%,document_type.ilike.%${task.document_type}%`)
+        .limit(1);
+
+      const docTypeId = docTypeRecords && docTypeRecords.length > 0
+        ? String(docTypeRecords[0].id)
+        : task.document_type;
+
       // Check if document already exists for this document type
       const { data: existingDocs } = await supabase
         .from('documents')
         .select('document_id, status')
         .eq('barangay_id', barangayId)
-        .eq('document_type', task.document_type)
+        .eq('document_type', docTypeId)
         .in('status', ['saved', 'submitted', 'approved', 'returned'])
         .limit(1);
 
@@ -662,11 +675,13 @@ export default function HomeScreen({ navigation }) {
         router.push({ pathname: '/(tabs)/sk-document-management', params: { initialTab: 'Saved' } });
       } else {
         // Document doesn't exist - go to document list with upload modal
+        // Use document_type for querying, but pass description for the title display
         router.push({
           pathname: '/(tabs)/sk-document-list',
           params: {
             category: folderCategory ? folderCategory.charAt(0).toUpperCase() + folderCategory.slice(1) : 'Planning',
-            subType: task.document_type,
+            subType: docTypeId,
+            docTitle: task.description,
             openUpload: 'true',
           },
         });
@@ -690,22 +705,81 @@ export default function HomeScreen({ navigation }) {
 
       if (error) { console.error('Error fetching tasks:', error); return; }
 
+      // Get all document types to map short codes to IDs
+      const { data: docTypes } = await supabase
+        .from('document_types')
+        .select('id, document_type');
+
+      // Build a map of document_type names/shortcodes to IDs
+      const docTypeToId = {};
+      (docTypes || []).forEach(dt => {
+        const name = (dt.document_type || '').trim().toLowerCase();
+        docTypeToId[name] = String(dt.id);
+        const shortMatch = name.match(/\b\w/g);
+        if (shortMatch) {
+          docTypeToId[shortMatch.join('')] = String(dt.id);
+        }
+      });
+
+      // Get all approved documents for this barangay
+      const { data: docs } = await supabase
+        .from('documents')
+        .select('document_id, document_type, status, title')
+        .eq('barangay_id', barangayId)
+        .eq('status', 'approved');
+
+      // Build a map: document_type_id -> exists
+      const approvedDocsSet = new Set((docs || []).map(d => d.document_type));
+
       // Set deadlines count for badge
       setDeadlinesCount(deadlines?.length || 0);
 
-      const taskList = (deadlines || []).map(d => {
+      const now = new Date().toISOString();
+      const taskList = [];
+
+      for (const d of (deadlines || [])) {
         const docType = d.document_type;
+        const descFromDeadline = (d.description || '').toLowerCase().trim();
+
+        // Find matching document type ID
+        let docTypeId = docTypeToId[docType.toUpperCase()] ||
+                        docTypeToId[docType.toLowerCase()] ||
+                        docTypeToId[descFromDeadline];
+
+        if (!docTypeId) {
+          const matched = (docTypes || []).find(dt =>
+            (dt.document_type || '').toLowerCase().includes(descFromDeadline) ||
+            descFromDeadline.includes((dt.document_type || '').toLowerCase().trim())
+          );
+          if (matched) {
+            docTypeId = String(matched.id);
+          }
+        }
+
+        // Check if there's an approved document
+        const hasApprovedDoc = docTypeId ? approvedDocsSet.has(docTypeId) : false;
+
+        // If deadline says not met but there's an approved doc, update it
+        let isMet = !!d.is_met;
+        if (!isMet && hasApprovedDoc) {
+          await supabase
+            .from('submission_deadlines')
+            .update({ is_met: true, met_at: now })
+            .eq('deadline_id', d.deadline_id);
+          isMet = true;
+        }
+
         const folderCategory = getFolderCategory(docType);
-        return {
+        taskList.push({
           id: d.deadline_id.toString(),
-          description: d.title || docType,
+          description: d.description || docType,
           action: d.action_type === 'publish' ? 'Publish' : 'Submit',
           urgent: new Date(d.deadline_date) <= new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-          isMet: !!d.is_met,
+          isMet: isMet,
           document_type: docType,
           folder_category: folderCategory,
-        };
-      });
+        });
+      }
       setComplianceTasks(taskList);
 
       // Approaching Deadline card: only deadlines not yet met, nearest first.
@@ -934,29 +1008,28 @@ export default function HomeScreen({ navigation }) {
                   <TouchableOpacity><Text style={styles.viewAll}>View All</Text></TouchableOpacity>
                 </View>
                 <View style={styles.divider} />
-                {(complianceTasks.length > 0 ? complianceTasks : [
-                  { id: '1', description: 'Submit the Approved Annual Budget to LYDO', action: 'Submit', isMet: false },
-                  { id: '2', description: 'Submit Annual Budget Youth Investment Program proposal', action: 'Submit', isMet: false },
-                  { id: '3', description: 'Publish the Comprehensive Barangay Youth Development Program to policy board', action: 'Publish', isMet: false },
-                  { id: '4', description: 'Submit Monthly Report for the month of february', action: 'Submit', isMet: false },
-                ]).map((task, idx, arr) => (
-                  <View key={task.id} style={[styles.taskRow, idx < arr.length - 1 && styles.taskRowBorder]}>
-                    <View style={[styles.taskStatusDot, task.isMet ? styles.taskStatusDotMet : styles.taskStatusDotPending]} />
-                    <Text style={styles.taskDesc}>{task.description}</Text>
-                    <TouchableOpacity
-                      style={[
-                        styles.taskBtn,
-                        task.isMet ? styles.taskBtnMet : styles.taskBtnPending,
-                      ]}
-                      onPress={() => handleTaskAction(task)}
-                      activeOpacity={0.8}
-                    >
-                      <Text style={[styles.taskBtnText, task.isMet ? styles.taskBtnMetText : styles.taskBtnPendingText]}>
-                        {task.isMet ? 'Completed' : task.action}
-                      </Text>
-                    </TouchableOpacity>
-                  </View>
-                ))}
+                {complianceTasks.length > 0 ? (
+                  complianceTasks.map((task, idx, arr) => (
+                    <View key={task.id} style={[styles.taskRow, idx < arr.length - 1 && styles.taskRowBorder]}>
+                      <View style={[styles.taskStatusDot, task.isMet ? styles.taskStatusDotMet : styles.taskStatusDotPending]} />
+                      <Text style={styles.taskDesc}>{task.description}</Text>
+                      <TouchableOpacity
+                        style={[
+                          styles.taskBtn,
+                          task.isMet ? styles.taskBtnMet : styles.taskBtnPending,
+                        ]}
+                        onPress={() => handleTaskAction(task)}
+                        activeOpacity={0.8}
+                      >
+                        <Text style={[styles.taskBtnText, task.isMet ? styles.taskBtnMetText : styles.taskBtnPendingText]}>
+                          {task.isMet ? 'Completed' : task.action}
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                  ))
+                ) : (
+                  <Text style={styles.noTaskText}>No Pending Task</Text>
+                )}
               </View>
 
               {/* Recent Activity */}
@@ -1338,6 +1411,7 @@ const styles = StyleSheet.create({
   taskBtnMetText: { color: COLORS.white },
   taskBtnPending: { borderColor: '#F59E0B', backgroundColor: '#FEF3C7' },
   taskBtnPendingText: { color: '#B45309' },
+  noTaskText: { fontSize: 13, color: COLORS.subText, paddingVertical: 14, textAlign: 'center' },
 
   // ── Recent Activity ──
   activityRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, gap: 10 },

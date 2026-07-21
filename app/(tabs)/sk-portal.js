@@ -605,33 +605,39 @@ export default function SKPortalScreen() {
   // ── Upload Modal ──
   const UPLOAD_FOLDER_CATEGORIES = ['Planning', 'Financial', 'Governance', 'Performance'];
 
-  const CATEGORY_DOC_TYPES = {
-    Planning: [
-      { label: 'ABYIP',             value: 'Annual Barangay Youth Investment Program (ABYIP)' },
-      { label: 'CBYDP',             value: 'Comprehensive Barangay Youth Development Plan (CBYDP)' },
-      { label: 'Work Plans',        value: 'Work Plans' },
-      { label: 'Project Proposals', value: 'Project Proposals' },
-    ],
-    Financial: [
-      { label: 'Monthly Itemized List',     value: 'Monthly Itemized List' },
-      { label: 'Quarterly Register of Bank', value: 'Quarterly Register of Bank' },
-      { label: 'Annual Budget',             value: 'Annual Budget' },
-      { label: 'Disbursement Vouchers',     value: 'Disbursement Vouchers' },
-      { label: 'Liquidation Reports',       value: 'Liquidation Reports' },
-    ],
-    Governance: [
-      { label: 'Resolutions', value: 'Resolutions' },
-      { label: 'Ordinances',  value: 'Ordinances' },
-    ],
-    Performance: [
-      { label: 'Accomplishment Reports',  value: 'Accomplishment Reports' },
-      { label: 'Activity Documentation', value: 'Activity Documentation' },
-      { label: 'Event Reports',          value: 'Event Reports' },
-      { label: 'Minutes of the meetings', value: 'Minutes of the meetings' },
-    ],
-  };
+  // Fetch folder_year for the year dropdown
+  const [folderYears, setFolderYears] = useState([]);
+  const [docTypes, setDocTypes] = useState([]);
+  useEffect(() => {
+    const fetchOptions = async () => {
+      const [yearsRes, typesRes] = await Promise.all([
+        supabase.from('folder_year').select('id, fiscal_year').order('fiscal_year', { ascending: false }),
+        supabase.from('document_types').select('id, document_type, category').order('document_type', { ascending: true })
+      ]);
+      if (yearsRes.data) setFolderYears(yearsRes.data);
+      if (typesRes.data) setDocTypes(typesRes.data);
+    };
+    fetchOptions();
+  }, []);
 
-  const UPLOAD_YEARS = ['2026', '2025', '2024', '2023'];
+  const UPLOAD_YEARS = folderYears.map(fy => String(fy.fiscal_year));
+  const yearOptions = folderYears.map(fy => ({ value: fy.id, label: String(fy.fiscal_year) }));
+
+  // Build doc types by category from database
+  const categoryIdMap = { 'Planning': 1, 'Financial': 2, 'Governance': 3, 'Performance': 4 };
+  const CATEGORY_DOC_TYPES = {};
+  UPLOAD_FOLDER_CATEGORIES.forEach(cat => {
+    const catId = categoryIdMap[cat];
+    CATEGORY_DOC_TYPES[cat] = docTypes
+      .filter(d => d.category === catId)
+      .map(d => {
+        const fullName = d.document_type.trim();
+        // Generate abbreviation from first letters of each word
+        const abbrev = fullName.split(' ').map(w => w[0]).join('').replace(/[^A-Z]/g, '');
+        const labelWithAbbr = fullName.includes('(') ? fullName : `${fullName} (${abbrev})`;
+        return { label: labelWithAbbr, value: d.id, fullName: fullName };
+      });
+  });
 
   const pickDocument = async () => {
     try {
@@ -883,6 +889,15 @@ export default function SKPortalScreen() {
                       fileUrl = urlData.publicUrl;
 
                       const now = new Date().toISOString();
+
+                      // Map category name to ID
+                      const categoryMap = { 'Planning': 1, 'Financial': 2, 'Governance': 3, 'Performance': 4 };
+                      const categoryId = categoryMap[uploadCategory] || 1;
+
+                      // Get folder_year fiscal_year value from selected year
+                      const selectedYearObj = folderYears.find(fy => String(fy.fiscal_year) === uploadYear);
+                      const yearValue = selectedYearObj?.fiscal_year || parseInt(uploadYear);
+
                       const { error: insertError } = await supabase
                         .from('website_posts')
                         .insert({
@@ -890,8 +905,10 @@ export default function SKPortalScreen() {
                           published_by: user.userId,
                           title: uploadTitle.trim(),
                           document_category: uploadCategory,
-                          document_type: uploadDocType.value,
-                          year: parseInt(uploadYear) || new Date().getFullYear(),
+                          document_type: uploadDocType?.label || null,
+                          type: uploadDocType?.value || null,
+                          category: categoryId,
+                          year: yearValue,
                           file_url: fileUrl,
                           portal_status: 'published',
                           published_at: now,
@@ -952,6 +969,14 @@ export default function SKPortalScreen() {
                     return;
                   }
                   try {
+                    // Map category name to ID
+                    const categoryMap = { 'Planning': 1, 'Financial': 2, 'Governance': 3, 'Performance': 4 };
+                    const categoryId = categoryMap[uploadCategory] || 1;
+
+                    // Get folder_year fiscal_year value from selected year
+                    const selectedYearObj = folderYears.find(fy => String(fy.fiscal_year) === uploadYear);
+                    const yearValue = selectedYearObj?.fiscal_year || parseInt(uploadYear);
+
                     const { error: insertError } = await supabase
                       .from('website_posts')
                       .insert({
@@ -959,7 +984,10 @@ export default function SKPortalScreen() {
                         published_by: user.userId,
                         title: uploadTitle.trim(),
                         document_category: uploadCategory || null,
-                        year: parseInt(uploadYear) || new Date().getFullYear(),
+                        document_type: uploadDocType?.label || null,
+                        type: uploadDocType?.value || null,
+                        category: categoryId,
+                        year: yearValue,
                         file_url: null,
                         portal_status: 'draft',
                       });
