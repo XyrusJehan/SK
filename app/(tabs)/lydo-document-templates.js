@@ -134,62 +134,13 @@ const STATUS_COLORS = {
   Archived:    { text: '#6D4C41', bg: '#EFEBE9' },
 };
 
-const FILTER_OPTIONS = ['All', 'Currently in use',];
-const CATEGORY_FILTERS = ['All Categories', 'planning', 'budgeting', 'financial_records', 'monitoring_evaluation'];
-const CATEGORY_DISPLAY = {
-  'planning': 'Planning',
-  'budgeting': 'Budgetary and Financial',
-  'financial_records': 'Reporting and Transparency',
-  'monitoring_evaluation': 'Legislative and Administrative',
-};
+const FILTER_OPTIONS = ['All', 'Currently in use'];
 
-// Category options for Add modal dropdown
-const CATEGORY_OPTIONS = [
-  { id: 'planning', name: 'Planning' },
-  { id: 'budgeting', name: 'Budgetary and Financial' },
-  { id: 'financial_records', name: 'Reporting and Transparency' },
-  { id: 'monitoring_evaluation', name: 'Legislative and Administrative' },
-];
+// Category options for Add modal dropdown - will be fetched from database
+// (Now uses state inside component - see LYDODocumentTemplatesScreen component)
 
-// Document types grouped by category — selecting a type auto-fills the category
-const DOCUMENT_TYPES = [
-  {
-    categoryId: 'planning',
-    categoryName: 'Planning Templates',
-    types: [
-      'Comprehensive Barangay Youth Development Plan (CBYDP)',
-      'Annual Barangay Youth Investment Program (ABYIP)',
-    ],
-  },
-  {
-    categoryId: 'budgeting',
-    categoryName: 'Budgetary and Financial Templates',
-    types: [
-      'SK Annual Budget',
-      'SK Supplemental Budget',
-      'Registry of Cash Receipts and Deposits (RCRD)',
-      'Registry of Cash Disbursements (RCD)',
-    ],
-  },
-  {
-    categoryId: 'financial_records',
-    categoryName: 'Reporting and Transparency Templates',
-    types: [
-      'Monthly/Quarterly Accomplishment Report',
-      'SK Full Disclosure Policy (SKFDP) Postings',
-    ],
-  },
-  {
-    categoryId: 'monitoring_evaluation',
-    categoryName: 'Legislative and Administrative Templates',
-    types: [
-      'Internal Rules of Procedure (IRP)',
-      'SK Resolution',
-      'Minutes of the Meeting',
-      'Katipunan ng Kabataan (KK) Assembly Minutes',
-    ],
-  },
-];
+// Document types grouped by category — will be fetched from database
+// (Now uses state inside component - see LYDODocumentTemplatesScreen component)
 
 // ─── ICON COMPONENTS ──────────────────────────────────────────────────────────
 const BellIcon = ({ hasNotif }) => (
@@ -299,6 +250,16 @@ export default function LYDODocumentTemplatesScreen() {
   const [showArchiveView, setShowArchiveView] = useState(false);
   const [expandedArchiveId, setExpandedArchiveId] = useState(null);
 
+  // Category and document type state
+  const [categoryOptions, setCategoryOptions] = useState([
+    { id: 1, name: 'Planning' },
+    { id: 2, name: 'Financial' },
+    { id: 3, name: 'Governance' },
+    { id: 4, name: 'Performance' },
+  ]);
+  const [documentTypes, setDocumentTypes] = useState([]);
+  const [categoryFilters, setCategoryFilters] = useState(['All Categories']);
+
   // Helper function to log LYDO activity
   const logActivity = async (action, description) => {
     try {
@@ -335,6 +296,36 @@ export default function LYDODocumentTemplatesScreen() {
     tick();
     const interval = setInterval(tick, 1000);
     return () => clearInterval(interval);
+  }, []);
+
+  // Fetch categories and document types from database
+  useEffect(() => {
+    const fetchDocTypes = async () => {
+      const [catRes, typeRes] = await Promise.all([
+        supabase.from('document_category').select('id, document_category').order('id'),
+        supabase.from('document_types').select('id, document_type, category').order('document_type'),
+      ]);
+
+      if (catRes.data) {
+        setCategoryOptions(catRes.data.map(c => ({ id: c.id, name: c.document_category })));
+        // Build category filters from database (use id as filter value)
+        setCategoryFilters(['All Categories', ...catRes.data.map(c => c.id.toString())]);
+      }
+
+      if (typeRes.data) {
+        // Group document types by category
+        const grouped = {};
+        typeRes.data.forEach(dt => {
+          const catId = dt.category;
+          if (!grouped[catId]) {
+            grouped[catId] = { categoryId: catId, types: [] };
+          }
+          grouped[catId].types.push(dt.document_type.trim());
+        });
+        setDocumentTypes(Object.values(grouped));
+      }
+    };
+    fetchDocTypes();
   }, []);
 
   // Fetch templates and distributions from database
@@ -448,13 +439,24 @@ export default function LYDODocumentTemplatesScreen() {
     const matchesFilter   =
       activeFilter === 'All' ||
       (activeFilter === 'Currently in use' && t.status === 'Active');
-    const matchesCategory =
-      categoryFilter === 'All Categories' || t.category === categoryFilter;
+    // Category matching - check if filter ID matches template's category name or ID
+    const matchesCategory = categoryFilter === 'All Categories' || (() => {
+      if (!t.category) return false;
+      const selectedCategory = categoryOptions.find(c => c.id.toString() === categoryFilter);
+      return selectedCategory && t.category.toLowerCase() === selectedCategory.name.toLowerCase();
+    })();
     return matchesSearch && matchesFilter && matchesCategory;
   });
 
   // ── Helper to get display category ──
-  const getDisplayCategory = (cat) => CATEGORY_DISPLAY[cat] || cat;
+  const getDisplayCategory = (cat) => {
+    // If it's already a string name, return it
+    if (typeof cat === 'string' && !cat.match(/^\d+$/)) {
+      return cat;
+    }
+    // Otherwise, try to find by id
+    return categoryOptions.find(c => c.id.toString() === cat?.toString())?.name || cat;
+  };
 
   // ── Navigation helpers ──
   const handleNavPress = (tab) => {
@@ -539,14 +541,14 @@ export default function LYDODocumentTemplatesScreen() {
         onPress={() => setShowCategoryDropdown(false)}
       />
       <View style={[styles.dropdown, { top: dropdownPos.top, left: dropdownPos.left }]}>
-        {CATEGORY_FILTERS.map(cat => (
+        {categoryFilters.map(cat => (
           <TouchableOpacity
             key={cat}
             style={[styles.dropdownItem, categoryFilter === cat && styles.dropdownItemActive]}
             onPress={() => { setCategoryFilter(cat); setShowCategoryDropdown(false); }}
           >
             <Text style={[styles.dropdownItemText, categoryFilter === cat && styles.dropdownItemTextActive]}>
-              {cat === 'All Categories' ? cat : CATEGORY_DISPLAY[cat] || cat}
+              {cat === 'All Categories' ? cat : categoryOptions.find(c => c.id.toString() === cat)?.name || cat}
             </Text>
           </TouchableOpacity>
         ))}
@@ -699,7 +701,7 @@ export default function LYDODocumentTemplatesScreen() {
                       borderWidth: 1, borderColor: '#BBC8E6',
                     }}>
                       <Text style={{ fontSize: 11, fontWeight: '700', color: COLORS.navy }}>
-                        {CATEGORY_DISPLAY[entry.docCategory] || entry.docCategory}
+                        {categoryOptions.find(c => c.id.toString() === entry.docCategory?.toString())?.name || entry.docCategory}
                       </Text>
                     </View>
                   </View>
@@ -715,7 +717,7 @@ export default function LYDODocumentTemplatesScreen() {
                         const takenByOtherEntries = new Set(
                           addEntries.filter(e => e.id !== entry.id && e.docType).map(e => e.docType)
                         );
-                        const available = DOCUMENT_TYPES.flatMap(g =>
+                        const available = documentTypes.flatMap(g =>
                           g.types.map(t => ({ docType: t, categoryId: g.categoryId }))
                         ).filter(item => !existingTypes.has(item.docType) && !takenByOtherEntries.has(item.docType));
 
@@ -827,7 +829,7 @@ export default function LYDODocumentTemplatesScreen() {
                   }
 
                   const lydoUserId = authUser.userId;
-                  const allowedCategories = ['planning', 'budgeting', 'financial_records', 'monitoring_evaluation'];
+                  const allowedCategories = ['planning', 'financial', 'governance', 'performance'];
 
                   const existingDocTypes = new Set(
                     templates.filter(t => t.status !== 'Archived').map(t => t.documentType).filter(Boolean)
@@ -844,7 +846,10 @@ export default function LYDODocumentTemplatesScreen() {
                     if (entry.file?.uri) {
                       fileUrl = await uploadFileToStorage(entry.file, entry.name);
                     }
-                    const categoryValue = entry.docCategory || 'planning';
+                    // Convert category ID to category name
+                    const catId = entry.docCategory;
+                    const catObj = categoryOptions.find(c => c.id === catId);
+                    const categoryValue = catObj?.name?.toLowerCase() || 'planning';
                     if (!allowedCategories.includes(categoryValue)) {
                       throw new Error('Invalid category for "' + entry.name + '"');
                     }
@@ -1492,7 +1497,7 @@ export default function LYDODocumentTemplatesScreen() {
               activeOpacity={0.75}
             >
               <Text style={styles.filterPillText}>
-                {categoryFilter === 'All Categories' ? 'Template ▾' : `${CATEGORY_DISPLAY[categoryFilter] || categoryFilter} ▾`}
+                {categoryFilter === 'All Categories' ? 'Template ▾' : `${categoryOptions.find(c => c.id.toString() === categoryFilter)?.name || categoryFilter} ▾`}
               </Text>
             </TouchableOpacity>
           </View>
