@@ -379,10 +379,11 @@ export default function SKPortalScreen() {
           return;
         }
 
+        const categoryMap = { 1: 'Planning', 2: 'Financial', 3: 'Governance', 4: 'Performance' };
         const formattedDocs = docs?.map(doc => ({
           id: doc.website_post_id,
           title: doc.title || 'Untitled',
-          category: doc.document_category || 'Unknown',
+          category: categoryMap[doc.category] || 'Unknown',
           year: doc.year?.toString() || toUtcDate(doc.published_at).toLocaleDateString('en-PH', { timeZone: 'Asia/Manila', year: 'numeric' }),
           uploadedAt: toPhilippineDate(doc.published_at, { month: 'long', day: 'numeric', year: 'numeric' }),
           fileUrl: doc.file_url,
@@ -901,8 +902,6 @@ export default function SKPortalScreen() {
                           barangay_id: barangayId,
                           published_by: user.userId,
                           title: uploadTitle.trim(),
-                          document_category: uploadCategory,
-                          document_type: uploadDocType?.label || null,
                           type: uploadDocType?.value || null,
                           category: categoryId,
                           year: yearValue,
@@ -927,10 +926,11 @@ export default function SKPortalScreen() {
                         .order('published_at', { ascending: false });
 
                       if (freshDocs) {
+                        const categoryMap = { 1: 'Planning', 2: 'Financial', 3: 'Governance', 4: 'Performance' };
                         setPublishedDocs(freshDocs.map(doc => ({
                           id: doc.website_post_id,
                           title: doc.title || 'Untitled',
-                          category: doc.document_category || 'Unknown',
+                          category: categoryMap[doc.category] || 'Unknown',
                           year: doc.year?.toString() || toUtcDate(doc.published_at).toLocaleDateString('en-PH', { timeZone: 'Asia/Manila', year: 'numeric' }),
                           uploadedAt: toPhilippineDate(doc.published_at, { month: 'long', day: 'numeric', year: 'numeric' }),
                           fileUrl: doc.file_url,
@@ -980,8 +980,6 @@ export default function SKPortalScreen() {
                         barangay_id: barangayId,
                         published_by: user.userId,
                         title: uploadTitle.trim(),
-                        document_category: uploadCategory || null,
-                        document_type: uploadDocType?.label || null,
                         type: uploadDocType?.value || null,
                         category: categoryId,
                         year: yearValue,
