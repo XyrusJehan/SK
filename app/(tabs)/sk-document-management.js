@@ -19,6 +19,7 @@ import {
 import { supabase } from '../../utils/supabase';
 import { useAuth } from './authContext';
 import { useNav } from './navContext';
+import { NotificationModal, useNotificationCenter } from './notificationCenter';
 // WebView: use react-native-webview on native, iframe on web
 let WebView = null;
 if (Platform.OS !== 'web') {
@@ -502,6 +503,10 @@ export default function SKDocumentManagementScreen() {
   const barangayName = user?.barangay?.barangay_name || 'Unknown Barangay';
   const barangayId = user?.barangayId;
 
+  // ── Shared notification bell (returned/approved docs, templates, deadlines) ──
+  const notif = useNotificationCenter(barangayId);
+  const notifCount = notif.count;
+
   // Helper function to log SK activity
   const logActivity = async (action, description) => {
     try {
@@ -527,7 +532,6 @@ export default function SKDocumentManagementScreen() {
   const [yearDropdownOpen, setYearDropdownOpen] = useState(false);
   const [sortDropdownOpen, setSortDropdownOpen] = useState(false);
   const [selectedYear, setSelectedYear] = useState('All Years');
-  const [notifCount]                          = useState(2);
   const [documents, setDocuments]             = useState([]);
   const [deleteModalVisible, setDeleteModalVisible] = useState(false);
   const [documentToDelete, setDocumentToDelete] = useState(null);
@@ -941,8 +945,13 @@ export default function SKDocumentManagementScreen() {
             <MenuIcon />
           </TouchableOpacity>
           <Text style={styles.mobileTitle}>Document Management</Text>
-          <TouchableOpacity style={styles.bellBtn}>
-            <BellIcon hasNotif={notifCount > 0} />
+          <TouchableOpacity style={styles.bellBtn} onPress={notif.open} activeOpacity={0.7}>
+            <BellIcon hasNotif={notif.hasUnviewed} />
+            {notifCount > 0 && (
+              <View style={styles.notifBadge}>
+                <Text style={styles.notifBadgeText}>{notifCount > 99 ? '99+' : notifCount}</Text>
+              </View>
+            )}
           </TouchableOpacity>
         </View>
       )}
@@ -954,14 +963,16 @@ export default function SKDocumentManagementScreen() {
             <Text style={styles.headerSub}>SANGGUNIANG KABATAAN</Text>
             <Text style={styles.headerTitle}>{barangayName.toUpperCase()}</Text>
           </View>
-          <TouchableOpacity style={styles.bellBtn} activeOpacity={0.7}>
-            <BellIcon hasNotif={notifCount > 0} />
-            {notifCount > 0 && (
-              <View style={styles.notifBadge}>
-                <Text style={styles.notifBadgeText}>{notifCount}</Text>
-              </View>
-            )}
-          </TouchableOpacity>
+          <View style={styles.headerRight}>
+            <TouchableOpacity style={styles.bellBtn} onPress={notif.open} activeOpacity={0.7}>
+              <BellIcon hasNotif={notif.hasUnviewed} />
+              {notifCount > 0 && (
+                <View style={styles.notifBadge}>
+                  <Text style={styles.notifBadgeText}>{notifCount > 99 ? '99+' : notifCount}</Text>
+                </View>
+              )}
+            </TouchableOpacity>
+          </View>
         </View>
       )}
 
@@ -1251,6 +1262,13 @@ export default function SKDocumentManagementScreen() {
   return (
     <SafeAreaView style={styles.safe}>
       <StatusBar barStyle="light-content" backgroundColor={COLORS.navy} />
+      <NotificationModal
+        {...notif.modalProps}
+        onOpenRoute={(route) => {
+          notif.close();
+          setTimeout(() => router.push(route), 120);
+        }}
+      />
       <View style={styles.layout}>
         {isMobile && sidebarVisible && (
           <TouchableOpacity
@@ -1618,7 +1636,11 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between', marginBottom: 16,
   },
   headerSub:   { fontSize: 10, fontWeight: '600', color: COLORS.subText, letterSpacing: 2, textTransform: 'uppercase', marginBottom: 2 },
-  headerTitle: { fontSize: 22, fontWeight: '900', color: COLORS.darkText },
+  headerTitle: {
+    fontSize: 22, fontWeight: '900', color: COLORS.darkText, letterSpacing: 0.3,
+    borderBottomWidth: 2, borderBottomColor: COLORS.lightGray, paddingBottom: 4, marginBottom: 6,
+  },
+  headerRight: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
 
   // Bell
   bellBtn: {

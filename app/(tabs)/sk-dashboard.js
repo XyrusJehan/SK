@@ -224,10 +224,10 @@ const BellIcon = ({ hasNotif }) => (
 );
 
 const ic = StyleSheet.create({
-  bellWrapper: { width: 20, height: 22, alignItems: 'center' },
-  bellBody: { width: 14, height: 12, borderRadius: 7, borderWidth: 2, borderColor: '#8B0000', marginTop: 4 },
-  bellBottom: { width: 8, height: 4, borderBottomLeftRadius: 4, borderBottomRightRadius: 4, backgroundColor: '#8B0000', marginTop: -1 },
-  bellDot: { position: 'absolute', top: 0, right: 1, width: 7, height: 7, borderRadius: 4, backgroundColor: '#E8C547', borderWidth: 1.5, borderColor: COLORS.white },
+ bellWrapper: { width: 20, height: 22, alignItems: 'center' },
+  bellBody:    { width: 14, height: 12, borderRadius: 7, borderWidth: 2, borderColor: '#8B0000', marginTop: 4 },
+  bellBottom:  { width: 8, height: 4, borderBottomLeftRadius: 4, borderBottomRightRadius: 4, backgroundColor: '#8B0000', marginTop: -1 },
+  bellDot:     { position: 'absolute', top: 0, right: 1, width: 7, height: 7, borderRadius: 4, backgroundColor: COLORS.gold, borderWidth: 1.5, borderColor: COLORS.cardBg },
 });
 
 const SearchIcon = () => (
@@ -1579,7 +1579,7 @@ const seenReady = seenLoaded ? 1 : 0;
 
           {/* Desktop Header */}
           <View style={styles.header}>
-            <View>
+            <View style={{ flex: 1 }}>
               <Text style={styles.headerSub}>SANGGUNIANG KABATAAN</Text>
               <Text style={styles.headerTitle}>{barangayName.toUpperCase()}</Text>
             </View>
@@ -2112,9 +2112,22 @@ const styles = StyleSheet.create({
   mobileActionIcon: { fontSize: 14 },
 
   // ── Desktop header (unchanged) ──
-  header: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: isMobile ? 12 : 16 },
-  headerSub: { fontSize: isMobile ? 8 : 10, fontWeight: '600', color: COLORS.subText, letterSpacing: 2, marginBottom: 2, textTransform: 'uppercase' },
-  headerTitle: { fontSize: isMobile ? 16 : 20, fontWeight: '900', color: COLORS.darkText, letterSpacing: 0.5 },
+ // Desktop header
+  header: {
+    flexDirection: 'row', alignItems: 'flex-start',
+    justifyContent: 'space-between', marginBottom: 12,
+  },
+  headerSub: {
+    fontSize: 10, fontWeight: '600', color: COLORS.subText,
+    letterSpacing: 2, textTransform: 'uppercase', marginBottom: 2,
+  },
+  headerTitle: {
+    fontSize: 22, fontWeight: '900', color: COLORS.darkText, letterSpacing: 0.3,
+    borderBottomWidth: 2, borderBottomColor: COLORS.lightGray, paddingBottom: 4, marginBottom: 6,
+  },
+  headerDocLabel: { fontSize: 14, fontWeight: '700', color: COLORS.darkText, marginTop: 4 },
+  headerRight:    { flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
+  
   headerActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   headerActionBtn: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingVertical: 7, paddingHorizontal: 12, borderRadius: 20, backgroundColor: COLORS.cardBg, borderWidth: 1, borderColor: COLORS.lightGray, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 4, elevation: 2 },
   archivesBtn: { backgroundColor: '#133E75', borderColor: '#133E75' },
@@ -2122,11 +2135,11 @@ const styles = StyleSheet.create({
   headerActionLabel: { fontSize: 12, fontWeight: '600', color: COLORS.darkText },
   archivesBtnText: { color: COLORS.white },
   bellBtn: {
-    width: 44, height: 44, borderRadius: 22,
-    backgroundColor: COLORS.white, alignItems: 'center', justifyContent: 'center',
-    shadowColor: COLORS.navy, shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.15, shadowRadius: 8, elevation: 4,
-    borderWidth: 1.5, borderColor: COLORS.navy + '30',
+    position: 'relative',
+    width: 40, height: 40, borderRadius: 20,
+    backgroundColor: COLORS.cardBg, alignItems: 'center', justifyContent: 'center',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08, shadowRadius: 6, elevation: 3,
   },
 
   // ── Bell icons ──

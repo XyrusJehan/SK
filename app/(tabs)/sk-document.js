@@ -8,6 +8,7 @@ import { useRouter, useFocusEffect } from 'expo-router';
 import { useNav } from './navContext';
 import { useAuth } from './authContext';
 import { supabase } from '../../utils/supabase';
+import { NotificationModal, useNotificationCenter } from './notificationCenter';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const isMobile = SCREEN_WIDTH < 768;
@@ -265,9 +266,12 @@ export default function SKDocumentScreen() {
 
   const [activeDocTab, setActiveDocTab]     = useState('Folder');
   const [searchText, setSearchText]         = useState('');
-  const [notifCount]                        = useState(2);
   const [sidebarVisible, setSidebarVisible] = useState(false);
   const [documents, setDocuments]           = useState([]);
+
+  // ── Shared notification bell (returned/approved docs, templates, deadlines) ──
+  const notif = useNotificationCenter(barangayId);
+  const notifCount = notif.count;
 
   // Reference tables - fetched from database
   const [documentCategories, setDocumentCategories] = useState([]);
@@ -363,17 +367,6 @@ export default function SKDocumentScreen() {
   };
 
   const handleLogout = () => { logout(); router.replace('/'); };
-
-  // Handle bell/notification press
-  const handleNotificationPress = () => {
-    if (notifCount > 0) {
-      Alert.alert(
-        'Notifications',
-        `You have ${notifCount} notification${notifCount > 1 ? 's' : ''}.\n\nThis feature is coming soon!`,
-        [{ text: 'OK' }]
-      );
-    }
-  };
 
   // Tap a bullet item → navigate to list screen with category + subType params
   const handleItemPress = (itemName, group) => {
@@ -482,13 +475,13 @@ export default function SKDocumentScreen() {
           <Text style={styles.mobileTitle}>Documents</Text>
           <TouchableOpacity
             style={[styles.bellBtn, styles.bellBtnMobile]}
-            onPress={handleNotificationPress}
+            onPress={notif.open}
             activeOpacity={0.7}
           >
-            <BellIcon hasNotif={notifCount > 0} />
+            <BellIcon hasNotif={notif.hasUnviewed} />
             {notifCount > 0 && (
               <View style={styles.notifBadge}>
-                <Text style={styles.notifBadgeText}>{notifCount}</Text>
+                <Text style={styles.notifBadgeText}>{notifCount > 99 ? '99+' : notifCount}</Text>
               </View>
             )}
           </TouchableOpacity>
@@ -504,23 +497,20 @@ export default function SKDocumentScreen() {
           </View>
           <TouchableOpacity
             style={styles.bellBtn}
-            onPress={handleNotificationPress}
+            onPress={notif.open}
             activeOpacity={0.7}
           >
-            <BellIcon hasNotif={notifCount > 0} />
+            <BellIcon hasNotif={notif.hasUnviewed} />
             {notifCount > 0 && (
               <View style={styles.notifBadge}>
-                <Text style={styles.notifBadgeText}>{notifCount}</Text>
+                <Text style={styles.notifBadgeText}>{notifCount > 99 ? '99+' : notifCount}</Text>
               </View>
             )}
           </TouchableOpacity>
         </View>
       )}
 
-      {/* Category label + Tab bar */}
-      <View style={styles.categoryRow}>
-        <Text style={styles.categoryLabel}>Category:</Text>
-      </View>
+  
 
       <View style={styles.filterRow}>
         {/* Folder / Document Management tab bar */}
@@ -588,6 +578,14 @@ export default function SKDocumentScreen() {
   return (
     <SafeAreaView style={styles.safe}>
       <StatusBar barStyle="light-content" backgroundColor={COLORS.navy} />
+
+      <NotificationModal
+        {...notif.modalProps}
+        onOpenRoute={(route) => {
+          notif.close();
+          setTimeout(() => router.push(route), 120);
+        }}
+      />
 
       <View style={styles.layout}>
         {isMobile && sidebarVisible && (
@@ -676,7 +674,10 @@ const styles = StyleSheet.create({
     fontSize: 10, fontWeight: '600', color: COLORS.subText,
     letterSpacing: 2, textTransform: 'uppercase', marginBottom: 2,
   },
-  headerTitle: { fontSize: 22, fontWeight: '900', color: COLORS.darkText },
+  headerTitle: {
+    fontSize: 22, fontWeight: '900', color: COLORS.darkText, letterSpacing: 0.3,
+    borderBottomWidth: 2, borderBottomColor: COLORS.lightGray, paddingBottom: 4, marginBottom: 6,
+  },
 
   // Bell
   bellBtn: {

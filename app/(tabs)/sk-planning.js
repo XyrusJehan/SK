@@ -8,6 +8,7 @@ import { useRouter } from 'expo-router';
 import { useNav } from './navContext';
 import { useAuth } from './authContext';
 import { supabase } from '../../utils/supabase';
+import { NotificationModal, useNotificationCenter } from './notificationCenter';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const isMobile = SCREEN_WIDTH < 768;
@@ -217,8 +218,11 @@ export default function SKPlanningScreen() {
   const [activePlanningTab, setActivePlanningTab] = useState('Templates');
   const [searchText, setSearchText]               = useState('');
   const [showAll, setShowAll]                     = useState(false); // false = Active Templates filter
-  const [notifCount]                              = useState(2);
   const [sidebarVisible, setSidebarVisible]       = useState(false);
+
+  // ── Shared notification bell (returned/approved docs, templates, deadlines) ──
+  const notif = useNotificationCenter(barangayId);
+  const notifCount = notif.count;
   const [selectedItem, setSelectedItem]           = useState(null);
   const [showEditModal, setShowEditModal]         = useState(false);
   const [templates, setTemplates]                = useState([]);
@@ -515,8 +519,13 @@ export default function SKPlanningScreen() {
             <MenuIcon />
           </TouchableOpacity>
           <Text style={styles.mobileTitle}>Planning</Text>
-          <TouchableOpacity style={styles.bellBtn}>
-            <BellIcon hasNotif={notifCount > 0} />
+          <TouchableOpacity style={styles.bellBtn} onPress={notif.open} activeOpacity={0.7}>
+            <BellIcon hasNotif={notif.hasUnviewed} />
+            {notifCount > 0 && (
+              <View style={styles.notifBadge}>
+                <Text style={styles.notifBadgeText}>{notifCount > 99 ? '99+' : notifCount}</Text>
+              </View>
+            )}
           </TouchableOpacity>
         </View>
       )}
@@ -531,11 +540,11 @@ export default function SKPlanningScreen() {
           </View>
           <View style={styles.headerRight}>
    
-            <TouchableOpacity style={styles.bellBtn} activeOpacity={0.7}>
-              <BellIcon hasNotif={notifCount > 0} />
+            <TouchableOpacity style={styles.bellBtn} onPress={notif.open} activeOpacity={0.7}>
+              <BellIcon hasNotif={notif.hasUnviewed} />
               {notifCount > 0 && (
                 <View style={styles.notifBadge}>
-                  <Text style={styles.notifBadgeText}>{notifCount}</Text>
+                  <Text style={styles.notifBadgeText}>{notifCount > 99 ? '99+' : notifCount}</Text>
                 </View>
               )}
             </TouchableOpacity>
@@ -665,6 +674,14 @@ export default function SKPlanningScreen() {
 
       {renderEditModal()}
       {renderViewerModal()}
+
+      <NotificationModal
+        {...notif.modalProps}
+        onOpenRoute={(route) => {
+          notif.close();
+          setTimeout(() => router.push(route), 120);
+        }}
+      />
 
       <View style={styles.layout}>
         {isMobile && sidebarVisible && (

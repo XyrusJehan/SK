@@ -8,6 +8,7 @@ import { useRouter, useFocusEffect } from 'expo-router';
 import { useNav } from './navContext';
 import { useAuth } from './authContext';
 import { supabase } from '../../utils/supabase';
+import { NotificationModal, useNotificationCenter } from './notificationCenter';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const isMobile = SCREEN_WIDTH < 768;
@@ -205,11 +206,14 @@ export default function SKPortalFeedbackScreen() {
   const barangayName = user?.barangay?.barangay_name || 'Unknown Barangay';
   const barangayId = user?.barangayId;
 
+  // ── Shared notification bell (returned/approved docs, templates, deadlines) ──
+  const notif = useNotificationCenter(barangayId);
+  const notifCount = notif.count;
+
   const [feedbackFilter, setFeedbackFilter] = useState('All');
   const [docFilter, setDocFilter]           = useState('All Documents');
   const [yearFilter, setYearFilter]         = useState('All Years');
   const [searchText, setSearchText]         = useState('');
-  const [notifCount]                        = useState(2);
   const [sidebarVisible, setSidebarVisible] = useState(false);
   const [showDocDropdown, setShowDocDropdown] = useState(false);
   const [showYearDropdown, setShowYearDropdown] = useState(false);
@@ -562,8 +566,13 @@ export default function SKPortalFeedbackScreen() {
             <MenuIcon />
           </TouchableOpacity>
           <Text style={styles.mobileTitle}>Portal</Text>
-          <TouchableOpacity style={styles.bellBtn}>
-            <BellIcon hasNotif={notifCount > 0} />
+          <TouchableOpacity style={styles.bellBtn} onPress={notif.open} activeOpacity={0.7}>
+            <BellIcon hasNotif={notif.hasUnviewed} />
+            {notifCount > 0 && (
+              <View style={styles.notifBadge}>
+                <Text style={styles.notifBadgeText}>{notifCount > 99 ? '99+' : notifCount}</Text>
+              </View>
+            )}
           </TouchableOpacity>
         </View>
       )}
@@ -576,14 +585,16 @@ export default function SKPortalFeedbackScreen() {
             <Text style={styles.headerTitle}>{barangayName.toUpperCase()}</Text>
             <Text style={styles.headerDocLabel}>Portal and Post Managemnet</Text>
           </View>
-          <TouchableOpacity style={styles.bellBtn} activeOpacity={0.7}>
-            <BellIcon hasNotif={notifCount > 0} />
-            {notifCount > 0 && (
-              <View style={styles.notifBadge}>
-                <Text style={styles.notifBadgeText}>{notifCount}</Text>
-              </View>
-            )}
-          </TouchableOpacity>
+          <View style={styles.headerRight}>
+            <TouchableOpacity style={styles.bellBtn} onPress={notif.open} activeOpacity={0.7}>
+              <BellIcon hasNotif={notif.hasUnviewed} />
+              {notifCount > 0 && (
+                <View style={styles.notifBadge}>
+                  <Text style={styles.notifBadgeText}>{notifCount > 99 ? '99+' : notifCount}</Text>
+                </View>
+              )}
+            </TouchableOpacity>
+          </View>
         </View>
       )}
 
@@ -741,6 +752,14 @@ export default function SKPortalFeedbackScreen() {
 
       {renderReplyModal()}
 
+      <NotificationModal
+        {...notif.modalProps}
+        onOpenRoute={(route) => {
+          notif.close();
+          setTimeout(() => router.push(route), 120);
+        }}
+      />
+
       <View style={styles.layout}>
         {isMobile && sidebarVisible && (
           <TouchableOpacity
@@ -829,6 +848,7 @@ const styles = StyleSheet.create({
     paddingBottom: 4, marginBottom: 6,
   },
   headerDocLabel: { fontSize: 14, fontWeight: '700', color: COLORS.darkText, marginTop: 4 },
+  headerRight: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
 
   // Bell
   bellBtn: {

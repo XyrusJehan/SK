@@ -8,6 +8,7 @@ import { useRouter } from 'expo-router';
 import { useNav } from './navContext';
 import { useAuth, encryptPassword, decryptPassword, validatePassword } from './authContext';
 import { supabase } from '../../utils/supabase';
+import { NotificationModal, useNotificationCenter } from './notificationCenter';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const isMobile = SCREEN_WIDTH < 768;
@@ -166,7 +167,11 @@ export default function AccountScreen() {
   const { logout, user } = useAuth();
 
   const [sidebarVisible, setSidebarVisible] = useState(false);
-  const [notifCount] = useState(2);
+
+  // ── Shared notification bell (returned/approved docs, templates, deadlines) ──
+  const barangayId = user?.barangayId;
+  const notif = useNotificationCenter(barangayId);
+  const notifCount = notif.count;
 
   // Personal Details
   const [firstName, setFirstName] = useState('');
@@ -446,6 +451,14 @@ export default function AccountScreen() {
     <SafeAreaView style={styles.safe}>
       <StatusBar barStyle="light-content" backgroundColor={COLORS.navy} />
 
+      <NotificationModal
+        {...notif.modalProps}
+        onOpenRoute={(route) => {
+          notif.close();
+          setTimeout(() => router.push(route), 120);
+        }}
+      />
+
       <View style={styles.layout}>
         {isMobile && sidebarVisible && (
           <TouchableOpacity
@@ -468,12 +481,30 @@ export default function AccountScreen() {
                 <MenuIcon />
               </TouchableOpacity>
               <Text style={styles.mobileTitle}>Account</Text>
-              <View style={styles.mobileHeaderActions}>
-                <TouchableOpacity style={styles.bellBtnMobile} activeOpacity={0.7}>
-                  <BellIcon hasNotif={notifCount > 0} />
+              <TouchableOpacity style={styles.bellBtn} onPress={notif.open} activeOpacity={0.7}>
+                <BellIcon hasNotif={notif.hasUnviewed} />
+                {notifCount > 0 && (
+                  <View style={styles.notifBadge}>
+                    <Text style={styles.notifBadgeText}>{notifCount > 99 ? '99+' : notifCount}</Text>
+                  </View>
+                )}
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {/* Desktop Header */}
+          {!isMobile && (
+            <View style={styles.header}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.headerSub}>SANGGUNIANG KABATAAN</Text>
+                <Text style={styles.headerTitle}>{barangayName.toUpperCase()}</Text>
+              </View>
+              <View style={styles.headerRight}>
+                <TouchableOpacity style={styles.bellBtn} onPress={notif.open} activeOpacity={0.7}>
+                  <BellIcon hasNotif={notif.hasUnviewed} />
                   {notifCount > 0 && (
-                    <View style={styles.notifBadgeMobile}>
-                      <Text style={styles.notifBadgeTextMobile}>{notifCount}</Text>
+                    <View style={styles.notifBadge}>
+                      <Text style={styles.notifBadgeText}>{notifCount > 99 ? '99+' : notifCount}</Text>
                     </View>
                   )}
                 </TouchableOpacity>
@@ -481,28 +512,6 @@ export default function AccountScreen() {
             </View>
           )}
 
-          {/* Desktop Header */}
-          <View style={styles.header}>
-            <View>
-              <Text style={styles.headerSub}>SANGGUNIANG KABATAAN</Text>
-              <Text style={styles.headerTitle}>{barangayName.toUpperCase()}</Text>
-            </View>
-            {!isMobile && (
-              <View style={styles.headerActions}>
-                <TouchableOpacity style={styles.headerActionBtn} activeOpacity={0.7}>
-                  <View style={{ position: 'relative' }}>
-                    <BellIcon hasNotif={notifCount > 0} />
-                    {notifCount > 0 && (
-                      <View style={styles.notifBadge}>
-                        <Text style={styles.notifBadgeText}>{notifCount}</Text>
-                      </View>
-                    )}
-                  </View>
-                  <Text style={styles.headerActionLabel}>Notification</Text>
-                </TouchableOpacity>
-              </View>
-            )}
-          </View>
 
           {/* ── Page Title ── */}
           <Text style={styles.pageTitle}>ACCOUNT</Text>
@@ -973,45 +982,38 @@ const styles = StyleSheet.create({
   },
   menuBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: COLORS.cardBg, alignItems: 'center', justifyContent: 'center' },
   menuIconContainer: { width: 20, height: 16, justifyContent: 'space-between' },
-  menuLine: { width: 20, height: 2, backgroundColor: COLORS.maroon, borderRadius: 1 },
-  mobileTitle: { fontSize: 16, fontWeight: '800', color: COLORS.darkText },
-  mobileHeaderActions: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  bellBtnMobile: {
-    width: 36, height: 36, borderRadius: 18, backgroundColor: COLORS.cardBg,
-    alignItems: 'center', justifyContent: 'center',
-    shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.1, shadowRadius: 2, elevation: 2,
-  },
-  notifBadgeMobile: {
-    position: 'absolute', top: -2, right: -2, width: 14, height: 14, borderRadius: 7,
-    backgroundColor: COLORS.gold, alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: COLORS.white,
-  },
-  notifBadgeTextMobile: { fontSize: 7, fontWeight: '900', color: COLORS.maroon },
+  menuLine: { width: 20, height: 2, backgroundColor: COLORS.navy, borderRadius: 1 },
+  mobileTitle: { fontSize: 18, fontWeight: '800', color: COLORS.darkText },
 
-  // ── Desktop header ──
+  // Desktop header
   header: {
-    flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between',
-    marginBottom: isMobile ? 12 : 16,
+    flexDirection: 'row', alignItems: 'flex-start',
+    justifyContent: 'space-between', marginBottom: 12,
   },
-  headerSub: { fontSize: isMobile ? 8 : 10, fontWeight: '600', color: COLORS.subText, letterSpacing: 2, marginBottom: 2, textTransform: 'uppercase' },
-  headerTitle: { fontSize: isMobile ? 16 : 20, fontWeight: '900', color: COLORS.darkText, letterSpacing: 0.5 },
-  headerActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  headerActionBtn: {
-    flexDirection: 'row', alignItems: 'center', gap: 5,
-    paddingVertical: 7, paddingHorizontal: 12, borderRadius: 20,
-    backgroundColor: COLORS.cardBg, borderWidth: 1, borderColor: COLORS.lightGray,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 4, elevation: 2,
+  headerSub: {
+    fontSize: 10, fontWeight: '600', color: COLORS.subText,
+    letterSpacing: 2, textTransform: 'uppercase', marginBottom: 2,
   },
-  headerActionLabel: { fontSize: 12, fontWeight: '600', color: COLORS.darkText },
-  bellWrapper: { width: 20, height: 22, alignItems: 'center' },
-  bellBody: { width: 14, height: 12, borderRadius: 7, borderWidth: 2, borderColor: COLORS.maroon, marginTop: 4 },
-  bellBottom: { width: 8, height: 4, borderBottomLeftRadius: 4, borderBottomRightRadius: 4, backgroundColor: COLORS.maroon, marginTop: -1 },
-  bellDot: { position: 'absolute', top: 0, right: 1, width: 7, height: 7, borderRadius: 4, backgroundColor: COLORS.gold, borderWidth: 1.5, borderColor: COLORS.cardBg },
-  notifBadge: {
-    position: 'absolute', top: -2, right: -2, width: 16, height: 16, borderRadius: 8,
-    backgroundColor: COLORS.gold, alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: COLORS.white,
+  headerTitle: {
+    fontSize: 22, fontWeight: '900', color: COLORS.darkText, letterSpacing: 0.3,
+    borderBottomWidth: 2, borderBottomColor: COLORS.lightGray, paddingBottom: 4, marginBottom: 6,
   },
-  notifBadgeText: { fontSize: 8, fontWeight: '900', color: COLORS.maroon },
+  headerDocLabel: { fontSize: 14, fontWeight: '700', color: COLORS.darkText, marginTop: 4 },
+  headerRight:    { flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
 
+  // Bell
+  bellBtn: {
+    width: 40, height: 40, borderRadius: 20,
+    backgroundColor: COLORS.cardBg, alignItems: 'center', justifyContent: 'center',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08, shadowRadius: 6, elevation: 3,
+  },
+  bellWrapper: { width: 20, height: 22, alignItems: 'center' },
+  bellBody:    { width: 14, height: 12, borderRadius: 7, borderWidth: 2, borderColor: '#8B0000', marginTop: 4 },
+  bellBottom:  { width: 8, height: 4, borderBottomLeftRadius: 4, borderBottomRightRadius: 4, backgroundColor: '#8B0000', marginTop: -1 },
+  bellDot:     { position: 'absolute', top: 0, right: 1, width: 7, height: 7, borderRadius: 4, backgroundColor: COLORS.gold, borderWidth: 1.5, borderColor: COLORS.cardBg },
+  notifBadge:  { position: 'absolute', top: -2, right: -2, width: 16, height: 16, borderRadius: 8, backgroundColor: COLORS.gold, alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: COLORS.white },
+  notifBadgeText: { fontSize: 8, fontWeight: '900', color: COLORS.navy },
   // ── Page Title ──
   pageTitle: {
     fontSize: isMobile ? 18 : 22, fontWeight: '900', color: COLORS.navy,

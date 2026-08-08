@@ -18,6 +18,7 @@ import { Feather } from '@expo/vector-icons';
 import { useNav } from './navContext';
 import { useAuth } from './authContext';
 import { supabase } from '../../utils/supabase';
+import { NotificationModal, useNotificationCenter } from './notificationCenter';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const isMobile = SCREEN_WIDTH < 768;
@@ -308,8 +309,11 @@ export default function SKPortalScreen() {
   const [docFilter, setDocFilter]             = useState('All Documents');
   const [yearFilter, setYearFilter]           = useState('All Years');
   const [searchText, setSearchText]           = useState('');
-  const [notifCount]                          = useState(2);
   const [sidebarVisible, setSidebarVisible]   = useState(false);
+
+  // ── Shared notification bell (returned/approved docs, templates, deadlines) ──
+  const notif = useNotificationCenter(barangayId);
+  const notifCount = notif.count;
   const [showDocDropdown, setShowDocDropdown] = useState(false);
   const [showYearDropdown, setShowYearDropdown] = useState(false);
   const [showUploadModal, setShowUploadModal]   = useState(false);
@@ -1032,8 +1036,13 @@ export default function SKPortalScreen() {
             <MenuIcon />
           </TouchableOpacity>
           <Text style={styles.mobileTitle}>Portal</Text>
-          <TouchableOpacity style={styles.bellBtn}>
-            <BellIcon hasNotif={notifCount > 0} />
+          <TouchableOpacity style={styles.bellBtn} onPress={notif.open} activeOpacity={0.7}>
+            <BellIcon hasNotif={notif.hasUnviewed} />
+            {notifCount > 0 && (
+              <View style={styles.notifBadge}>
+                <Text style={styles.notifBadgeText}>{notifCount > 99 ? '99+' : notifCount}</Text>
+              </View>
+            )}
           </TouchableOpacity>
         </View>
       )}
@@ -1047,11 +1056,11 @@ export default function SKPortalScreen() {
             <Text style={styles.headerDocLabel}>Portal and Post Managemnet</Text>
           </View>
           <View style={styles.headerRight}>
-            <TouchableOpacity style={styles.bellBtn} activeOpacity={0.7}>
-              <BellIcon hasNotif={notifCount > 0} />
+            <TouchableOpacity style={styles.bellBtn} onPress={notif.open} activeOpacity={0.7}>
+              <BellIcon hasNotif={notif.hasUnviewed} />
               {notifCount > 0 && (
                 <View style={styles.notifBadge}>
-                  <Text style={styles.notifBadgeText}>{notifCount}</Text>
+                  <Text style={styles.notifBadgeText}>{notifCount > 99 ? '99+' : notifCount}</Text>
                 </View>
               )}
             </TouchableOpacity>
@@ -1413,6 +1422,14 @@ export default function SKPortalScreen() {
       {renderUploadModal()}
       {renderAlertModal()}
       {renderSuccessModal()}
+
+      <NotificationModal
+        {...notif.modalProps}
+        onOpenRoute={(route) => {
+          notif.close();
+          setTimeout(() => router.push(route), 120);
+        }}
+      />
 
       {/* ── Document Viewer Modal ── */}
       <Modal

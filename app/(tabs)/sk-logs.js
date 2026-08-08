@@ -7,6 +7,7 @@ import { useRouter, useFocusEffect } from 'expo-router';
 import { useNav } from './navContext';
 import { useAuth } from './authContext';
 import { supabase } from '../../utils/supabase';
+import { NotificationModal, useNotificationCenter } from './notificationCenter';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const isMobile = SCREEN_WIDTH < 768;
@@ -139,6 +140,14 @@ const LogoutNavIcon = ({ color = '#fff', size = 16 }) => (
   </View>
 );
 
+const BellIcon = ({ hasNotif }) => (
+  <View style={styles.bellWrapper}>
+    <View style={styles.bellBody} />
+    <View style={styles.bellBottom} />
+    {hasNotif && <View style={styles.bellDot} />}
+  </View>
+);
+
 const SearchIcon = ({ color = COLORS.midGray }) => (
   <View style={styles.searchIconWrap}>
     <View style={[styles.searchCircle, { borderColor: color }]} />
@@ -231,6 +240,10 @@ export default function LogsScreen() {
 
   const barangayName = user?.barangay?.barangay_name || 'Unknown Barangay';
   const barangayId = user?.barangayId;
+
+  // ── Shared notification bell (returned/approved docs, templates, deadlines) ──
+  const notif = useNotificationCenter(barangayId);
+  const notifCount = notif.count;
 
   useEffect(() => {
     if (user && user.role !== 'sk') router.replace('/');
@@ -468,6 +481,13 @@ export default function LogsScreen() {
         onClose={() => setDateDropVisible(false)}
         title="Filter by Date Range"
       />
+      <NotificationModal
+        {...notif.modalProps}
+        onOpenRoute={(route) => {
+          notif.close();
+          setTimeout(() => router.push(route), 120);
+        }}
+      />
       <View style={styles.layout}>
         {isMobile && sidebarVisible && (
           <TouchableOpacity
@@ -490,19 +510,34 @@ export default function LogsScreen() {
                 <MenuIcon />
               </TouchableOpacity>
               <Text style={styles.mobileTitle}>Activity Logs</Text>
-              <View style={{ width: 40 }} />
+              <TouchableOpacity style={[styles.bellBtn, styles.bellBtnMobile]} onPress={notif.open} activeOpacity={0.7}>
+                <BellIcon hasNotif={notif.hasUnviewed} />
+                {notifCount > 0 && (
+                  <View style={styles.notifBadge}>
+                    <Text style={styles.notifBadgeText}>{notifCount > 99 ? '99+' : notifCount}</Text>
+                  </View>
+                )}
+              </TouchableOpacity>
             </View>
           )}
 
           {/* Page Header */}
-          <View style={styles.pageHeader}>
-            <View>
-              <Text style={styles.headerSub}>SANGGUNIANG KABATAAN</Text>
-              <Text style={styles.headerTitle}>{barangayName.toUpperCase()}</Text>
+          {!isMobile && (
+            <View style={styles.pageHeader}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.headerSub}>SANGGUNIANG KABATAAN</Text>
+                <Text style={styles.headerTitle}>{barangayName.toUpperCase()}</Text>
+              </View>
+              <TouchableOpacity style={styles.bellBtn} onPress={notif.open} activeOpacity={0.7}>
+                <BellIcon hasNotif={notif.hasUnviewed} />
+                {notifCount > 0 && (
+                  <View style={styles.notifBadge}>
+                    <Text style={styles.notifBadgeText}>{notifCount > 99 ? '99+' : notifCount}</Text>
+                  </View>
+                )}
+              </TouchableOpacity>
             </View>
-          </View>
-
-          <View style={styles.divider} />
+          )}
 
           {/* Section title */}
           <View style={styles.sectionTitleRow}>
@@ -716,7 +751,7 @@ const styles = StyleSheet.create({
   // ── Main area
   main: { flex: 1, backgroundColor: COLORS.offWhite, borderTopLeftRadius: 20 },
   mainMobile: { borderTopLeftRadius: 0 },
-  mainContent: { padding: isMobile ? 12 : 24, paddingBottom: isMobile ? 24 : 48 },
+  mainContent: { padding: 20, paddingBottom: 40 },
 
   // ── Mobile header
   mobileHeader: {
@@ -729,7 +764,7 @@ const styles = StyleSheet.create({
   },
   menuIconContainer: { width: 20, height: 16, justifyContent: 'space-between' },
   menuLine: { width: 20, height: 2, backgroundColor: COLORS.navy, borderRadius: 1 },
-  mobileTitle: { fontSize: 16, fontWeight: '800', color: COLORS.darkText },
+  mobileTitle: { fontSize: 18, fontWeight: '800', color: COLORS.darkText },
 
   // ── Page header
   pageHeader: {
@@ -737,13 +772,29 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between', marginBottom: 12,
   },
   headerSub: {
-    fontSize: isMobile ? 9 : 11, fontWeight: '600', color: COLORS.subText,
+    fontSize: 10, fontWeight: '600', color: COLORS.subText,
     letterSpacing: 2, marginBottom: 2, textTransform: 'uppercase',
   },
   headerTitle: {
-    fontSize: isMobile ? 18 : 22, fontWeight: '900', color: COLORS.darkText, letterSpacing: 0.4,
+    fontSize: 22, fontWeight: '900', color: COLORS.darkText, letterSpacing: 0.3,
+    borderBottomWidth: 2, borderBottomColor: COLORS.lightGray, paddingBottom: 4, marginBottom: 6,
   },
-  divider: { height: 1.5, backgroundColor: COLORS.navy + '25', marginBottom: 20 },
+
+  // ── Bell ──
+  bellBtn: {
+    position: 'relative',
+    width: 40, height: 40, borderRadius: 20,
+    backgroundColor: COLORS.cardBg, alignItems: 'center', justifyContent: 'center',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08, shadowRadius: 6, elevation: 3,
+  },
+  bellBtnMobile: { position: 'relative' },
+  bellWrapper: { width: 20, height: 22, alignItems: 'center' },
+  bellBody:    { width: 14, height: 12, borderRadius: 7, borderWidth: 2, borderColor: '#8B0000', marginTop: 4 },
+  bellBottom:  { width: 8, height: 4, borderBottomLeftRadius: 4, borderBottomRightRadius: 4, backgroundColor: '#8B0000', marginTop: -1 },
+  bellDot:     { position: 'absolute', top: 0, right: 1, width: 7, height: 7, borderRadius: 4, backgroundColor: COLORS.gold, borderWidth: 1.5, borderColor: COLORS.cardBg },
+  notifBadge:  { position: 'absolute', top: -2, right: -2, width: 16, height: 16, borderRadius: 8, backgroundColor: COLORS.gold, alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: COLORS.white },
+  notifBadgeText: { fontSize: 8, fontWeight: '900', color: COLORS.navy },
 
   // ── Section title
   sectionTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 20 },
