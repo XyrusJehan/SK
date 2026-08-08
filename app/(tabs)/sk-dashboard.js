@@ -1,5 +1,6 @@
 import { useFocusEffect } from '@react-navigation/native';
 import { useRouter } from 'expo-router';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
@@ -18,6 +19,50 @@ import { useNav } from './navContext';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const isMobile = SCREEN_WIDTH < 768;
+
+// ─── PERSISTED "SEEN" COUNTS ──────────────────────────────────────────────────
+// The bell badge counts how many notifications are NEW since the user last
+// opened the bell modal. Those seen counts are kept in AsyncStorage so they
+// survive pull-to-refresh, screen re-mounts, and app restarts.
+const SEEN_KEYS = {
+  approved:  'sk_notif_seen_approved',
+  templates: 'sk_notif_seen_templates',
+  returned:  'sk_notif_seen_returned',
+  deadlines: 'sk_notif_seen_deadlines',
+};
+
+const loadSeenCounts = async () => {
+  try {
+    const entries = await Promise.all([
+      AsyncStorage.getItem(SEEN_KEYS.approved),
+      AsyncStorage.getItem(SEEN_KEYS.templates),
+      AsyncStorage.getItem(SEEN_KEYS.returned),
+      AsyncStorage.getItem(SEEN_KEYS.deadlines),
+    ]);
+    return {
+      approved:  parseInt(entries[0] || '0', 10) || 0,
+      templates: parseInt(entries[1] || '0', 10) || 0,
+      returned:  parseInt(entries[2] || '0', 10) || 0,
+      deadlines: parseInt(entries[3] || '0', 10) || 0,
+    };
+  } catch (err) {
+    console.error('Error loading seen counts:', err);
+    return { approved: 0, templates: 0, returned: 0, deadlines: 0 };
+  }
+};
+
+const saveSeenCounts = async (counts) => {
+  try {
+    await Promise.all([
+      AsyncStorage.setItem(SEEN_KEYS.approved,  String(counts.approved  || 0)),
+      AsyncStorage.setItem(SEEN_KEYS.templates, String(counts.templates || 0)),
+      AsyncStorage.setItem(SEEN_KEYS.returned,  String(counts.returned  || 0)),
+      AsyncStorage.setItem(SEEN_KEYS.deadlines, String(counts.deadlines || 0)),
+    ]);
+  } catch (err) {
+    console.error('Error saving seen counts:', err);
+  }
+};
 
 // Supabase timestamps have no 'Z' suffix — JS mis-parses them as local time.
 // toUtcDate forces correct UTC parsing before PHT display.
@@ -171,18 +216,19 @@ const LogoutNavIcon = ({ color = '#fff', size = 16 }) => (
 
 // ─── ICON COMPONENTS ──────────────────────────────────────────────────────────
 const BellIcon = ({ hasNotif }) => (
-  <View style={styles.bellWrapper}>
-    {/* Bell dome */}
-    <View style={styles.bellBody}>
-      {/* Clapper */}
-      <View style={styles.bellClapper} />
-    </View>
-    {/* Bell bottom */}
-    <View style={styles.bellBottom} />
-    {/* Notification dot */}
-    {hasNotif && <View style={styles.bellDot} />}
+  <View style={ic.bellWrapper}>
+    <View style={ic.bellBody} />
+    <View style={ic.bellBottom} />
+    {hasNotif && <View style={ic.bellDot} />}
   </View>
 );
+
+const ic = StyleSheet.create({
+  bellWrapper: { width: 20, height: 22, alignItems: 'center' },
+  bellBody: { width: 14, height: 12, borderRadius: 7, borderWidth: 2, borderColor: '#8B0000', marginTop: 4 },
+  bellBottom: { width: 8, height: 4, borderBottomLeftRadius: 4, borderBottomRightRadius: 4, backgroundColor: '#8B0000', marginTop: -1 },
+  bellDot: { position: 'absolute', top: 0, right: 1, width: 7, height: 7, borderRadius: 4, backgroundColor: '#E8C547', borderWidth: 1.5, borderColor: COLORS.white },
+});
 
 const SearchIcon = () => (
   <View style={styles.searchIcon}>
@@ -537,7 +583,7 @@ function CalendarModal({ visible, onClose, barangayId }) {
   );
 }
 
-// ─── NOTIFICATION MODAL ───────────────────────────────────────────────────────────
+// ─── NOTIFICATION MODAL ──────────────────────────────────────────────────────
 // Lists every notification relevant to the SK: documents returned by LYDO,
 // documents approved by LYDO, templates forwarded by LYDO, and approaching
 // submission deadlines. Rows are grouped by category via tab pills (with
@@ -550,7 +596,9 @@ function NotificationModal({
   approvedDocuments,
   forwardedTemplates,
   approachingDeadlines,
+  unviewedCounts = { returned: 0, approved: 0, templates: 0, deadlines: 0 },
   onMarkAllRead,
+  onViewCategory,
   onOpenRoute,
 }) {
   // ── Filter state ──
@@ -564,6 +612,15 @@ function NotificationModal({
       setActiveTab('all');
     }
   }, [visible]);
+
+  // Selecting a specific category tab (not "All") counts as viewing that
+  // category, so its unread badge clears. "All" never auto-clears anything —
+  // that only happens via the explicit "Mark all read" button.
+  useEffect(() => {
+    if (visible && activeTab !== 'all' && onViewCategory) {
+      onViewCategory(activeTab);
+    }
+  }, [visible, activeTab, onViewCategory]);
 
   // ── Build the unified notification list once per data change ──
   const notifications = React.useMemo(() => {
@@ -598,7 +655,7 @@ function NotificationModal({
     forwardedTemplates.forEach((doc) => {
       items.push({
         id: `template-${doc.id}`,
-        type: 'template',
+        type: 'templates',
         title: doc.title || 'New template',
         subtitle: `New template received (v${doc.version || 1})`,
         rawDate: doc.distributed_at || doc.date,
@@ -611,7 +668,7 @@ function NotificationModal({
     approachingDeadlines.forEach((item) => {
       items.push({
         id: `deadline-${item.id}`,
-        type: 'deadline',
+        type: 'deadlines',
         title: item.title || 'Upcoming deadline',
         subtitle:
           item.daysLeft < 0
@@ -641,6 +698,20 @@ function NotificationModal({
     notifications.forEach((n) => { c[n.type] = (c[n.type] || 0) + 1; });
     return c;
   }, [notifications]);
+
+  // ── Unread badge counts for the dropdown ──
+  // These are separate from `counts` above: `counts` is the total number of
+  // items in each category (used for the header subtitle and list), while
+  // `badgeCounts` is how many of those are still unread. Unread counts drop
+  // to 0 the moment the modal is viewed or "Mark all read" is pressed, since
+  // `unviewedCounts` is driven by the same seen-state as the bell badge.
+  const badgeCounts = React.useMemo(() => {
+    const returned  = unviewedCounts.returned  || 0;
+    const approved  = unviewedCounts.approved  || 0;
+    const templates = unviewedCounts.templates || 0;
+    const deadlines = unviewedCounts.deadlines || 0;
+    return { all: returned + approved + templates + deadlines, returned, approved, templates, deadlines };
+  }, [unviewedCounts]);
 
   const filteredNotifications = React.useMemo(() => {
     if (activeTab === 'all') return notifications;
@@ -713,8 +784,9 @@ function NotificationModal({
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <View style={notifModalStyles.backdrop}>
-        <View style={notifModalStyles.modal}>
+      <TouchableOpacity style={notifModalStyles.backdrop} activeOpacity={1} onPress={onClose}>
+        <TouchableOpacity activeOpacity={1} onPress={() => {}} style={notifModalStyles.caret} />
+        <TouchableOpacity activeOpacity={1} onPress={() => {}} style={notifModalStyles.modal}>
           {/* ── Header ── */}
           <View style={notifModalStyles.header}>
             <View style={notifModalStyles.headerLeft}>
@@ -752,10 +824,10 @@ function NotificationModal({
             >
               <View style={notifModalStyles.dropdownButtonLeft}>
                 <Text style={notifModalStyles.dropdownButtonText}>{activeLabel}</Text>
-                {counts[activeTab] > 0 && (
+                {badgeCounts[activeTab] > 0 && (
                   <View style={notifModalStyles.dropdownButtonBadge}>
                     <Text style={notifModalStyles.dropdownButtonBadgeText}>
-                      {counts[activeTab] > 99 ? '99+' : counts[activeTab]}
+                      {badgeCounts[activeTab] > 99 ? '99+' : badgeCounts[activeTab]}
                     </Text>
                   </View>
                 )}
@@ -773,7 +845,7 @@ function NotificationModal({
                     : tab === 'approved' ? 'Approved'
                     : tab === 'templates' ? 'Templates'
                     : 'Deadlines';
-                  const itemCount = counts[tab] || 0;
+                  const itemCount = badgeCounts[tab] || 0;
                   return (
                     <TouchableOpacity
                       key={tab}
@@ -855,8 +927,8 @@ function NotificationModal({
               </ScrollView>
             )}
           </View>
-        </View>
-      </View>
+        </TouchableOpacity>
+      </TouchableOpacity>
     </Modal>
   );
 }
@@ -887,6 +959,9 @@ export default function HomeScreen({ navigation }) {
   const [hasUnviewedNotif, setHasUnviewedNotif] = useState(false);
   const [seenApprovedCount, setSeenApprovedCount] = useState(0);
   const [seenTemplatesCount, setSeenTemplatesCount] = useState(0);
+  const [seenReturnedCount, setSeenReturnedCount] = useState(0);
+  const [seenDeadlinesCount, setSeenDeadlinesCount] = useState(0);
+  const [seenLoaded, setSeenLoaded] = useState(false);
   const [sidebarVisible, setSidebarVisible] = useState(false);
   const [calendarVisible, setCalendarVisible] = useState(false);
   const [notificationModalVisible, setNotificationModalVisible] = useState(false);
@@ -907,6 +982,34 @@ export default function HomeScreen({ navigation }) {
     if (user && user.role !== 'sk') router.replace('/');
   }, [user]);
 
+  // Load persisted "seen" counts once on mount so the bell badge doesn't show
+  // stale notifications as "new" after a refresh or app restart.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const stored = await loadSeenCounts();
+      if (cancelled) return;
+      setSeenApprovedCount(stored.approved);
+      setSeenTemplatesCount(stored.templates);
+      setSeenReturnedCount(stored.returned);
+      setSeenDeadlinesCount(stored.deadlines);
+      setSeenLoaded(true);
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  // Persist seen counts to AsyncStorage whenever they change after the
+  // initial load. This keeps the bell badge accurate across refreshes.
+  useEffect(() => {
+    if (!seenLoaded) return;
+    saveSeenCounts({
+      approved:  seenApprovedCount,
+      templates: seenTemplatesCount,
+      returned:  seenReturnedCount,
+      deadlines: seenDeadlinesCount,
+    });
+  }, [seenLoaded, seenApprovedCount, seenTemplatesCount, seenReturnedCount, seenDeadlinesCount]);
+
   const barangayName = user?.barangay?.barangay_name || 'Unknown Barangay';
   const barangayId = user?.barangayId;
 
@@ -924,7 +1027,7 @@ export default function HomeScreen({ navigation }) {
     try {
       const { data: documents, error } = await supabase
         .from('documents')
-        .select('document_id, status, title, created_at, submitted_at, saved_at')
+        .select('document_id, status, title, created_at, submitted_at, saved_at, reviewed_at')
         .eq('barangay_id', barangayId)
         .order('created_at', { ascending: false });
 
@@ -956,8 +1059,8 @@ export default function HomeScreen({ navigation }) {
         id: doc.document_id,
         title: doc.title,
         created_at: doc.created_at,
-        approved_at: doc.submitted_at,
-        date: doc.submitted_at || doc.created_at,
+        approved_at: doc.reviewed_at || doc.submitted_at,
+        date: doc.reviewed_at || doc.submitted_at || doc.created_at,
       }));
       setApprovedDocuments(approvedDocs);
 
@@ -1295,30 +1398,31 @@ export default function HomeScreen({ navigation }) {
     fetchRecentActivities();
   }, [refreshKey, barangayId, fetchDocuments, fetchTasks, fetchConsultations, fetchRecentActivities]);
 
-  // Update notification count when badge counts change
+  // Compute unviewed notification counts per category.
+// Each category contributes only its NEW items (count - last seen count).
+// When the modal is opened, the seen counts are bumped to match current counts
+// so that category contributes 0 next time — until a new item arrives.
+// Until seen counts have been loaded from AsyncStorage, treat everything as
+// already seen — this prevents a flash of the old count on first paint after
+// a refresh.
+const seenReady = seenLoaded ? 1 : 0;
+  const unviewedApproved  = seenReady ? Math.max(0, approvedDocuments.length  - seenApprovedCount)  : 0;
+  const unviewedTemplates = seenReady ? Math.max(0, forwardedTemplates.length - seenTemplatesCount) : 0;
+  const unviewedReturned  = seenReady ? Math.max(0, returnedProposalsCount   - seenReturnedCount)  : 0;
+  const unviewedDeadlines = seenReady ? Math.max(0, deadlinesCount           - seenDeadlinesCount) : 0;
+
+  const totalUnviewed = unviewedApproved + unviewedTemplates + unviewedReturned + unviewedDeadlines;
+
+  // Update notification count when unviewed counts change.
   useEffect(() => {
-    const total = returnedProposalsCount + approvedDocuments.length + forwardedTemplates.length + deadlinesCount;
-    setNotifCount(total);
-  }, [returnedProposalsCount, approvedDocuments, forwardedTemplates, deadlinesCount]);
+    setNotifCount(totalUnviewed);
+  }, [totalUnviewed]);
 
-  // Update red dot based on notification types
+  // Show red dot whenever there is anything unviewed. Bell badge shows the
+  // total unviewed count.
   useEffect(() => {
-    const hasPersistentNotif = returnedProposalsCount > 0 || deadlinesCount > 0;
-
-    // Approved and Templates: one-time - show red dot only when NEW items arrive (count increased)
-    const hasNewApproved = approvedDocuments.length > seenApprovedCount;
-    const hasNewTemplates = forwardedTemplates.length > seenTemplatesCount;
-    const hasNewApprovedTemplates = hasNewApproved || hasNewTemplates;
-
-    // Returned and Deadlines: always show red dot if items exist (persistent)
-    if (hasPersistentNotif) {
-      setHasUnviewedNotif(true);
-    } else if (hasNewApprovedTemplates) {
-      setHasUnviewedNotif(true);
-    } else if (!hasPersistentNotif && !hasNewApprovedTemplates) {
-      setHasUnviewedNotif(false);
-    }
-  }, [returnedProposalsCount, deadlinesCount, approvedDocuments.length, forwardedTemplates.length, seenApprovedCount, seenTemplatesCount]);
+    setHasUnviewedNotif(totalUnviewed > 0);
+  }, [totalUnviewed]);
 
   const handleNavPress = (tab) => {
     if (tab === 'Dashboard') router.push('/(tabs)/sk-dashboard');
@@ -1410,15 +1514,29 @@ export default function HomeScreen({ navigation }) {
         approvedDocuments={approvedDocuments}
         forwardedTemplates={forwardedTemplates}
         approachingDeadlines={approachingDeadlines}
+        unviewedCounts={{
+          returned: unviewedReturned,
+          approved: unviewedApproved,
+          templates: unviewedTemplates,
+          deadlines: unviewedDeadlines,
+        }}
+        onViewCategory={(category) => {
+          // Selecting a specific tab marks only that category as seen —
+          // "All" is intentionally excluded, since it only clears via
+          // the "Mark all read" button.
+          if (category === 'returned')  setSeenReturnedCount(returnedProposalsCount);
+          if (category === 'approved')  setSeenApprovedCount(approvedDocuments.length);
+          if (category === 'templates') setSeenTemplatesCount(forwardedTemplates.length);
+          if (category === 'deadlines') setSeenDeadlinesCount(deadlinesCount);
+        }}
         onMarkAllRead={() => {
-          // Treat the current Approved and Templates inventories as fully
-          // seen, then clear the red dot unless Returned / Deadlines still
-          // require attention.
+          // Treat the current inventory as fully seen across every category —
+          // this clears the bell badge count and red dot.
           setSeenApprovedCount(approvedDocuments.length);
           setSeenTemplatesCount(forwardedTemplates.length);
-          if (returnedProposalsCount === 0 && deadlinesCount === 0) {
-            setHasUnviewedNotif(false);
-          }
+          setSeenReturnedCount(returnedProposalsCount);
+          setSeenDeadlinesCount(deadlinesCount);
+          setHasUnviewedNotif(false);
         }}
         onOpenRoute={(route) => {
           setNotificationModalVisible(false);
@@ -1444,15 +1562,16 @@ export default function HomeScreen({ navigation }) {
               <Text style={styles.mobileTitle}>SK Dashboard</Text>
               <View style={styles.mobileHeaderActions}>
                 <TouchableOpacity style={styles.bellBtnMobile} activeOpacity={0.7} onPress={() => {
-                  // Mark current Approved and Templates counts as seen (one-time)
-                  setSeenApprovedCount(approvedDocuments.length);
-                  setSeenTemplatesCount(forwardedTemplates.length);
-                  // Keep red dot if there are still Returned or Deadlines
-                  const hasPersistentNotif = returnedProposalsCount > 0 || deadlinesCount > 0;
-                  if (!hasPersistentNotif) setHasUnviewedNotif(false);
                   setNotificationModalVisible(true);
                 }}>
                   <BellIcon hasNotif={hasUnviewedNotif} />
+                  {notifCount > 0 && (
+                    <View style={styles.notifBadgeMobile}>
+                      <Text style={styles.notifBadgeTextMobile}>
+                        {notifCount > 99 ? '99+' : notifCount}
+                      </Text>
+                    </View>
+                  )}
                 </TouchableOpacity>
               </View>
             </View>
@@ -1467,15 +1586,16 @@ export default function HomeScreen({ navigation }) {
             {!isMobile && (
               <View style={styles.headerActions}>
                 <TouchableOpacity style={styles.bellBtn} activeOpacity={0.7} onPress={() => {
-                  // Mark current Approved and Templates counts as seen (one-time)
-                  setSeenApprovedCount(approvedDocuments.length);
-                  setSeenTemplatesCount(forwardedTemplates.length);
-                  // Keep red dot if there are still Returned or Deadlines
-                  const hasPersistentNotif = returnedProposalsCount > 0 || deadlinesCount > 0;
-                  if (!hasPersistentNotif) setHasUnviewedNotif(false);
                   setNotificationModalVisible(true);
                 }}>
                   <BellIcon hasNotif={hasUnviewedNotif} />
+                  {notifCount > 0 && (
+                    <View style={styles.notifBadge}>
+                      <Text style={styles.notifBadgeText}>
+                        {notifCount > 99 ? '99+' : notifCount}
+                      </Text>
+                    </View>
+                  )}
                 </TouchableOpacity>
               </View>
             )}
@@ -1820,12 +1940,24 @@ const calStyles = StyleSheet.create({
 
 // ─── NOTIFICATION MODAL STYLES ─────────────────────────────────────────────────
 const notifModalStyles = StyleSheet.create({
-  backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'center', alignItems: 'center', padding: 18 },
+  backdrop: {
+    flex: 1, backgroundColor: 'rgba(15,23,42,0.25)',
+    alignItems: 'flex-end',
+    paddingTop: isMobile ? 58 : 84,
+    paddingRight: isMobile ? 10 : 24,
+  },
+  caret: {
+    width: 16, height: 16, backgroundColor: COLORS.navy,
+    borderTopLeftRadius: 3,
+    transform: [{ rotate: '45deg' }],
+    marginBottom: -8, marginRight: isMobile ? 18 : 26,
+  },
   modal: {
-    width: '100%', maxWidth: 540, height: isMobile ? '85%' : 620,
-    backgroundColor: COLORS.white, borderRadius: 18, overflow: 'hidden',
-    shadowColor: '#000', shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.25, shadowRadius: 24, elevation: 18,
+    width: isMobile ? SCREEN_WIDTH - 20 : 400,
+    height: isMobile ? 460 : 560,
+    backgroundColor: COLORS.white, borderRadius: 16, overflow: 'hidden',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.22, shadowRadius: 22, elevation: 18,
   },
 
   // ── Header ──
@@ -1998,38 +2130,6 @@ const styles = StyleSheet.create({
   },
 
   // ── Bell icons ──
-  bellWrapper: { width: 22, height: 26, alignItems: 'center', justifyContent: 'center' },
-  bellBody: {
-    width: 18, height: 16,
-    borderRadius: 9,
-    borderWidth: 2.5,
-    borderColor: COLORS.navy,
-    marginTop: 2,
-    backgroundColor: COLORS.white,
-  },
-  bellClapper: {
-    position: 'absolute',
-    bottom: 2,
-    alignSelf: 'center',
-    width: 4, height: 4,
-    borderRadius: 2,
-    backgroundColor: COLORS.navy,
-  },
-  bellBottom: {
-    width: 10, height: 5,
-    borderBottomLeftRadius: 5, borderBottomRightRadius: 5,
-    backgroundColor: COLORS.navy,
-    marginTop: -1
-  },
-  bellDot: {
-    position: 'absolute',
-    top: 0, right: 0,
-    width: 9, height: 9,
-    borderRadius: 5,
-    backgroundColor: '#EF4444',
-    borderWidth: 2,
-    borderColor: COLORS.white,
-  },
   notifBadge: {
     position: 'absolute',
     top: 2, right: 2,

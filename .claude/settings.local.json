@@ -5,7 +5,10 @@
       "Bash(Select-Object FullName)",
       "Bash(npx tsc *)",
       "Bash(Select-Object -First 30)",
-      "Bash(node -e \"try { require\\('./app/\\(tabs\\)/sk-document-list.js'\\); console.log\\('sk-document-list.js: OK'\\); } catch\\(e\\) { console.log\\('sk-document-list.js: Error -', e.message\\); }\")"
+      "Bash(node -e \"try { require\\('./app/\\(tabs\\)/sk-document-list.js'\\); console.log\\('sk-document-list.js: OK'\\); } catch\\(e\\) { console.log\\('sk-document-list.js: Error -', e.message\\); }\")",
+      "Bash(dir C:\\\\xampp\\\\htdocs\\\\SK *)",
+      "Bash(dir C:\\\\xampp\\\\htdocs\\\\SK\\\\app *)",
+      "Bash(dir C:\\\\xampp\\\\htdocs\\\\SK\\\\app\\\\\\(tabs\\) *)"
     ]
   }
 }

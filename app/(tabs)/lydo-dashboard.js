@@ -13,6 +13,7 @@ import {
   Modal,
   ActivityIndicator,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { useNav } from './navContext';
 import { useAuth } from './authContext';
@@ -20,6 +21,31 @@ import { supabase } from '../../utils/supabase';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const isMobile = SCREEN_WIDTH < 768;
+
+// ─── PERSISTED "SEEN" COUNT ───────────────────────────────────────────────────
+// The bell badge counts how many SK-submitted documents are NEW since the
+// LYDO officer last opened the notification dropdown. That seen count is
+// kept in AsyncStorage so it survives pull-to-refresh, screen re-mounts, and
+// app restarts.
+const SEEN_KEY = 'lydo_notif_seen_submitted';
+
+const loadSeenCount = async () => {
+  try {
+    const stored = await AsyncStorage.getItem(SEEN_KEY);
+    return parseInt(stored || '0', 10) || 0;
+  } catch (err) {
+    console.error('Error loading seen count:', err);
+    return 0;
+  }
+};
+
+const saveSeenCount = async (count) => {
+  try {
+    await AsyncStorage.setItem(SEEN_KEY, String(count || 0));
+  } catch (err) {
+    console.error('Error saving seen count:', err);
+  }
+};
 
 // Supabase timestamps have no 'Z' suffix — JS mis-parses them as local time.
 // toUtcDate forces correct UTC parsing before PHT display.
@@ -602,7 +628,7 @@ function CalendarModal({ visible, onClose }) {
 // Lists every document the SK officials have submitted to LYDO for review.
 // Each row shows the document title, barangay, status (with color-coded
 // pill), and the date/time it was sent.
-function NotificationModal({ visible, onClose, items, loading, onReview }) {
+function NotificationModal({ visible, onClose, items, loading, onReview, onViewed }) {
   const formatDate = (dateStr) => {
     if (!dateStr) return '—';
     return toPhilippineDate(dateStr, { month: 'short', day: 'numeric', year: 'numeric' });
@@ -612,10 +638,20 @@ function NotificationModal({ visible, onClose, items, loading, onReview }) {
     return toPhilippineTime(dateStr, { hour: '2-digit', minute: '2-digit' });
   };
 
+  // The moment the dropdown becomes visible, treat the current list as
+  // viewed — this clears the bell badge immediately, the same way selecting
+  // a specific category does on the SK dashboard's notification dropdown.
+  useEffect(() => {
+    if (visible && onViewed) {
+      onViewed();
+    }
+  }, [visible, onViewed]);
+
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <View style={notifModalStyles.backdrop}>
-        <View style={notifModalStyles.modal}>
+      <TouchableOpacity style={notifModalStyles.backdrop} activeOpacity={1} onPress={onClose}>
+        <TouchableOpacity activeOpacity={1} onPress={() => {}} style={notifModalStyles.caret} />
+        <TouchableOpacity activeOpacity={1} onPress={() => {}} style={notifModalStyles.modal}>
           <View style={notifModalStyles.header}>
             <View style={{ flex: 1 }}>
               <Text style={notifModalStyles.title}>Notifications</Text>
@@ -690,8 +726,8 @@ function NotificationModal({ visible, onClose, items, loading, onReview }) {
               ))}
             </ScrollView>
           )}
-        </View>
-      </View>
+        </TouchableOpacity>
+      </TouchableOpacity>
     </Modal>
   );
 }
@@ -737,6 +773,28 @@ export default function LYDOHomeScreen() {
   const [notifModalVisible, setNotifModalVisible] = useState(false);
   const [skSentDocs, setSkSentDocs] = useState([]);
   const [loadingNotifs, setLoadingNotifs] = useState(false);
+  const [seenSubmittedCount, setSeenSubmittedCount] = useState(0);
+  const [seenLoaded, setSeenLoaded] = useState(false);
+
+  // Load the persisted "seen" count once on mount so the bell badge doesn't
+  // show stale notifications as "new" after a refresh or app restart.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const stored = await loadSeenCount();
+      if (cancelled) return;
+      setSeenSubmittedCount(stored);
+      setSeenLoaded(true);
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  // Persist the seen count to AsyncStorage whenever it changes after the
+  // initial load, so the bell badge stays accurate across refreshes.
+  useEffect(() => {
+    if (!seenLoaded) return;
+    saveSeenCount(seenSubmittedCount);
+  }, [seenLoaded, seenSubmittedCount]);
 
   useEffect(() => {
     if (user && user.role !== 'lydo') router.replace('/');
@@ -1093,11 +1151,17 @@ export default function LYDOHomeScreen() {
     }
   }, [notifModalVisible]);
 
-  // ── Update notification count when badge counts change ───────────────────────
+  // ── Notification badge reflects unread SK-submitted documents ──────────────
+  // Mirrors the SK dashboard's design: the badge only counts documents that
+  // haven't been seen yet (current total minus what was seen last time the
+  // dropdown was opened). Until the seen count has loaded from AsyncStorage,
+  // treat everything as already seen — this avoids a flash of the old count
+  // on first paint after a refresh.
   useEffect(() => {
-    const total = proposalsForReview + consultationsCount + forRevision + missingDocs;
-    setNotifCount(total);
-  }, [proposalsForReview, consultationsCount, forRevision, missingDocs]);
+    const seenReady = seenLoaded ? 1 : 0;
+    const unviewedSubmitted = seenReady ? Math.max(0, proposalsForReview - seenSubmittedCount) : 0;
+    setNotifCount(unviewedSubmitted);
+  }, [proposalsForReview, seenSubmittedCount, seenLoaded]);
 
   // ── Approaching Deadline card — org-wide, grouped across all barangays ──
   // Each submission_deadlines row is per-barangay, so a single logical
@@ -1260,6 +1324,7 @@ export default function LYDOHomeScreen() {
         onClose={() => setNotifModalVisible(false)}
         items={skSentDocs}
         loading={loadingNotifs}
+        onViewed={() => setSeenSubmittedCount(proposalsForReview)}
         onReview={(doc) => {
           setNotifModalVisible(false);
           router.push({
@@ -1340,11 +1405,11 @@ export default function LYDOHomeScreen() {
                 <MenuIcon />
               </TouchableOpacity>
               <Text style={styles.mobileTitle}>LYDO Dashboard</Text>
-              <TouchableOpacity style={styles.bellBtn} activeOpacity={0.7} onPress={() => setNotifModalVisible(true)}>
+              <TouchableOpacity style={styles.bellBtnMobile} activeOpacity={0.7} onPress={() => setNotifModalVisible(true)}>
                 <BellIcon hasNotif={notifCount > 0} />
                 {notifCount > 0 && (
-                  <View style={styles.notifBadge}>
-                    <Text style={styles.notifBadgeText}>{notifCount}</Text>
+                  <View style={styles.notifBadgeMobile}>
+                    <Text style={styles.notifBadgeTextMobile}>{notifCount > 99 ? '99+' : notifCount}</Text>
                   </View>
                 )}
               </TouchableOpacity>
@@ -1377,7 +1442,7 @@ export default function LYDOHomeScreen() {
                 <BellIcon hasNotif={notifCount > 0} />
                 {notifCount > 0 && (
                   <View style={styles.notifBadge}>
-                    <Text style={styles.notifBadgeText}>{notifCount}</Text>
+                    <Text style={styles.notifBadgeText}>{notifCount > 99 ? '99+' : notifCount}</Text>
                   </View>
                 )}
               </TouchableOpacity>
@@ -1731,18 +1796,35 @@ const styles = StyleSheet.create({
 
   // Bell
   bellBtn: {
-    width: 40, height: 40, borderRadius: 20,
-    backgroundColor: COLORS.cardBg, alignItems: 'center', justifyContent: 'center',
-    shadowColor: 'rgba(0,0,0,0.08)', shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 1, shadowRadius: 6, elevation: 3,
+    width: 44, height: 44, borderRadius: 22,
+    backgroundColor: COLORS.white, alignItems: 'center', justifyContent: 'center',
+    shadowColor: COLORS.navy, shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.15, shadowRadius: 8, elevation: 4,
+    borderWidth: 1.5, borderColor: COLORS.navy + '30',
   },
   notifBadge: {
-    position: 'absolute', top: -2, right: -2,
-    width: 16, height: 16, borderRadius: 8,
-    backgroundColor: '#E8C547', alignItems: 'center', justifyContent: 'center',
-    borderWidth: 1.5, borderColor: COLORS.white,
+    position: 'absolute', top: 2, right: 2,
+    minWidth: 18, height: 18, borderRadius: 9,
+    backgroundColor: '#EF4444', alignItems: 'center', justifyContent: 'center',
+    borderWidth: 2, borderColor: COLORS.white,
+    paddingHorizontal: 4,
   },
-  notifBadgeText: { fontSize: 8, fontWeight: '900', color: '#133E75' },
+  notifBadgeText: { fontSize: 10, fontWeight: '800', color: COLORS.white },
+  bellBtnMobile: {
+    width: 40, height: 40, borderRadius: 20,
+    backgroundColor: COLORS.white, alignItems: 'center', justifyContent: 'center',
+    shadowColor: COLORS.navy, shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15, shadowRadius: 6, elevation: 4,
+    borderWidth: 1.5, borderColor: COLORS.navy + '30',
+  },
+  notifBadgeMobile: {
+    position: 'absolute', top: 2, right: 2,
+    minWidth: 16, height: 16, borderRadius: 8,
+    backgroundColor: '#EF4444', alignItems: 'center', justifyContent: 'center',
+    borderWidth: 1.5, borderColor: COLORS.white,
+    paddingHorizontal: 3,
+  },
+  notifBadgeTextMobile: { fontSize: 9, fontWeight: '800', color: COLORS.white },
 
   // Stat Cards
   statsRow: { flexDirection: 'row', gap: 10, marginBottom: 18, flexWrap: 'wrap' },
@@ -2118,16 +2200,24 @@ const missingModalStyles = StyleSheet.create({
 // ─── NOTIFICATION MODAL STYLES ─────────────────────────────────────────────────
 const notifModalStyles = StyleSheet.create({
   backdrop: {
-    flex: 1, backgroundColor: 'rgba(0,0,0,0.65)',
-    justifyContent: 'center', alignItems: 'center', padding: 24,
+    flex: 1, backgroundColor: 'rgba(15,23,42,0.25)',
+    alignItems: 'flex-end',
+    paddingTop: isMobile ? 58 : 84,
+    paddingRight: isMobile ? 10 : 24,
+  },
+  caret: {
+    width: 16, height: 16, backgroundColor: COLORS.navy,
+    borderTopLeftRadius: 3,
+    transform: [{ rotate: '45deg' }],
+    marginBottom: -8, marginRight: isMobile ? 18 : 26,
   },
   modal: {
     backgroundColor: COLORS.white, borderRadius: 16,
-    width: isMobile ? '92%' : 520,
-    height: isMobile ? '80%' : 600,
-    overflow: 'hidden', elevation: 20,
+    width: isMobile ? SCREEN_WIDTH - 20 : 400,
+    height: isMobile ? 460 : 560,
+    overflow: 'hidden', elevation: 18,
     shadowColor: '#000', shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.25, shadowRadius: 20,
+    shadowOpacity: 0.22, shadowRadius: 22,
   },
   header: {
     flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between',
