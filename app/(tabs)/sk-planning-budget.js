@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View, Text, TextInput, ScrollView, TouchableOpacity,
   StyleSheet, SafeAreaView, StatusBar, Dimensions,
@@ -7,6 +7,7 @@ import {
 import { useRouter } from 'expo-router';
 import { useNav } from './navContext';
 import { useAuth } from './authContext';
+import { supabase } from '../../utils/supabase';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const isMobile = SCREEN_WIDTH < 768;
@@ -26,17 +27,12 @@ const COLORS = {
 };
 
 // ─── TABS ─────────────────────────────────────────────────────────────────────
-const NAV_TABS      = ['Dashboard', 'Documents', 'Planning', 'Portal'];
+const NAV_TABS      = ['Dashboard', 'Documents', 'Planning', 'Portal', 'Logs', 'Account'];
 const PLANNING_TABS = ['Templates', 'Budget'];
 
 // ─── BUDGET DATA ──────────────────────────────────────────────────────────────
-const BUDGET_DATA = [
-  { id: '1', barangay: 'Barangay San Jose',      budget: 235000, action: 'formulate' },
-  { id: '2', barangay: 'Barangay San Roque',     budget: 235000, action: 'readonly' },
-  { id: '3', barangay: 'Barangay Apasan',        budget: 235000, action: 'readonly' },
-  { id: '4', barangay: 'Barangay Mamala',        budget: 235000, action: 'readonly' },
-  { id: '5', barangay: 'Barangay Ilayang Owain', budget: 235000, action: 'readonly' },
-];
+// (Data now fetched from Supabase based on barangay_id)
+const BUDGET_DATA = [];
 
 const EMPTY_ROWS = 4; // filler rows at bottom
 
@@ -55,6 +51,104 @@ const MenuIcon = () => (
   </View>
 );
 
+// Dashboard: 2×2 grid of rounded squares
+const DashboardIcon = ({ color = '#fff', size = 16 }) => {
+  const s = size * 0.38;
+  const gap = size * 0.12;
+  const r = size * 0.12;
+  const box = { width: s, height: s, borderRadius: r, backgroundColor: color };
+  return (
+    <View style={{ width: size, height: size, justifyContent: 'center', alignItems: 'center' }}>
+      <View style={{ flexDirection: 'row', gap }}>
+        <View style={box} />
+        <View style={box} />
+      </View>
+      <View style={{ height: gap }} />
+      <View style={{ flexDirection: 'row', gap }}>
+        <View style={box} />
+        <View style={box} />
+      </View>
+    </View>
+  );
+};
+
+// Documents: file shape with fold + two lines
+const DocumentsIcon = ({ color = '#fff', size = 16 }) => {
+  const w = size * 0.6, h = size * 0.78;
+  const fold = size * 0.22;
+  return (
+    <View style={{ width: size, height: size, justifyContent: 'center', alignItems: 'center' }}>
+      <View style={{ width: w, height: h, justifyContent: 'flex-end', paddingBottom: size * 0.08, paddingHorizontal: size * 0.1 }}>
+        <View style={{ position: 'absolute', left: 0, right: 0, top: fold, bottom: 0, borderWidth: 1.5, borderColor: color, borderRadius: size * 0.08 }} />
+        <View style={{ position: 'absolute', top: 0, right: 0, width: fold, height: fold, backgroundColor: color, borderBottomLeftRadius: size * 0.06 }} />
+        <View style={{ position: 'absolute', top: 0, left: 0, width: w - fold, height: fold, borderTopWidth: 1.5, borderLeftWidth: 1.5, borderColor: color, borderTopLeftRadius: size * 0.08 }} />
+        <View style={{ height: 1.5, backgroundColor: color, borderRadius: 1, marginBottom: size * 0.1, width: '80%' }} />
+        <View style={{ height: 1.5, backgroundColor: color, borderRadius: 1, width: '55%' }} />
+      </View>
+    </View>
+  );
+};
+
+// Planning: calendar grid
+const PlanningIcon = ({ color = '#fff', size = 16 }) => {
+  const bw = 1.5;
+  return (
+    <View style={{ width: size, height: size, justifyContent: 'center', alignItems: 'center' }}>
+      <View style={{ width: size * 0.82, height: size * 0.75, borderWidth: bw, borderColor: color, borderRadius: size * 0.1, overflow: 'hidden' }}>
+        <View style={{ height: size * 0.22, backgroundColor: color, width: '100%' }} />
+        <View style={{ flex: 1, flexDirection: 'row', justifyContent: 'space-around', alignItems: 'center', paddingHorizontal: size * 0.05 }}>
+          {[0,1,2].map(i => <View key={i} style={{ width: size * 0.1, height: size * 0.1, borderRadius: size * 0.05, backgroundColor: color }} />)}
+        </View>
+      </View>
+      <View style={{ position: 'absolute', top: 0, flexDirection: 'row', gap: size * 0.32 }}>
+        {[0,1].map(i => <View key={i} style={{ width: size * 0.1, height: size * 0.2, backgroundColor: color, borderRadius: size * 0.05 }} />)}
+      </View>
+    </View>
+  );
+};
+
+// Portal: simple globe
+const PortalIcon = ({ color = '#fff', size = 16 }) => (
+  <View style={{ width: size, height: size, justifyContent: 'center', alignItems: 'center' }}>
+    <View style={{ width: size * 0.82, height: size * 0.82, borderRadius: size * 0.41, borderWidth: 1.5, borderColor: color, justifyContent: 'center', alignItems: 'center', overflow: 'hidden' }}>
+      <View style={{ position: 'absolute', height: 1.5, width: '100%', backgroundColor: color }} />
+      <View style={{ width: size * 0.38, height: size * 0.78, borderRadius: size * 0.19, borderWidth: 1.5, borderColor: color, backgroundColor: 'transparent' }} />
+    </View>
+  </View>
+);
+
+// Logs: clipboard with checkmark lines
+const LogsIcon = ({ color = '#fff', size = 16 }) => (
+  <View style={{ width: size, height: size, justifyContent: 'center', alignItems: 'center' }}>
+    <View style={{ width: size * 0.75, height: size * 0.85, borderWidth: 1.5, borderColor: color, borderRadius: size * 0.1, paddingHorizontal: size * 0.1, paddingVertical: size * 0.1, justifyContent: 'space-around' }}>
+      <View style={{ position: 'absolute', top: -size * 0.08, alignSelf: 'center', width: size * 0.3, height: size * 0.14, backgroundColor: color, borderRadius: size * 0.04 }} />
+      {[0,1,2].map(i => (
+        <View key={i} style={{ flexDirection: 'row', alignItems: 'center', gap: size * 0.08, marginTop: i === 0 ? size * 0.1 : 0 }}>
+          <View style={{ width: size * 0.1, height: size * 0.1, borderRadius: size * 0.05, backgroundColor: color }} />
+          <View style={{ flex: 1, height: 1.5, backgroundColor: color, borderRadius: 1 }} />
+        </View>
+      ))}
+    </View>
+  </View>
+);
+
+// Account: head + shoulders silhouette
+const AccountIcon = ({ color = '#fff', size = 16 }) => (
+  <View style={{ width: size, height: size, justifyContent: 'center', alignItems: 'center' }}>
+    <View style={{ width: size * 0.38, height: size * 0.38, borderRadius: size * 0.19, borderWidth: 1.5, borderColor: color, marginBottom: size * 0.04 }} />
+    <View style={{ width: size * 0.72, height: size * 0.36, borderBottomLeftRadius: size * 0.36, borderBottomRightRadius: size * 0.36, borderWidth: 1.5, borderColor: color, borderTopWidth: 0, overflow: 'hidden' }} />
+  </View>
+);
+
+// Logout: door with arrow
+const LogoutNavIcon = ({ color = '#fff', size = 16 }) => (
+  <View style={{ width: size, height: size, justifyContent: 'center', alignItems: 'center' }}>
+    <View style={{ position: 'absolute', left: 0, top: 0, width: size * 0.55, height: size, borderWidth: 1.5, borderColor: color, borderRadius: size * 0.08 }} />
+    <View style={{ position: 'absolute', right: size * 0.02, width: size * 0.52, height: 1.8, backgroundColor: color, borderRadius: 1 }} />
+    <View style={{ position: 'absolute', right: size * 0.02, width: size * 0.2, height: size * 0.2, borderTopWidth: 1.8, borderRightWidth: 1.8, borderColor: color, transform: [{ rotate: '45deg' }], marginTop: -size * 0.01 }} />
+  </View>
+);
+
 // External link icon box — matches the screenshot action icon
 const ExternalLinkIcon = () => (
   <View style={styles.extLinkBox}>
@@ -66,11 +160,49 @@ const ExternalLinkIcon = () => (
 export default function SKPlanningBudgetScreen() {
   const router = useRouter();
   const { activeTab, setActiveTab } = useNav();
-  const { logout } = useAuth();
+  const { logout, user } = useAuth();
+
+  // Get user's barangay from auth context
+  const barangayName = user?.barangay?.barangay_name || 'Unknown Barangay';
+  const barangayId = user?.barangayId;
 
   const [searchText, setSearchText]         = useState('');
   const [notifCount]                        = useState(2);
   const [sidebarVisible, setSidebarVisible] = useState(false);
+  const [budgetData, setBudgetData]        = useState([]);
+
+  // Fetch budget allocations for this barangay
+  useEffect(() => {
+    const fetchBudget = async () => {
+      if (!barangayId) return;
+
+      try {
+        const { data: budget, error } = await supabase
+          .from('budget_allocations')
+          .select('*')
+          .eq('barangay_id', barangayId)
+          .order('fiscal_year', { ascending: false });
+
+        if (error) {
+          console.error('Error fetching budget:', error);
+          return;
+        }
+
+        const formattedBudget = budget?.map(b => ({
+          id: b.allocation_id?.toString() || '1',
+          barangay: barangayName,
+          budget: b.allocated_amount || 0,
+          action: 'readonly',
+        })) || [];
+
+        setBudgetData(formattedBudget);
+      } catch (error) {
+        console.error('Error:', error);
+      }
+    };
+
+    fetchBudget();
+  }, [barangayId, barangayName]);
 
   const handleNavPress = (tab) => {
     setActiveTab(tab);
@@ -79,6 +211,8 @@ export default function SKPlanningBudgetScreen() {
     if (tab === 'Documents') router.push('/(tabs)/sk-document');
     if (tab === 'Planning')  router.push('/(tabs)/sk-planning');
     if (tab === 'Portal')    router.push('/(tabs)/sk-portal');
+    if (tab === 'Logs')      router.push('/(tabs)/sk-logs');
+    if (tab === 'Account')   router.push('/(tabs)/sk-account');
   };
 
   const handleLogout = () => { logout(); router.replace('/'); };
@@ -92,6 +226,15 @@ export default function SKPlanningBudgetScreen() {
   );
 
   // ── Sidebar ──
+  const NAV_ITEMS = [
+    { tab: 'Dashboard', IconComponent: DashboardIcon },
+    { tab: 'Documents', IconComponent: DocumentsIcon },
+    { tab: 'Planning',  IconComponent: PlanningIcon  },
+    { tab: 'Portal',    IconComponent: PortalIcon    },
+    { tab: 'Logs',      IconComponent: LogsIcon      },
+    { tab: 'Account',   IconComponent: AccountIcon   },
+  ];
+
   const renderSidebar = () => (
     <View style={styles.sidebar}>
       <View style={styles.logoPill}>
@@ -102,27 +245,29 @@ export default function SKPlanningBudgetScreen() {
         />
       </View>
       <View style={{ height: 28 }} />
-      {NAV_TABS.map(tab => {
-        const active = activeTab === tab || (tab === 'Planning');
+      {NAV_ITEMS.map(({ tab, IconComponent }) => {
+        const active = activeTab === tab;
+        const iconColor = active ? '#133E75' : 'rgba(255,255,255,0.85)';
         return (
           <TouchableOpacity
             key={tab}
-            style={[styles.navItem, active && tab === 'Planning' && styles.navItemActive]}
+            style={[styles.navItem, active && styles.navItemActive]}
             onPress={() => handleNavPress(tab)}
             activeOpacity={0.8}
           >
-            <Text style={[
-              styles.navLabel,
-              active && tab === 'Planning' && styles.navLabelActive,
-            ]}>
-              {tab}
-            </Text>
+            <View style={styles.navItemInner}>
+              <IconComponent color={iconColor} size={16} />
+              <Text style={[styles.navLabel, active && styles.navLabelActive]}>{tab}</Text>
+            </View>
           </TouchableOpacity>
         );
       })}
       <View style={{ flex: 1 }} />
       <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout} activeOpacity={0.8}>
-        <Text style={styles.logoutText}>Logout</Text>
+        <View style={styles.navItemInner}>
+          <LogoutNavIcon color="rgba(255,255,255,0.85)" size={16} />
+          <Text style={styles.logoutText}>Logout</Text>
+        </View>
       </TouchableOpacity>
     </View>
   );
@@ -152,7 +297,7 @@ export default function SKPlanningBudgetScreen() {
         <View style={styles.header}>
           <View style={{ flex: 1 }}>
             <Text style={styles.headerSub}>SANGGUNIANG KABATAAN</Text>
-            <Text style={styles.headerTitle}>BARANGAY SAN JOSE</Text>
+            <Text style={styles.headerTitle}>{barangayName.toUpperCase()}</Text>
             <Text style={styles.headerDocLabel}>Template and Budget Reference Documents</Text>
           </View>
           <TouchableOpacity style={styles.bellBtn} activeOpacity={0.7}>
@@ -282,11 +427,17 @@ const styles = StyleSheet.create({
   sidebar: {
     width: 250, backgroundColor: COLORS.navy,
     alignItems: 'center', paddingTop: 20, paddingBottom: 24,
-    paddingHorizontal: 10, zIndex: 10,
+    paddingHorizontal: 10, zIndex: 20,
+    ...(isMobile ? {
+      position: 'absolute', top: 0, left: 0, bottom: 0, zIndex: 20,
+    } : {}),
+  },
+  sidebarHidden: {
+    display: 'none',
   },
   sidebarOverlay: {
     position: 'absolute', left: 0, top: 0, bottom: 0, right: 0,
-    backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 5,
+    backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 15,
   },
   logoPill: {
     marginTop: 20, width: 70, height: 70, borderRadius: 35,
@@ -300,8 +451,8 @@ const styles = StyleSheet.create({
     borderRadius: 24, marginBottom: 8, alignItems: 'center',
     borderWidth: 1.5, borderColor: COLORS.white,
     backgroundColor: COLORS.navy,
-    flexDirection: 'row', justifyContent: 'center', gap: 6,
   },
+  navItemInner: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   navItemActive: { backgroundColor: COLORS.white, borderColor: COLORS.white },
   navLabel: { fontSize: 13, fontWeight: '600', color: 'rgba(255,255,255,0.85)', letterSpacing: 0.3 },
   navLabelActive: { color: '#000', fontWeight: '800' },

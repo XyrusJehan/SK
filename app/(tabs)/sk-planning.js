@@ -1,12 +1,13 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
   View, Text, TextInput, ScrollView, TouchableOpacity,
   StyleSheet, SafeAreaView, StatusBar, Dimensions,
-  Modal, Alert, Image,
+  Modal, Alert, Image, Linking,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useNav } from './navContext';
 import { useAuth } from './authContext';
+import { supabase } from '../../utils/supabase';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const isMobile = SCREEN_WIDTH < 768;
@@ -26,73 +27,19 @@ const COLORS = {
 };
 
 // ─── NAV & PLANNING TABS ─────────────────────────────────────────────────────
-const NAV_TABS      = ['Dashboard', 'Documents', 'Planning', 'Portal'];
+const NAV_TABS      = ['Dashboard', 'Documents', 'Planning', 'Portal', 'Logs', 'Account'];
 const PLANNING_TABS = ['Templates', 'Budget'];
 
-// ─── TEMPLATE CATEGORIES (from screenshot) ───────────────────────────────────
-const TEMPLATE_SECTIONS = [
-  {
-    id: 'planning',
-    title: 'Planning Templates',
-    color: '#EAF0FB',
-    borderColor: '#B8CAE8',
-    items: [
-      { id: 'p1', name: 'Comprehensive Barangay Youth Development Plan' },
-      { id: 'p2', name: 'SK PPA Template' },
-      { id: 'p3', name: 'Annual Barangay Youth Investment Program' },
-      { id: 'p4', name: 'Program of Work' },
-    ],
-  },
-  {
-    id: 'budgeting',
-    title: 'Budgeting Templates',
-    color: '#EAFBEA',
-    borderColor: '#B8E4B8',
-    items: [
-      { id: 'b1', name: 'Approved Annual Budget' },
-      { id: 'b2', name: 'SK Supplemental Budget' },
-    ],
-  },
-  {
-    id: 'financial',
-    title: 'Financial Records and Evaluation Templates',
-    color: '#FDF5E6',
-    borderColor: '#E8D5A8',
-    items: [
-      { id: 'f1', name: 'Registry of Cash Receipts and Deposits' },
-      { id: 'f2', name: 'Registry of Cash Disbursements' },
-      { id: 'f3', name: 'Monthly Itemized List' },
-      { id: 'f4', name: 'Quarterly Financial Reports' },
-    ],
-  },
-  {
-    id: 'monitoring',
-    title: 'Monitoring and Evaluation',
-    color: '#F3EAFB',
-    borderColor: '#C8B0E4',
-    items: [
-      { id: 'm1', name: 'Barangay Youth Investment Monitoring Form' },
-      { id: 'm2', name: 'Monthly/Quarterly Accomplishment Report' },
-    ],
-  },
-];
+// ─── TEMPLATE CATEGORY CONFIG ─────────────────────────────────────────────────
+const CATEGORY_CONFIG = {
+  planning: { title: 'Planning Templates', color: '#EAF0FB', borderColor: '#B8CAE8' },
+  budgeting: { title: 'Budgeting Templates', color: '#EAFBEA', borderColor: '#B8E4B8' },
+  financial_records: { title: 'Financial Records and Evaluation Templates', color: '#FDF5E6', borderColor: '#E8D5A8' },
+  monitoring_evaluation: { title: 'Monitoring and Evaluation', color: '#F3EAFB', borderColor: '#C8B0E4' },
+};
 
-// ─── ALL TEMPLATES — flat table data (shown when "All" filter is active) ─────
-const ALL_TEMPLATES = [
-  { id: 'a1', name: 'Comprehensive Barangay Youth Development Plan', type: 'Planning',  source: 'LYDO', dateReceived: 'April 21, 2026' },
-  { id: 'a2', name: 'Annual Barangay Youth Investment Program',       type: 'Planning',  source: 'LYDO', dateReceived: 'April 21, 2026' },
-  { id: 'a3', name: 'Registry of Cash Receipts and Deposits',         type: 'Planning',  source: 'LYDO', dateReceived: 'April 21, 2026' },
-  { id: 'a4', name: 'Monthly Itemized List',                          type: 'Financial', source: 'LYDO', dateReceived: 'April 21, 2026' },
-  { id: 'a5', name: 'Comprehensive Barangay Youth Development Plan',  type: 'Planning',  source: 'LYDO', dateReceived: 'April 21, 2026' },
-  { id: 'a6', name: 'SK PPA Template',                                type: 'Planning',  source: 'LYDO', dateReceived: 'April 21, 2026' },
-  { id: 'a7', name: 'Program of Work',                                type: 'Planning',  source: 'LYDO', dateReceived: 'April 21, 2026' },
-  { id: 'a8', name: 'Approved Annual Budget',                         type: 'Budgeting', source: 'LYDO', dateReceived: 'April 21, 2026' },
-  { id: 'a9', name: 'SK Supplemental Budget',                         type: 'Budgeting', source: 'LYDO', dateReceived: 'April 21, 2026' },
-  { id:'a10', name: 'Registry of Cash Disbursements',                 type: 'Financial', source: 'LYDO', dateReceived: 'April 21, 2026' },
-  { id:'a11', name: 'Quarterly Financial Reports',                    type: 'Financial', source: 'LYDO', dateReceived: 'April 21, 2026' },
-  { id:'a12', name: 'Barangay Youth Investment Monitoring Form',       type: 'Monitoring',source: 'LYDO', dateReceived: 'April 21, 2026' },
-  { id:'a13', name: 'Monthly/Quarterly Accomplishment Report',         type: 'Monitoring',source: 'LYDO', dateReceived: 'April 21, 2026' },
-];
+// ─── ALL TEMPLATES — (now fetched from Supabase based on barangay_id) ─────
+// (Data fetched via useEffect)
 
 // ─── ICONS ────────────────────────────────────────────────────────────────────
 const BellIcon = ({ hasNotif }) => (
@@ -106,6 +53,104 @@ const BellIcon = ({ hasNotif }) => (
 const MenuIcon = () => (
   <View style={styles.menuIconContainer}>
     {[0, 1, 2].map(i => <View key={i} style={styles.menuLine} />)}
+  </View>
+);
+
+// Dashboard: 2×2 grid of rounded squares
+const DashboardIcon = ({ color = '#fff', size = 16 }) => {
+  const s = size * 0.38;
+  const gap = size * 0.12;
+  const r = size * 0.12;
+  const box = { width: s, height: s, borderRadius: r, backgroundColor: color };
+  return (
+    <View style={{ width: size, height: size, justifyContent: 'center', alignItems: 'center' }}>
+      <View style={{ flexDirection: 'row', gap }}>
+        <View style={box} />
+        <View style={box} />
+      </View>
+      <View style={{ height: gap }} />
+      <View style={{ flexDirection: 'row', gap }}>
+        <View style={box} />
+        <View style={box} />
+      </View>
+    </View>
+  );
+};
+
+// Documents: file shape with fold + two lines
+const DocumentsIcon = ({ color = '#fff', size = 16 }) => {
+  const w = size * 0.6, h = size * 0.78;
+  const fold = size * 0.22;
+  return (
+    <View style={{ width: size, height: size, justifyContent: 'center', alignItems: 'center' }}>
+      <View style={{ width: w, height: h, justifyContent: 'flex-end', paddingBottom: size * 0.08, paddingHorizontal: size * 0.1 }}>
+        <View style={{ position: 'absolute', left: 0, right: 0, top: fold, bottom: 0, borderWidth: 1.5, borderColor: color, borderRadius: size * 0.08 }} />
+        <View style={{ position: 'absolute', top: 0, right: 0, width: fold, height: fold, backgroundColor: color, borderBottomLeftRadius: size * 0.06 }} />
+        <View style={{ position: 'absolute', top: 0, left: 0, width: w - fold, height: fold, borderTopWidth: 1.5, borderLeftWidth: 1.5, borderColor: color, borderTopLeftRadius: size * 0.08 }} />
+        <View style={{ height: 1.5, backgroundColor: color, borderRadius: 1, marginBottom: size * 0.1, width: '80%' }} />
+        <View style={{ height: 1.5, backgroundColor: color, borderRadius: 1, width: '55%' }} />
+      </View>
+    </View>
+  );
+};
+
+// Planning: calendar grid
+const PlanningIcon = ({ color = '#fff', size = 16 }) => {
+  const bw = 1.5;
+  return (
+    <View style={{ width: size, height: size, justifyContent: 'center', alignItems: 'center' }}>
+      <View style={{ width: size * 0.82, height: size * 0.75, borderWidth: bw, borderColor: color, borderRadius: size * 0.1, overflow: 'hidden' }}>
+        <View style={{ height: size * 0.22, backgroundColor: color, width: '100%' }} />
+        <View style={{ flex: 1, flexDirection: 'row', justifyContent: 'space-around', alignItems: 'center', paddingHorizontal: size * 0.05 }}>
+          {[0,1,2].map(i => <View key={i} style={{ width: size * 0.1, height: size * 0.1, borderRadius: size * 0.05, backgroundColor: color }} />)}
+        </View>
+      </View>
+      <View style={{ position: 'absolute', top: 0, flexDirection: 'row', gap: size * 0.32 }}>
+        {[0,1].map(i => <View key={i} style={{ width: size * 0.1, height: size * 0.2, backgroundColor: color, borderRadius: size * 0.05 }} />)}
+      </View>
+    </View>
+  );
+};
+
+// Portal: simple globe
+const PortalIcon = ({ color = '#fff', size = 16 }) => (
+  <View style={{ width: size, height: size, justifyContent: 'center', alignItems: 'center' }}>
+    <View style={{ width: size * 0.82, height: size * 0.82, borderRadius: size * 0.41, borderWidth: 1.5, borderColor: color, justifyContent: 'center', alignItems: 'center', overflow: 'hidden' }}>
+      <View style={{ position: 'absolute', height: 1.5, width: '100%', backgroundColor: color }} />
+      <View style={{ width: size * 0.38, height: size * 0.78, borderRadius: size * 0.19, borderWidth: 1.5, borderColor: color, backgroundColor: 'transparent' }} />
+    </View>
+  </View>
+);
+
+// Logs: clipboard with checkmark lines
+const LogsIcon = ({ color = '#fff', size = 16 }) => (
+  <View style={{ width: size, height: size, justifyContent: 'center', alignItems: 'center' }}>
+    <View style={{ width: size * 0.75, height: size * 0.85, borderWidth: 1.5, borderColor: color, borderRadius: size * 0.1, paddingHorizontal: size * 0.1, paddingVertical: size * 0.1, justifyContent: 'space-around' }}>
+      <View style={{ position: 'absolute', top: -size * 0.08, alignSelf: 'center', width: size * 0.3, height: size * 0.14, backgroundColor: color, borderRadius: size * 0.04 }} />
+      {[0,1,2].map(i => (
+        <View key={i} style={{ flexDirection: 'row', alignItems: 'center', gap: size * 0.08, marginTop: i === 0 ? size * 0.1 : 0 }}>
+          <View style={{ width: size * 0.1, height: size * 0.1, borderRadius: size * 0.05, backgroundColor: color }} />
+          <View style={{ flex: 1, height: 1.5, backgroundColor: color, borderRadius: 1 }} />
+        </View>
+      ))}
+    </View>
+  </View>
+);
+
+// Account: head + shoulders silhouette
+const AccountIcon = ({ color = '#fff', size = 16 }) => (
+  <View style={{ width: size, height: size, justifyContent: 'center', alignItems: 'center' }}>
+    <View style={{ width: size * 0.38, height: size * 0.38, borderRadius: size * 0.19, borderWidth: 1.5, borderColor: color, marginBottom: size * 0.04 }} />
+    <View style={{ width: size * 0.72, height: size * 0.36, borderBottomLeftRadius: size * 0.36, borderBottomRightRadius: size * 0.36, borderWidth: 1.5, borderColor: color, borderTopWidth: 0, overflow: 'hidden' }} />
+  </View>
+);
+
+// Logout: door with arrow
+const LogoutNavIcon = ({ color = '#fff', size = 16 }) => (
+  <View style={{ width: size, height: size, justifyContent: 'center', alignItems: 'center' }}>
+    <View style={{ position: 'absolute', left: 0, top: 0, width: size * 0.55, height: size, borderWidth: 1.5, borderColor: color, borderRadius: size * 0.08 }} />
+    <View style={{ position: 'absolute', right: size * 0.02, width: size * 0.52, height: 1.8, backgroundColor: color, borderRadius: 1 }} />
+    <View style={{ position: 'absolute', right: size * 0.02, width: size * 0.2, height: size * 0.2, borderTopWidth: 1.8, borderRightWidth: 1.8, borderColor: color, transform: [{ rotate: '45deg' }], marginTop: -size * 0.01 }} />
   </View>
 );
 
@@ -163,15 +208,111 @@ const TemplateSection = ({ section, onEdit }) => {
 export default function SKPlanningScreen() {
   const router = useRouter();
   const { activeTab, setActiveTab } = useNav();
-  const { logout } = useAuth();
+  const { logout, user } = useAuth();
+
+  // Get user's barangay from auth context
+  const barangayName = user?.barangay?.barangay_name || 'Unknown Barangay';
+  const barangayId = user?.barangayId;
 
   const [activePlanningTab, setActivePlanningTab] = useState('Templates');
   const [searchText, setSearchText]               = useState('');
-  const [showAll, setShowAll]                     = useState(true); // false = Active Templates filter
+  const [showAll, setShowAll]                     = useState(false); // false = Active Templates filter
   const [notifCount]                              = useState(2);
   const [sidebarVisible, setSidebarVisible]       = useState(false);
   const [selectedItem, setSelectedItem]           = useState(null);
   const [showEditModal, setShowEditModal]         = useState(false);
+  const [templates, setTemplates]                = useState([]);
+  const [budgetData, setBudgetData]               = useState(null);
+  const [viewerModal, setViewerModal]             = useState({ visible: false, fileUrl: null, title: '' });
+
+  // Fetch templates for this barangay from template_distributions based on barangay_id
+  useEffect(() => {
+    const fetchTemplates = async () => {
+      if (!barangayId) return;
+
+      try {
+        // Get templates distributed to this barangay from template_distributions
+        const { data: distributions, error: distError } = await supabase
+          .from('template_distributions')
+          .select(`
+            distribution_id,
+            distributed_at,
+            is_acknowledged,
+            template_id,
+            templates (
+              template_id,
+              title,
+              description,
+              template_category,
+              document_type,
+              status,
+              created_at,
+              file_url,
+              version
+            )
+          `)
+          .eq('barangay_id', barangayId);
+
+        if (distError) {
+          console.error('Error fetching template distributions:', distError);
+          return;
+        }
+
+        // Build templates list from distributions only
+        const templateList = [];
+
+        if (distributions) {
+          distributions.forEach(d => {
+            if (d.templates && d.templates.template_id) {
+              templateList.push({
+                id: d.templates.template_id,
+                name: d.templates.title || 'Untitled Template',
+                type: d.templates.template_category || 'Unknown',
+                source: 'LYDO',
+                dateReceived: new Date(d.distributed_at).toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' }),
+                fileUrl: d.templates.file_url || '',
+                version: d.templates.version || 1,
+              });
+            }
+          });
+        }
+
+        setTemplates(templateList);
+      } catch (error) {
+        console.error('Error:', error);
+      }
+    };
+
+    fetchTemplates();
+  }, [barangayId]);
+
+  // Fetch budget allocation for this barangay
+  useEffect(() => {
+    const fetchBudget = async () => {
+      if (!barangayId) return;
+
+      try {
+        const { data: budget, error } = await supabase
+          .from('budget_allocations')
+          .select('*')
+          .eq('barangay_id', barangayId)
+          .order('fiscal_year', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (error) {
+          console.error('Error fetching budget:', error);
+          return;
+        }
+
+        setBudgetData(budget);
+      } catch (error) {
+        console.error('Error:', error);
+      }
+    };
+
+    fetchBudget();
+  }, [barangayId]);
 
   const handleNavPress = (tab) => {
     setActiveTab(tab);
@@ -179,6 +320,8 @@ export default function SKPlanningScreen() {
     if (tab === 'Dashboard') router.push('/(tabs)/sk-dashboard');
     if (tab === 'Documents') router.push('/(tabs)/sk-document');
     if (tab === 'Portal')    router.push('/(tabs)/sk-portal');
+      if (tab === 'Logs')      router.push('/(tabs)/sk-logs');
+    if (tab === 'Account')   router.push('/(tabs)/sk-account');
   };
 
   const handleLogout = () => { logout(); router.replace('/'); };
@@ -192,17 +335,27 @@ export default function SKPlanningScreen() {
 
   const handleEdit = (item) => { setSelectedItem(item); setShowEditModal(true); };
 
-  // Filter sections/items by search
-  const filteredSections = TEMPLATE_SECTIONS.map(sec => ({
-    ...sec,
-    items: sec.items.filter(it =>
-      it.name.toLowerCase().includes(searchText.toLowerCase())
-    ),
-  })).filter(sec => sec.items.length > 0);
+  // Get all categories as sections, then filter items by search
+  const templateSections = Object.entries(CATEGORY_CONFIG).map(([id, config]) => ({
+    id,
+    ...config,
+    items: templates
+      .filter(t => (t.type || 'planning') === id)
+      .filter(t => t.name.toLowerCase().includes(searchText.toLowerCase())),
+  }));
 
   // ── Sidebar ──
+  const NAV_ITEMS = [
+    { tab: 'Dashboard', IconComponent: DashboardIcon },
+    { tab: 'Documents', IconComponent: DocumentsIcon },
+    { tab: 'Planning',  IconComponent: PlanningIcon  },
+    { tab: 'Portal',    IconComponent: PortalIcon    },
+    { tab: 'Logs',      IconComponent: LogsIcon      },
+    { tab: 'Account',   IconComponent: AccountIcon   },
+  ];
+
   const renderSidebar = () => (
-    <View style={styles.sidebar}>
+    <View style={[styles.sidebar, isMobile && !sidebarVisible && styles.sidebarHidden]}>
       <View style={styles.logoPill}>
         <Image
           source={require('./../../assets/images/sk-logo.png')}
@@ -211,8 +364,9 @@ export default function SKPlanningScreen() {
         />
       </View>
       <View style={{ height: 28 }} />
-      {NAV_TABS.map(tab => {
+      {NAV_ITEMS.map(({ tab, IconComponent }) => {
         const active = activeTab === tab;
+        const iconColor = active ? '#133E75' : 'rgba(255,255,255,0.85)';
         return (
           <TouchableOpacity
             key={tab}
@@ -220,24 +374,47 @@ export default function SKPlanningScreen() {
             onPress={() => handleNavPress(tab)}
             activeOpacity={0.8}
           >
-            <Text style={[styles.navLabel, active && styles.navLabelActive]}>{tab}</Text>
-            {/* Notification badge for Planning */}
-            {tab === 'Planning' && notifCount > 0 && (
-              <View>
-                
-              </View>
-            )}
+            <View style={styles.navItemInner}>
+              <IconComponent color={iconColor} size={16} />
+              <Text style={[styles.navLabel, active && styles.navLabelActive]}>{tab}</Text>
+            </View>
           </TouchableOpacity>
         );
       })}
       <View style={{ flex: 1 }} />
       <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout} activeOpacity={0.8}>
-        <Text style={styles.logoutText}>Logout</Text>
+        <View style={styles.navItemInner}>
+          <LogoutNavIcon color="rgba(255,255,255,0.85)" size={16} />
+          <Text style={styles.logoutText}>Logout</Text>
+        </View>
       </TouchableOpacity>
     </View>
   );
 
   // ── Edit Modal ──
+  const handleViewTemplate = () => {
+    if (!selectedItem?.fileUrl) {
+      Alert.alert('No File', 'This template has no file attached.');
+      return;
+    }
+    setViewerModal({ visible: true, fileUrl: selectedItem.fileUrl, title: selectedItem.name });
+    setShowEditModal(false);
+  };
+
+  const handleDownloadTemplate = async () => {
+    if (!selectedItem?.fileUrl) {
+      Alert.alert('No File', 'This template has no file to download.');
+      return;
+    }
+    setShowEditModal(false);
+    try {
+      await Linking.openURL(selectedItem.fileUrl);
+    } catch (error) {
+      console.error('Download error:', error);
+      Alert.alert('Download Failed', `Could not open the file: ${error.message}`);
+    }
+  };
+
   const renderEditModal = () => (
     <Modal
       visible={showEditModal}
@@ -253,25 +430,26 @@ export default function SKPlanningScreen() {
         <View style={styles.modalCard} onStartShouldSetResponder={() => true}>
           <Text style={styles.modalTitle}>Edit Template</Text>
           <Text style={styles.modalSubtitle}>{selectedItem?.name}</Text>
+          <Text style={styles.modalVersion}>Version {selectedItem?.version || 1}</Text>
           <View style={styles.modalDivider} />
           <View style={styles.modalActions}>
             <TouchableOpacity
               style={[styles.modalActionBtn, { backgroundColor: '#EAF0FB' }]}
-              onPress={() => { Alert.alert('View', 'Opening template…'); setShowEditModal(false); }}
+              onPress={handleViewTemplate}
             >
               <Text style={[styles.modalActionText, { color: COLORS.navy }]}>👁  View</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.modalActionBtn, { backgroundColor: '#EAFBEA' }]}
-              onPress={() => { Alert.alert('Download', 'Downloading…'); setShowEditModal(false); }}
+              onPress={handleDownloadTemplate}
             >
               <Text style={[styles.modalActionText, { color: '#2E7D32' }]}>⬇  Download</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.modalActionBtn, { backgroundColor: '#FDF5E6' }]}
-              onPress={() => { Alert.alert('Replace', 'Replace coming soon.'); setShowEditModal(false); }}
+              onPress={() => { Alert.alert('Info', 'Template creation is handled by LYDO.'); setShowEditModal(false); }}
             >
-              <Text style={[styles.modalActionText, { color: '#B45309' }]}>↔  Replace</Text>
+              <Text style={[styles.modalActionText, { color: '#B45309' }]}>↔  Create</Text>
             </TouchableOpacity>
           </View>
           <TouchableOpacity
@@ -284,6 +462,44 @@ export default function SKPlanningScreen() {
       </TouchableOpacity>
     </Modal>
   );
+
+  // ── Viewer Modal (PDF/Image viewer) ──────────────────────────────────────────────
+  const renderViewerModal = () => {
+    if (!viewerModal.visible) return null;
+
+    const googleViewerUrl = `https://docs.google.com/gview?embedded=true&url=${encodeURIComponent(viewerModal.fileUrl)}`;
+
+    return (
+      <Modal visible={viewerModal.visible} animationType="slide" onRequestClose={() => setViewerModal({ ...viewerModal, visible: false })}>
+        <SafeAreaView style={styles.safe}>
+          <View style={styles.viewerHeader}>
+            <TouchableOpacity onPress={() => setViewerModal({ ...viewerModal, visible: false })}>
+              <Text style={styles.viewerCloseText}>← Back</Text>
+            </TouchableOpacity>
+            <Text style={styles.viewerTitle} numberOfLines={1}>{viewerModal.title}</Text>
+            <TouchableOpacity onPress={async () => {
+              try {
+                await Linking.openURL(viewerModal.fileUrl);
+              } catch (error) {
+                Alert.alert('Download Failed', `Could not open the file: ${error.message}`);
+              }
+            }}>
+              <Text style={styles.viewerDownloadText}>⬇</Text>
+            </TouchableOpacity>
+          </View>
+          {viewerModal.fileUrl && (
+            <View style={styles.viewerWebContainer}>
+              <iframe
+                src={googleViewerUrl}
+                style={{ flex: 1, border: 'none' }}
+                title={viewerModal.title}
+              />
+            </View>
+          )}
+        </SafeAreaView>
+      </Modal>
+    );
+  };
 
   // ── Main Content ──
   const renderContent = () => (
@@ -310,7 +526,7 @@ export default function SKPlanningScreen() {
         <View style={styles.header}>
           <View style={{ flex: 1 }}>
             <Text style={styles.headerSub}>SANGGUNIANG KABATAAN</Text>
-            <Text style={styles.headerTitle}>BARANGAY SAN JOSE</Text>
+            <Text style={styles.headerTitle}>{barangayName.toUpperCase()}</Text>
             <Text style={styles.headerDocLabel}>Template and Budget Reference Documents</Text>
           </View>
           <View style={styles.headerRight}>
@@ -374,13 +590,6 @@ export default function SKPlanningScreen() {
           {/* All / Active Templates filter pills */}
           <View style={styles.filterRow}>
             <TouchableOpacity
-              style={showAll ? styles.filterLinkActive : styles.filterLink}
-              onPress={() => setShowAll(true)}
-              activeOpacity={0.8}
-            >
-              <Text style={[styles.filterLinkText, showAll && styles.filterLinkTextActive]}>All</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
               style={!showAll ? styles.filterLinkActive : styles.filterLink}
               onPress={() => setShowAll(false)}
               activeOpacity={0.8}
@@ -402,7 +611,7 @@ export default function SKPlanningScreen() {
                 <Text style={[styles.thText, styles.colDate]}>Date Received</Text>
               </View>
               {/* Table Rows */}
-              {ALL_TEMPLATES
+              {templates
                 .filter(t => t.name.toLowerCase().includes(searchText.toLowerCase()))
                 .map((t, idx) => (
                   <TouchableOpacity
@@ -416,10 +625,9 @@ export default function SKPlanningScreen() {
                     <Text style={[styles.tdCell, styles.colSource]}>{t.source}</Text>
                     <Text style={[styles.tdCell, styles.colDate]}>{t.dateReceived}</Text>
                   </TouchableOpacity>
-                ))
-              }
-              {/* Empty filler rows to match screenshot */}
-              {Array(Math.max(0, 4 - ALL_TEMPLATES.filter(t =>
+                ))}
+              {/* Empty filler rows */}
+              {Array(Math.max(0, 4 - templates.filter(t =>
                 t.name.toLowerCase().includes(searchText.toLowerCase())).length
               )).fill(null).map((_, i) => (
                 <View key={`empty-${i}`} style={[styles.tableRow, styles.tableRowEmpty]} />
@@ -429,8 +637,8 @@ export default function SKPlanningScreen() {
 
           {/* ── ACTIVE TEMPLATES view: category grid ── */}
           {!showAll && (
-            filteredSections.length > 0 ? (
-              filteredSections.map(sec => (
+            templateSections.length > 0 ? (
+              templateSections.map(sec => (
                 <TemplateSection key={sec.id} section={sec} onEdit={handleEdit} />
               ))
             ) : (
@@ -456,6 +664,7 @@ export default function SKPlanningScreen() {
       <StatusBar barStyle="light-content" backgroundColor={COLORS.navy} />
 
       {renderEditModal()}
+      {renderViewerModal()}
 
       <View style={styles.layout}>
         {isMobile && sidebarVisible && (
@@ -465,7 +674,7 @@ export default function SKPlanningScreen() {
             onPress={() => setSidebarVisible(false)}
           />
         )}
-        {isMobile ? sidebarVisible && renderSidebar() : renderSidebar()}
+        {renderSidebar()}
         {renderContent()}
       </View>
     </SafeAreaView>
@@ -481,11 +690,17 @@ const styles = StyleSheet.create({
   sidebar: {
     width: 250, backgroundColor: COLORS.navy,
     alignItems: 'center', paddingTop: 20, paddingBottom: 24,
-    paddingHorizontal: 10, zIndex: 10,
+    paddingHorizontal: 10, zIndex: 20,
+    ...(isMobile ? {
+      position: 'absolute', top: 0, left: 0, bottom: 0, zIndex: 20,
+    } : {}),
+  },
+  sidebarHidden: {
+    display: 'none',
   },
   sidebarOverlay: {
     position: 'absolute', left: 0, top: 0, bottom: 0, right: 0,
-    backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 5,
+    backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 15,
   },
   logoPill: {
     marginTop: 20, width: 70, height: 70, borderRadius: 35,
@@ -499,8 +714,8 @@ const styles = StyleSheet.create({
     borderRadius: 24, marginBottom: 8, alignItems: 'center',
     borderWidth: 1.5, borderColor: COLORS.white,
     backgroundColor: COLORS.navy,
-    flexDirection: 'row', justifyContent: 'center', gap: 6,
   },
+  navItemInner: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   navItemActive: { backgroundColor: COLORS.white, borderColor: COLORS.white },
   navLabel: { fontSize: 13, fontWeight: '600', color: 'rgba(255,255,255,0.85)', letterSpacing: 0.3 },
   navLabelActive: { color: '#000', fontWeight: '800' },
@@ -750,7 +965,8 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.18, shadowRadius: 20, elevation: 12,
   },
   modalTitle:    { fontSize: 16, fontWeight: '800', color: COLORS.darkText, marginBottom: 6 },
-  modalSubtitle: { fontSize: 13, color: COLORS.subText, lineHeight: 18, marginBottom: 14 },
+  modalSubtitle: { fontSize: 13, color: COLORS.subText, lineHeight: 18, marginBottom: 4 },
+  modalVersion:  { fontSize: 11, color: COLORS.midGray, marginBottom: 14 },
   modalDivider:  { height: 1, backgroundColor: COLORS.lightGray, marginBottom: 14 },
   modalActions:  { flexDirection: 'row', gap: 8, marginBottom: 16 },
   modalActionBtn: {
@@ -762,4 +978,21 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.lightGray, alignItems: 'center',
   },
   modalCloseBtnText: { fontSize: 13, fontWeight: '600', color: COLORS.darkText },
+
+  // ── Viewer Modal ──
+  viewerHeader: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: 16, paddingVertical: 12,
+    backgroundColor: COLORS.navy, borderBottomWidth: 1, borderBottomColor: COLORS.lightGray,
+  },
+  viewerCloseText: { fontSize: 14, fontWeight: '600', color: COLORS.white },
+  viewerTitle: { flex: 1, fontSize: 14, fontWeight: '700', color: COLORS.white, textAlign: 'center', marginHorizontal: 10 },
+  viewerDownloadText: { fontSize: 18, color: COLORS.white },
+  viewerLoading: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: COLORS.offWhite },
+  viewerLoadingText: { marginTop: 12, fontSize: 14, color: COLORS.subText },
+  viewerWebContainer: { flex: 1, backgroundColor: COLORS.white },
+  viewerFallback: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: COLORS.offWhite, padding: 20 },
+  viewerFallbackText: { fontSize: 14, color: COLORS.subText, marginBottom: 16 },
+  viewerFallbackBtn: { backgroundColor: COLORS.navy, paddingHorizontal: 20, paddingVertical: 12, borderRadius: 8 },
+  viewerFallbackBtnText: { fontSize: 14, fontWeight: '700', color: COLORS.white },
 });

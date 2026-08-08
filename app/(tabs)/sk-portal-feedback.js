@@ -1,12 +1,13 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, TextInput, ScrollView, TouchableOpacity,
   StyleSheet, SafeAreaView, StatusBar, Dimensions,
   Modal, Image,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { useNav } from './navContext';
 import { useAuth } from './authContext';
+import { supabase } from '../../utils/supabase';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const isMobile = SCREEN_WIDTH < 768;
@@ -26,51 +27,14 @@ const COLORS = {
 };
 
 // ─── NAV & PORTAL TABS ───────────────────────────────────────────────────────
-const NAV_TABS    = ['Dashboard', 'Documents', 'Planning', 'Portal'];
+const NAV_TABS    = ['Dashboard', 'Documents', 'Planning', 'Portal', 'Logs', 'Account'];  
 const PORTAL_TABS = ['Published', 'Feedback'];
 const YEAR_FILTERS = ['All Years', '2026', '2025', '2024'];
 const DOCUMENT_FILTERS = ['All Documents', 'Annual Barangay Youth Investment Program', 'Approved Annual Budget 2026', 'Comprehensive Barangay Youth Development Plan (CBYDP) 2026'];
 const FEEDBACK_FILTERS = ['All', 'Recent', 'Unread'];
 
 // ─── FEEDBACK DATA ────────────────────────────────────────────────────────────
-const FEEDBACK_DATA = [
-  {
-    id: 'f1',
-    name: 'Patrick Dela Rosa',
-    document: 'Annual Barangay Youth Investment Program',
-    comment: 'Concerns about the over budget for sports instead of  education being priority',
-    date: 'April 22, 2026',
-    status: 'Unread',
-    reply: '',
-  },
-  {
-    id: 'f2',
-    name: 'Harvey Daella',
-    document: 'Annual Barangay Youth Investment Program',
-    comment: 'Concerns about the over budget for sports instead of  education being priority',
-    date: 'April 20, 2026',
-    status: 'Read',
-    reply: '',
-  },
-  {
-    id: 'f3',
-    name: 'Maria Santos',
-    document: 'Approved Annual Budget 2026',
-    comment: 'Can we see the breakdown for barangay health programs?',
-    date: 'April 18, 2026',
-    status: 'Unread',
-    reply: '',
-  },
-  {
-    id: 'f4',
-    name: 'Jose Reyes',
-    document: 'Comprehensive Barangay Youth Development Plan (CBYDP) 2026',
-    comment: 'The CBYDP looks comprehensive. When is the implementation date?',
-    date: 'April 15, 2026',
-    status: 'Read',
-    reply: 'Implementation starts June 2026. Thank you for your interest!',
-  },
-];
+// (Data now fetched from Supabase based on barangay_id)
 
 // ─── ICONS ───────────────────────────────────────────────────────────────────
 const BellIcon = ({ hasNotif }) => (
@@ -84,6 +48,104 @@ const BellIcon = ({ hasNotif }) => (
 const MenuIcon = () => (
   <View style={styles.menuIconContainer}>
     {[0, 1, 2].map(i => <View key={i} style={styles.menuLine} />)}
+  </View>
+);
+
+// Dashboard: 2×2 grid of rounded squares
+const DashboardIcon = ({ color = '#fff', size = 16 }) => {
+  const s = size * 0.38;
+  const gap = size * 0.12;
+  const r = size * 0.12;
+  const box = { width: s, height: s, borderRadius: r, backgroundColor: color };
+  return (
+    <View style={{ width: size, height: size, justifyContent: 'center', alignItems: 'center' }}>
+      <View style={{ flexDirection: 'row', gap }}>
+        <View style={box} />
+        <View style={box} />
+      </View>
+      <View style={{ height: gap }} />
+      <View style={{ flexDirection: 'row', gap }}>
+        <View style={box} />
+        <View style={box} />
+      </View>
+    </View>
+  );
+};
+
+// Documents: file shape with fold + two lines
+const DocumentsIcon = ({ color = '#fff', size = 16 }) => {
+  const w = size * 0.6, h = size * 0.78;
+  const fold = size * 0.22;
+  return (
+    <View style={{ width: size, height: size, justifyContent: 'center', alignItems: 'center' }}>
+      <View style={{ width: w, height: h, justifyContent: 'flex-end', paddingBottom: size * 0.08, paddingHorizontal: size * 0.1 }}>
+        <View style={{ position: 'absolute', left: 0, right: 0, top: fold, bottom: 0, borderWidth: 1.5, borderColor: color, borderRadius: size * 0.08 }} />
+        <View style={{ position: 'absolute', top: 0, right: 0, width: fold, height: fold, backgroundColor: color, borderBottomLeftRadius: size * 0.06 }} />
+        <View style={{ position: 'absolute', top: 0, left: 0, width: w - fold, height: fold, borderTopWidth: 1.5, borderLeftWidth: 1.5, borderColor: color, borderTopLeftRadius: size * 0.08 }} />
+        <View style={{ height: 1.5, backgroundColor: color, borderRadius: 1, marginBottom: size * 0.1, width: '80%' }} />
+        <View style={{ height: 1.5, backgroundColor: color, borderRadius: 1, width: '55%' }} />
+      </View>
+    </View>
+  );
+};
+
+// Planning: calendar grid
+const PlanningIcon = ({ color = '#fff', size = 16 }) => {
+  const bw = 1.5;
+  return (
+    <View style={{ width: size, height: size, justifyContent: 'center', alignItems: 'center' }}>
+      <View style={{ width: size * 0.82, height: size * 0.75, borderWidth: bw, borderColor: color, borderRadius: size * 0.1, overflow: 'hidden' }}>
+        <View style={{ height: size * 0.22, backgroundColor: color, width: '100%' }} />
+        <View style={{ flex: 1, flexDirection: 'row', justifyContent: 'space-around', alignItems: 'center', paddingHorizontal: size * 0.05 }}>
+          {[0,1,2].map(i => <View key={i} style={{ width: size * 0.1, height: size * 0.1, borderRadius: size * 0.05, backgroundColor: color }} />)}
+        </View>
+      </View>
+      <View style={{ position: 'absolute', top: 0, flexDirection: 'row', gap: size * 0.32 }}>
+        {[0,1].map(i => <View key={i} style={{ width: size * 0.1, height: size * 0.2, backgroundColor: color, borderRadius: size * 0.05 }} />)}
+      </View>
+    </View>
+  );
+};
+
+// Portal: simple globe
+const PortalIcon = ({ color = '#fff', size = 16 }) => (
+  <View style={{ width: size, height: size, justifyContent: 'center', alignItems: 'center' }}>
+    <View style={{ width: size * 0.82, height: size * 0.82, borderRadius: size * 0.41, borderWidth: 1.5, borderColor: color, justifyContent: 'center', alignItems: 'center', overflow: 'hidden' }}>
+      <View style={{ position: 'absolute', height: 1.5, width: '100%', backgroundColor: color }} />
+      <View style={{ width: size * 0.38, height: size * 0.78, borderRadius: size * 0.19, borderWidth: 1.5, borderColor: color, backgroundColor: 'transparent' }} />
+    </View>
+  </View>
+);
+
+// Logs: clipboard with checkmark lines
+const LogsIcon = ({ color = '#fff', size = 16 }) => (
+  <View style={{ width: size, height: size, justifyContent: 'center', alignItems: 'center' }}>
+    <View style={{ width: size * 0.75, height: size * 0.85, borderWidth: 1.5, borderColor: color, borderRadius: size * 0.1, paddingHorizontal: size * 0.1, paddingVertical: size * 0.1, justifyContent: 'space-around' }}>
+      <View style={{ position: 'absolute', top: -size * 0.08, alignSelf: 'center', width: size * 0.3, height: size * 0.14, backgroundColor: color, borderRadius: size * 0.04 }} />
+      {[0,1,2].map(i => (
+        <View key={i} style={{ flexDirection: 'row', alignItems: 'center', gap: size * 0.08, marginTop: i === 0 ? size * 0.1 : 0 }}>
+          <View style={{ width: size * 0.1, height: size * 0.1, borderRadius: size * 0.05, backgroundColor: color }} />
+          <View style={{ flex: 1, height: 1.5, backgroundColor: color, borderRadius: 1 }} />
+        </View>
+      ))}
+    </View>
+  </View>
+);
+
+// Account: head + shoulders silhouette
+const AccountIcon = ({ color = '#fff', size = 16 }) => (
+  <View style={{ width: size, height: size, justifyContent: 'center', alignItems: 'center' }}>
+    <View style={{ width: size * 0.38, height: size * 0.38, borderRadius: size * 0.19, borderWidth: 1.5, borderColor: color, marginBottom: size * 0.04 }} />
+    <View style={{ width: size * 0.72, height: size * 0.36, borderBottomLeftRadius: size * 0.36, borderBottomRightRadius: size * 0.36, borderWidth: 1.5, borderColor: color, borderTopWidth: 0, overflow: 'hidden' }} />
+  </View>
+);
+
+// Logout: door with arrow
+const LogoutNavIcon = ({ color = '#fff', size = 16 }) => (
+  <View style={{ width: size, height: size, justifyContent: 'center', alignItems: 'center' }}>
+    <View style={{ position: 'absolute', left: 0, top: 0, width: size * 0.55, height: size, borderWidth: 1.5, borderColor: color, borderRadius: size * 0.08 }} />
+    <View style={{ position: 'absolute', right: size * 0.02, width: size * 0.52, height: 1.8, backgroundColor: color, borderRadius: 1 }} />
+    <View style={{ position: 'absolute', right: size * 0.02, width: size * 0.2, height: size * 0.2, borderTopWidth: 1.8, borderRightWidth: 1.8, borderColor: color, transform: [{ rotate: '45deg' }], marginTop: -size * 0.01 }} />
   </View>
 );
 
@@ -137,7 +199,11 @@ const FeedbackCard = ({ item, onViewReply }) => (
 export default function SKPortalFeedbackScreen() {
   const router = useRouter();
   const { activeTab, setActiveTab } = useNav();
-  const { logout } = useAuth();
+  const { logout, user } = useAuth();
+
+  // Get user's barangay from auth context
+  const barangayName = user?.barangay?.barangay_name || 'Unknown Barangay';
+  const barangayId = user?.barangayId;
 
   const [feedbackFilter, setFeedbackFilter] = useState('All');
   const [docFilter, setDocFilter]           = useState('All Documents');
@@ -151,7 +217,103 @@ export default function SKPortalFeedbackScreen() {
   // Reply modal
   const [selectedFeedback, setSelectedFeedback] = useState(null);
   const [replyText, setReplyText]               = useState('');
-  const [feedbackList, setFeedbackList]         = useState(FEEDBACK_DATA);
+  const [feedbackList, setFeedbackList]         = useState([]);
+
+  // Fetch feedback for this barangay
+  const fetchFeedback = useCallback(async () => {
+    if (!barangayId) return;
+
+    try {
+      // Fetch resident comments
+      const { data: feedback, error } = await supabase
+        .from('resident_comments')
+        .select('*')
+        .eq('barangay_id', barangayId)
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error('Error fetching feedback:', error);
+        return;
+      }
+
+      // Fetch user info and post info separately
+      const userIds = [...new Set(feedback?.map(f => f.resident_id).filter(Boolean) || [])];
+      const postIds = [...new Set(feedback?.map(f => f.website_post_id).filter(Boolean) || [])];
+
+      let userMap = {};
+      let postMap = {};
+
+      if (userIds.length > 0) {
+        const { data: users } = await supabase
+          .from('users')
+          .select('user_id, first_name, last_name, middle_initial')
+          .in('user_id', userIds);
+        userMap = users?.reduce((acc, u) => ({ ...acc, [u.user_id]: u }), {}) || {};
+      }
+
+      if (postIds.length > 0) {
+        const { data: posts } = await supabase
+          .from('website_posts')
+          .select('website_post_id, title')
+          .in('website_post_id', postIds);
+        postMap = posts?.reduce((acc, p) => ({ ...acc, [p.website_post_id]: p }), {}) || {};
+      }
+
+      // Fetch replies
+      const commentIds = feedback?.map(f => f.comment_id).filter(Boolean) || [];
+      let replyMap = {};
+      if (commentIds.length > 0) {
+        const { data: replies } = await supabase
+          .from('sk_replies')
+          .select('*')
+          .in('comment_id', commentIds)
+          .order('created_at', { ascending: true });
+
+        // Map replies by comment_id (get latest reply per comment)
+        replies?.forEach(r => {
+          if (!replyMap[r.comment_id]) {
+            replyMap[r.comment_id] = r.content;
+          }
+        });
+      }
+
+      const formattedFeedback = feedback?.map(f => {
+        const user = userMap[f.resident_id] || {};
+        const post = postMap[f.website_post_id] || {};
+        const firstName = user.first_name || '';
+        const lastName = user.last_name || '';
+        const middleInitial = user.middle_initial || '';
+        const name = `${firstName} ${middleInitial ? middleInitial + '. ' : ''}${lastName}`.trim() || 'Anonymous';
+
+        return {
+          id: f.comment_id,
+          residentId: f.resident_id,
+          name: name,
+          document: post.title || 'Unknown Document',
+          comment: f.content || '',
+          date: f.created_at ? new Date(f.created_at).toLocaleDateString() : '',
+          status: f.is_read ? 'Read' : 'Unread',
+          reply: replyMap[f.comment_id] || '',
+          postId: f.website_post_id,
+        };
+      }) || [];
+
+      setFeedbackList(formattedFeedback);
+    } catch (error) {
+      console.error('Error:', error);
+    }
+  }, [barangayId]);
+
+  // Fetch on mount and when screen gains focus
+  useEffect(() => {
+    fetchFeedback();
+  }, [fetchFeedback]);
+
+  useFocusEffect(
+    useCallback(() => {
+      fetchFeedback();
+    }, [fetchFeedback])
+  );
 
   const handleNavPress = (tab) => {
     setActiveTab(tab);
@@ -160,6 +322,8 @@ export default function SKPortalFeedbackScreen() {
     if (tab === 'Documents') router.push('/(tabs)/sk-document');
     if (tab === 'Planning')  router.push('/(tabs)/sk-planning');
     if (tab === 'Portal')    router.push('/(tabs)/sk-portal');
+      if (tab === 'Logs')      router.push('/(tabs)/sk-logs');
+    if (tab === 'Account')   router.push('/(tabs)/sk-account');
   };
 
   const handleLogout = () => { logout(); router.replace('/'); };
@@ -171,12 +335,48 @@ export default function SKPortalFeedbackScreen() {
   const handleViewReply = (item) => {
     setSelectedFeedback(item);
     setReplyText(item.reply || '');
-    // Mark as read
-    setFeedbackList(prev => prev.map(f => f.id === item.id ? { ...f, status: 'Read' } : f));
+    // Mark as read in database
+    if (item.status === 'Unread') {
+      supabase
+        .from('resident_comments')
+        .update({ is_read: true })
+        .eq('comment_id', item.id)
+        .then(({ error }) => {
+          if (error) console.error('Error marking as read:', error);
+        });
+      setFeedbackList(prev => prev.map(f => f.id === item.id ? { ...f, status: 'Read' } : f));
+    }
   };
 
-  const handleSendReply = () => {
-    if (!replyText.trim()) return;
+  const handleSendReply = async () => {
+    if (!replyText.trim() || !selectedFeedback) return;
+
+    const userId = user?.userId;
+    if (!userId) {
+      console.error('User not logged in');
+      return;
+    }
+
+    // Insert reply to sk_replies table
+    const { error } = await supabase
+      .from('sk_replies')
+      .insert({
+        comment_id: selectedFeedback.id,
+        replied_by: userId,
+        content: replyText.trim(),
+      });
+
+    if (error) {
+      console.error('Error saving reply:', error);
+      return;
+    }
+
+    // Also mark comment as read
+    await supabase
+      .from('resident_comments')
+      .update({ is_read: true })
+      .eq('comment_id', selectedFeedback.id);
+
     setFeedbackList(prev => prev.map(f =>
       f.id === selectedFeedback.id ? { ...f, reply: replyText.trim(), status: 'Read' } : f
     ));
@@ -201,6 +401,15 @@ export default function SKPortalFeedbackScreen() {
   const unreadCount = feedbackList.filter(f => f.status === 'Unread').length;
 
   // ── Sidebar ──
+  const NAV_ITEMS = [
+    { tab: 'Dashboard', IconComponent: DashboardIcon },
+    { tab: 'Documents', IconComponent: DocumentsIcon },
+    { tab: 'Planning',  IconComponent: PlanningIcon  },
+    { tab: 'Portal',    IconComponent: PortalIcon    },
+    { tab: 'Logs',      IconComponent: LogsIcon      },
+    { tab: 'Account',   IconComponent: AccountIcon   },
+  ];
+
   const renderSidebar = () => (
     <View style={styles.sidebar}>
       <View style={styles.logoPill}>
@@ -211,8 +420,9 @@ export default function SKPortalFeedbackScreen() {
         />
       </View>
       <View style={{ height: 28 }} />
-      {NAV_TABS.map(tab => {
-        const active = tab === 'Portal';
+      {NAV_ITEMS.map(({ tab, IconComponent }) => {
+        const active = activeTab === tab;
+        const iconColor = active ? '#133E75' : 'rgba(255,255,255,0.85)';
         return (
           <TouchableOpacity
             key={tab}
@@ -220,13 +430,19 @@ export default function SKPortalFeedbackScreen() {
             onPress={() => handleNavPress(tab)}
             activeOpacity={0.8}
           >
-            <Text style={[styles.navLabel, active && styles.navLabelActive]}>{tab}</Text>
+            <View style={styles.navItemInner}>
+              <IconComponent color={iconColor} size={16} />
+              <Text style={[styles.navLabel, active && styles.navLabelActive]}>{tab}</Text>
+            </View>
           </TouchableOpacity>
         );
       })}
       <View style={{ flex: 1 }} />
       <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout} activeOpacity={0.8}>
-        <Text style={styles.logoutText}>Logout</Text>
+        <View style={styles.navItemInner}>
+          <LogoutNavIcon color="rgba(255,255,255,0.85)" size={16} />
+          <Text style={styles.logoutText}>Logout</Text>
+        </View>
       </TouchableOpacity>
     </View>
   );
@@ -357,7 +573,7 @@ export default function SKPortalFeedbackScreen() {
         <View style={styles.header}>
           <View style={{ flex: 1 }}>
             <Text style={styles.headerSub}>SANGGUNIANG KABATAAN</Text>
-            <Text style={styles.headerTitle}>BARANGAY SAN JOSE</Text>
+            <Text style={styles.headerTitle}>{barangayName.toUpperCase()}</Text>
             <Text style={styles.headerDocLabel}>Portal and Post Managemnet</Text>
           </View>
           <TouchableOpacity style={styles.bellBtn} activeOpacity={0.7}>
@@ -567,8 +783,8 @@ const styles = StyleSheet.create({
     borderRadius: 24, marginBottom: 8, alignItems: 'center',
     borderWidth: 1.5, borderColor: COLORS.white,
     backgroundColor: COLORS.navy,
-    flexDirection: 'row', justifyContent: 'center', gap: 6,
   },
+  navItemInner: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   navItemActive: { backgroundColor: COLORS.white, borderColor: COLORS.white },
   navLabel:      { fontSize: 13, fontWeight: '600', color: 'rgba(255,255,255,0.85)', letterSpacing: 0.3 },
   navLabelActive:{ color: '#000', fontWeight: '800' },
