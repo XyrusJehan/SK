@@ -13,39 +13,14 @@ import {
   Modal,
   ActivityIndicator,
 } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { useNav } from './navContext';
 import { useAuth } from './authContext';
 import { supabase } from '../../utils/supabase';
+import { useLydoNotificationCenter, LydoNotificationModal, LydoBellIcon } from './notificationCenter';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const isMobile = SCREEN_WIDTH < 768;
-
-// ─── PERSISTED "SEEN" COUNT ───────────────────────────────────────────────────
-// The bell badge counts how many SK-submitted documents are NEW since the
-// LYDO officer last opened the notification dropdown. That seen count is
-// kept in AsyncStorage so it survives pull-to-refresh, screen re-mounts, and
-// app restarts.
-const SEEN_KEY = 'lydo_notif_seen_submitted';
-
-const loadSeenCount = async () => {
-  try {
-    const stored = await AsyncStorage.getItem(SEEN_KEY);
-    return parseInt(stored || '0', 10) || 0;
-  } catch (err) {
-    console.error('Error loading seen count:', err);
-    return 0;
-  }
-};
-
-const saveSeenCount = async (count) => {
-  try {
-    await AsyncStorage.setItem(SEEN_KEY, String(count || 0));
-  } catch (err) {
-    console.error('Error saving seen count:', err);
-  }
-};
 
 // Supabase timestamps have no 'Z' suffix — JS mis-parses them as local time.
 // toUtcDate forces correct UTC parsing before PHT display.
@@ -224,14 +199,7 @@ const QUICK_ACTIONS = [
 ];
 
 // ─── ICON COMPONENTS ──────────────────────────────────────────────────────────
-const BellIcon = ({ hasNotif }) => (
-  <View style={ic.bellWrapper}>
-    <View style={ic.bellBody} />
-    <View style={ic.bellBottom} />
-    {hasNotif && <View style={ic.bellDot} />}
-  </View>
-);
-
+// Bell glyph now lives in notificationCenter.js as LydoBellIcon (shared).
 const MenuIcon = () => (
   <View style={ic.menuIconContainer}>
     <View style={ic.menuLine} />
@@ -243,10 +211,6 @@ const MenuIcon = () => (
 const ic = StyleSheet.create({
   menuIconContainer: { width: 20, height: 16, justifyContent: 'space-between' },
   menuLine: { width: 20, height: 2, backgroundColor: COLORS.navy, borderRadius: 1 },
-  bellWrapper: { width: 20, height: 22, alignItems: 'center' },
-  bellBody: { width: 14, height: 12, borderRadius: 7, borderWidth: 2, borderColor: '#8B0000', marginTop: 4 },
-  bellBottom: { width: 8, height: 4, borderBottomLeftRadius: 4, borderBottomRightRadius: 4, backgroundColor: '#8B0000', marginTop: -1 },
-  bellDot: { position: 'absolute', top: 0, right: 1, width: 7, height: 7, borderRadius: 4, backgroundColor: '#E8C547', borderWidth: 1.5, borderColor: COLORS.white },
 });
 
 // ─── SEGMENTED DONUT CHART (SVG-free, stacked arc rings) ─────────────────────
@@ -624,113 +588,7 @@ function CalendarModal({ visible, onClose }) {
   );
 }
 
-// ─── NOTIFICATION MODAL ──────────────────────────────────────────────────────
-// Lists every document the SK officials have submitted to LYDO for review.
-// Each row shows the document title, barangay, status (with color-coded
-// pill), and the date/time it was sent.
-function NotificationModal({ visible, onClose, items, loading, onReview, onViewed }) {
-  const formatDate = (dateStr) => {
-    if (!dateStr) return '—';
-    return toPhilippineDate(dateStr, { month: 'short', day: 'numeric', year: 'numeric' });
-  };
-  const formatTime = (dateStr) => {
-    if (!dateStr) return '—';
-    return toPhilippineTime(dateStr, { hour: '2-digit', minute: '2-digit' });
-  };
-
-  // The moment the dropdown becomes visible, treat the current list as
-  // viewed — this clears the bell badge immediately, the same way selecting
-  // a specific category does on the SK dashboard's notification dropdown.
-  useEffect(() => {
-    if (visible && onViewed) {
-      onViewed();
-    }
-  }, [visible, onViewed]);
-
-  return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <TouchableOpacity style={notifModalStyles.backdrop} activeOpacity={1} onPress={onClose}>
-        <TouchableOpacity activeOpacity={1} onPress={() => {}} style={notifModalStyles.caret} />
-        <TouchableOpacity activeOpacity={1} onPress={() => {}} style={notifModalStyles.modal}>
-          <View style={notifModalStyles.header}>
-            <View style={{ flex: 1 }}>
-              <Text style={notifModalStyles.title}>Notifications</Text>
-              <Text style={notifModalStyles.subtitle}>
-                Documents sent by SK Officials for review
-              </Text>
-            </View>
-            <TouchableOpacity style={notifModalStyles.closeBtn} onPress={onClose} activeOpacity={0.8}>
-              <Text style={notifModalStyles.closeText}>✕</Text>
-            </TouchableOpacity>
-          </View>
-          <View style={notifModalStyles.divider} />
-
-          {loading ? (
-            <View style={notifModalStyles.loadingState}>
-              <ActivityIndicator color={COLORS.navy} />
-              <Text style={notifModalStyles.loadingText}>Loading notifications…</Text>
-            </View>
-          ) : items.length === 0 ? (
-            <View style={notifModalStyles.emptyState}>
-              <Text style={notifModalStyles.emptyIcon}>🔔</Text>
-              <Text style={notifModalStyles.emptyText}>No new notifications</Text>
-              <Text style={notifModalStyles.emptySubText}>
-                When SK officials send documents to your office, they will appear here.
-              </Text>
-            </View>
-          ) : (
-            <ScrollView
-              style={notifModalStyles.body}
-              contentContainerStyle={notifModalStyles.bodyContent}
-              showsVerticalScrollIndicator={false}
-            >
-              <Text style={notifModalStyles.countLabel}>
-                {items.length} document{items.length !== 1 ? 's' : ''} awaiting review
-              </Text>
-              {items.map((doc, idx) => (
-                <View
-                  key={doc.id}
-                  style={[
-                    notifModalStyles.itemRow,
-                    idx < items.length - 1 && notifModalStyles.itemRowBorder,
-                  ]}
-                >
-                  <View style={notifModalStyles.docIconBox}>
-                    <Text style={notifModalStyles.docIcon}>📄</Text>
-                  </View>
-                  <View style={notifModalStyles.itemInfo}>
-                    <Text style={notifModalStyles.itemTitle} numberOfLines={1}>
-                      {doc.title}
-                    </Text>
-                    <Text style={notifModalStyles.itemMeta} numberOfLines={1}>
-                      From: {doc.barangay}
-                    </Text>
-                    <View style={notifModalStyles.itemFooter}>
-                      <View style={notifModalStyles.statusBadge}>
-                        <Text style={notifModalStyles.statusText}>For Review</Text>
-                      </View>
-                      <View style={notifModalStyles.itemTime}>
-                        <Text style={notifModalStyles.itemDate}>{formatDate(doc.submittedAt)}</Text>
-                        <Text style={notifModalStyles.itemTimeText}>{formatTime(doc.submittedAt)}</Text>
-                      </View>
-                    </View>
-                  </View>
-                  <TouchableOpacity
-                    style={notifModalStyles.reviewBtn}
-                    activeOpacity={0.8}
-                    onPress={() => onReview && onReview(doc)}
-                  >
-                    <Text style={notifModalStyles.reviewBtnText}>Review</Text>
-                  </TouchableOpacity>
-                </View>
-              ))}
-            </ScrollView>
-          )}
-        </TouchableOpacity>
-      </TouchableOpacity>
-    </Modal>
-  );
-}
+// Notification modal now lives in notificationCenter.js as LydoNotificationModal (shared).
 
 // ─── STAT CARD ────────────────────────────────────────────────────────────────
 const StatCard = ({ icon, value, label, sub, iconBg, iconColor, borderColor }) => (
@@ -762,7 +620,6 @@ export default function LYDOHomeScreen() {
   const [approved, setApproved] = useState(0);
   const [missingDocs, setMissingDocs] = useState(0);
   const [currentTime, setCurrentTime] = useState('');
-  const [notifCount, setNotifCount] = useState(0);
   const [progressData, setProgressData] = useState({ submitted: 0, awaiting: 0, incomplete: 0, total: 0 });
   const [approachingDeadlines, setApproachingDeadlines] = useState([]);
   const [proposalsForReview, setProposalsForReview] = useState(0);
@@ -770,31 +627,10 @@ export default function LYDOHomeScreen() {
   const [lydoActivities, setLydoActivities] = useState([]);
   const [missingDocsModalVisible, setMissingDocsModalVisible] = useState(false);
   const [missingDocsList, setMissingDocsList] = useState([]);
-  const [notifModalVisible, setNotifModalVisible] = useState(false);
-  const [skSentDocs, setSkSentDocs] = useState([]);
-  const [loadingNotifs, setLoadingNotifs] = useState(false);
-  const [seenSubmittedCount, setSeenSubmittedCount] = useState(0);
-  const [seenLoaded, setSeenLoaded] = useState(false);
 
-  // Load the persisted "seen" count once on mount so the bell badge doesn't
-  // show stale notifications as "new" after a refresh or app restart.
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      const stored = await loadSeenCount();
-      if (cancelled) return;
-      setSeenSubmittedCount(stored);
-      setSeenLoaded(true);
-    })();
-    return () => { cancelled = true; };
-  }, []);
-
-  // Persist the seen count to AsyncStorage whenever it changes after the
-  // initial load, so the bell badge stays accurate across refreshes.
-  useEffect(() => {
-    if (!seenLoaded) return;
-    saveSeenCount(seenSubmittedCount);
-  }, [seenLoaded, seenSubmittedCount]);
+  // Shared LYDO bell badge + dropdown (documents SK officials submitted for
+  // review). See notificationCenter.js — reused by every LYDO screen.
+  const notif = useLydoNotificationCenter();
 
   useEffect(() => {
     if (user && user.role !== 'lydo') router.replace('/');
@@ -1099,70 +935,6 @@ export default function LYDOHomeScreen() {
     }, [])
   );
 
-  // ── Fetch SK-submitted documents for notification modal ──────────────────────
-  const fetchSKSubmittedNotifications = async () => {
-    setLoadingNotifs(true);
-    try {
-      // Get documents that were submitted (status = 'submitted') — these are
-      // documents sent by the SK officials to the LYDO for review.
-      const { data: submittedDocs, error } = await supabase
-        .from('documents')
-        .select(`
-          document_id,
-          title,
-          document_type,
-          status,
-          created_at,
-          saved_at,
-          submitted_at,
-          barangay_id,
-          barangays(barangay_name)
-        `)
-        .eq('status', 'submitted')
-        .order('submitted_at', { ascending: false })
-        .limit(50);
-
-      if (error) {
-        console.error('Error fetching SK submitted documents:', error);
-        setSkSentDocs([]);
-      } else {
-        const formatted = (submittedDocs || []).map((doc) => ({
-          id: doc.document_id,
-          title: doc.title || doc.document_type || 'Document',
-          documentType: doc.document_type,
-          barangay: doc.barangays?.barangay_name || 'Unknown Barangay',
-          submittedAt: doc.submitted_at || doc.saved_at || doc.created_at,
-        }));
-        setSkSentDocs(formatted);
-      }
-    } catch (err) {
-      console.error('Unexpected error fetching notifications:', err);
-      setSkSentDocs([]);
-    } finally {
-      setLoadingNotifs(false);
-    }
-  };
-
-  // Refresh notifications whenever the modal becomes visible so the list
-  // reflects the latest SK submissions without a full page refetch.
-  useEffect(() => {
-    if (notifModalVisible) {
-      fetchSKSubmittedNotifications();
-    }
-  }, [notifModalVisible]);
-
-  // ── Notification badge reflects unread SK-submitted documents ──────────────
-  // Mirrors the SK dashboard's design: the badge only counts documents that
-  // haven't been seen yet (current total minus what was seen last time the
-  // dropdown was opened). Until the seen count has loaded from AsyncStorage,
-  // treat everything as already seen — this avoids a flash of the old count
-  // on first paint after a refresh.
-  useEffect(() => {
-    const seenReady = seenLoaded ? 1 : 0;
-    const unviewedSubmitted = seenReady ? Math.max(0, proposalsForReview - seenSubmittedCount) : 0;
-    setNotifCount(unviewedSubmitted);
-  }, [proposalsForReview, seenSubmittedCount, seenLoaded]);
-
   // ── Approaching Deadline card — org-wide, grouped across all barangays ──
   // Each submission_deadlines row is per-barangay, so a single logical
   // deadline (e.g. "ABYIP due Jan 6") appears as one row per barangay. We
@@ -1319,14 +1091,10 @@ export default function LYDOHomeScreen() {
       <CalendarModal visible={calendarVisible} onClose={() => setCalendarVisible(false)} />
 
       {/* Notification Modal — lists documents sent by SK officials */}
-      <NotificationModal
-        visible={notifModalVisible}
-        onClose={() => setNotifModalVisible(false)}
-        items={skSentDocs}
-        loading={loadingNotifs}
-        onViewed={() => setSeenSubmittedCount(proposalsForReview)}
+      <LydoNotificationModal
+        {...notif.modalProps}
         onReview={(doc) => {
-          setNotifModalVisible(false);
+          notif.close();
           router.push({
             pathname: '/(tabs)/lydo-monitor',
             params: { viewFilter: 'submitted' },
@@ -1405,11 +1173,11 @@ export default function LYDOHomeScreen() {
                 <MenuIcon />
               </TouchableOpacity>
               <Text style={styles.mobileTitle}>LYDO Dashboard</Text>
-              <TouchableOpacity style={styles.bellBtnMobile} activeOpacity={0.7} onPress={() => setNotifModalVisible(true)}>
-                <BellIcon hasNotif={notifCount > 0} />
-                {notifCount > 0 && (
+              <TouchableOpacity style={styles.bellBtnMobile} activeOpacity={0.7} onPress={notif.open}>
+                <LydoBellIcon hasNotif={notif.count > 0} />
+                {notif.count > 0 && (
                   <View style={styles.notifBadgeMobile}>
-                    <Text style={styles.notifBadgeTextMobile}>{notifCount > 99 ? '99+' : notifCount}</Text>
+                    <Text style={styles.notifBadgeTextMobile}>{notif.count > 99 ? '99+' : notif.count}</Text>
                   </View>
                 )}
               </TouchableOpacity>
@@ -1438,11 +1206,11 @@ export default function LYDOHomeScreen() {
                   </View>
                 </View>
               </View>
-              <TouchableOpacity style={styles.bellBtn} activeOpacity={0.7} onPress={() => setNotifModalVisible(true)}>
-                <BellIcon hasNotif={notifCount > 0} />
-                {notifCount > 0 && (
+              <TouchableOpacity style={styles.bellBtn} activeOpacity={0.7} onPress={notif.open}>
+                <LydoBellIcon hasNotif={notif.count > 0} />
+                {notif.count > 0 && (
                   <View style={styles.notifBadge}>
-                    <Text style={styles.notifBadgeText}>{notifCount > 99 ? '99+' : notifCount}</Text>
+                    <Text style={styles.notifBadgeText}>{notif.count > 99 ? '99+' : notif.count}</Text>
                   </View>
                 )}
               </TouchableOpacity>
@@ -1738,7 +1506,10 @@ const styles = StyleSheet.create({
     fontSize: 10, fontWeight: '600', color: COLORS.subText,
     letterSpacing: 2, textTransform: 'uppercase', marginBottom: 2,
   },
-  headerTitle: { fontSize: 20, fontWeight: '900', color: COLORS.darkText, letterSpacing: 0.5 },
+  headerTitle: {
+    fontSize: 20, fontWeight: '900', color: COLORS.darkText, letterSpacing: 0.5,
+    borderBottomWidth: 2, borderBottomColor: COLORS.lightGray, paddingBottom: 4, marginBottom: 6,
+  },
   datetimeCard: {
     backgroundColor: '#F7F5F2',
     borderRadius: 12,
@@ -2197,98 +1968,4 @@ const missingModalStyles = StyleSheet.create({
   statusNotSubmittedText: { color: '#DC2626' },
 });
 
-// ─── NOTIFICATION MODAL STYLES ─────────────────────────────────────────────────
-const notifModalStyles = StyleSheet.create({
-  backdrop: {
-    flex: 1, backgroundColor: 'rgba(15,23,42,0.25)',
-    alignItems: 'flex-end',
-    paddingTop: isMobile ? 58 : 84,
-    paddingRight: isMobile ? 10 : 24,
-  },
-  caret: {
-    width: 16, height: 16, backgroundColor: COLORS.navy,
-    borderTopLeftRadius: 3,
-    transform: [{ rotate: '45deg' }],
-    marginBottom: -8, marginRight: isMobile ? 18 : 26,
-  },
-  modal: {
-    backgroundColor: COLORS.white, borderRadius: 16,
-    width: isMobile ? SCREEN_WIDTH - 20 : 400,
-    height: isMobile ? 460 : 560,
-    overflow: 'hidden', elevation: 18,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.22, shadowRadius: 22,
-  },
-  header: {
-    flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between',
-    paddingHorizontal: 16, paddingVertical: 14, backgroundColor: COLORS.navy,
-  },
-  title: { fontSize: 16, fontWeight: '800', color: COLORS.white },
-  subtitle: { fontSize: 12, fontWeight: '600', color: 'rgba(255,255,255,0.75)', marginTop: 3 },
-  closeBtn: {
-    width: 28, height: 28, borderRadius: 14,
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    alignItems: 'center', justifyContent: 'center',
-    marginLeft: 12,
-  },
-  closeText: { fontSize: 12, fontWeight: '700', color: COLORS.white },
-  divider: { height: 1, backgroundColor: COLORS.lightGray },
-  body: { flex: 1 },
-  bodyContent: { padding: 16, flexGrow: 1 },
-  countLabel: {
-    fontSize: 11, fontWeight: '700', color: COLORS.subText,
-    textTransform: 'uppercase', letterSpacing: 1,
-    marginBottom: 12,
-  },
-  itemRow: {
-    flexDirection: 'row', alignItems: 'center',
-    paddingVertical: 12, gap: 10,
-  },
-  itemRowBorder: { borderBottomWidth: 1, borderBottomColor: COLORS.lightGray },
-  docIconBox: {
-    width: 40, height: 40, borderRadius: 10,
-    backgroundColor: COLORS.blueLight,
-    alignItems: 'center', justifyContent: 'center',
-    flexShrink: 0,
-  },
-  docIcon: { fontSize: 18 },
-  itemInfo: { flex: 1 },
-  itemTitle: { fontSize: 14, fontWeight: '700', color: COLORS.darkText, marginBottom: 2 },
-  itemMeta: { fontSize: 12, color: COLORS.subText, marginBottom: 6 },
-  itemFooter: {
-    flexDirection: 'row', alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  statusBadge: {
-    paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12,
-    backgroundColor: COLORS.orangeLight,
-  },
-  statusText: { fontSize: 10, fontWeight: '700', color: COLORS.orange },
-  itemTime: { alignItems: 'flex-end' },
-  itemDate: { fontSize: 11, color: COLORS.subText },
-  itemTimeText: {
-    fontSize: 12, fontWeight: '700', color: COLORS.navy,
-    fontVariant: ['tabular-nums'],
-  },
-  reviewBtn: {
-    paddingHorizontal: 12, paddingVertical: 8,
-    borderRadius: 16, borderWidth: 1.5,
-    borderColor: COLORS.navy, backgroundColor: COLORS.white,
-    flexShrink: 0,
-    marginLeft: 6,
-  },
-  reviewBtnText: { fontSize: 11, fontWeight: '700', color: COLORS.navy, letterSpacing: 0.2 },
-  loadingState: {
-    flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 40, gap: 10,
-  },
-  loadingText: { fontSize: 13, color: COLORS.subText },
-  emptyState: {
-    flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 60, paddingHorizontal: 24,
-  },
-  emptyIcon: { fontSize: 36, marginBottom: 12 },
-  emptyText: { fontSize: 15, fontWeight: '700', color: COLORS.darkText, marginBottom: 4 },
-  emptySubText: {
-    fontSize: 13, color: COLORS.subText,
-    textAlign: 'center', lineHeight: 18,
-  },
-});
+// Notification modal styles now live in notificationCenter.js (shared).

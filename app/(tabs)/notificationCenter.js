@@ -2,7 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useFocusEffect } from 'expo-router';
 import {
-  Dimensions, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View,
+  ActivityIndicator, Dimensions, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View,
 } from 'react-native';
 import { supabase } from '../../utils/supabase';
 
@@ -771,5 +771,397 @@ const notifModalStyles = StyleSheet.create({
   emptySubText: {
     fontSize: 13, color: SUB_TEXT, textAlign: 'center',
     lineHeight: 19, maxWidth: 340,
+  },
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ─── LYDO OFFICER NOTIFICATION CENTER ────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════════════
+// Everything below mirrors useNotificationCenter/NotificationModal above, but
+// for the LYDO side of the app: a bell badge + dropdown listing documents SK
+// officials have submitted for review. This is shared across every LYDO
+// screen (dashboard, logs, monitor, barangay, etc.) so the badge count and
+// "seen" state stay consistent no matter which screen the officer is on.
+
+const LYDO_SEEN_KEY = 'lydo_notif_seen_submitted';
+
+const loadLydoSeenCount = async () => {
+  try {
+    const stored = await AsyncStorage.getItem(LYDO_SEEN_KEY);
+    return parseInt(stored || '0', 10) || 0;
+  } catch (err) {
+    console.error('Error loading LYDO seen count:', err);
+    return 0;
+  }
+};
+
+const saveLydoSeenCount = async (count) => {
+  try {
+    await AsyncStorage.setItem(LYDO_SEEN_KEY, String(count || 0));
+  } catch (err) {
+    console.error('Error saving LYDO seen count:', err);
+  }
+};
+
+// ─── DATA HOOK ────────────────────────────────────────────────────────────────
+// Fetches documents SK officials have submitted (status = 'submitted') for
+// LYDO review, tracks the "seen" count in AsyncStorage, and exposes
+// bell-badge state plus the props LydoNotificationModal needs. Re-fetches
+// whenever the screen regains focus so every LYDO screen always shows the
+// latest count.
+export function useLydoNotificationCenter() {
+  const [visible, setVisible] = useState(false);
+  const [items, setItems] = useState([]);
+  const [loading, setLoading] = useState(false);
+
+  const [seenSubmittedCount, setSeenSubmittedCount] = useState(0);
+  const [seenLoaded, setSeenLoaded] = useState(false);
+
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  // Load the persisted "seen" count once on mount so the bell badge doesn't
+  // show stale notifications as "new" after a refresh or app restart.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const stored = await loadLydoSeenCount();
+      if (cancelled) return;
+      setSeenSubmittedCount(stored);
+      setSeenLoaded(true);
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  // Persist the seen count to AsyncStorage whenever it changes after the
+  // initial load.
+  useEffect(() => {
+    if (!seenLoaded) return;
+    saveLydoSeenCount(seenSubmittedCount);
+  }, [seenLoaded, seenSubmittedCount]);
+
+  // Refresh whenever the screen comes into focus.
+  useFocusEffect(
+    useCallback(() => {
+      setRefreshKey((k) => k + 1);
+    }, [])
+  );
+
+  // Fetch SK-submitted documents awaiting LYDO review.
+  useEffect(() => {
+    let cancelled = false;
+
+    (async () => {
+      setLoading(true);
+      try {
+        const { data: submittedDocs, error } = await supabase
+          .from('documents')
+          .select(`
+            document_id,
+            title,
+            document_type,
+            status,
+            created_at,
+            saved_at,
+            submitted_at,
+            barangay_id,
+            barangays (barangay_name)
+          `)
+          .eq('status', 'submitted')
+          .order('submitted_at', { ascending: false })
+          .limit(50);
+
+        if (cancelled) return;
+
+        if (error) {
+          console.error('Error fetching SK submitted documents:', error);
+          setItems([]);
+        } else {
+          setItems((submittedDocs || []).map((doc) => ({
+            id: doc.document_id,
+            title: doc.title || doc.document_type || 'Document',
+            documentType: doc.document_type,
+            barangay: doc.barangays?.barangay_name || 'Unknown Barangay',
+            submittedAt: doc.submitted_at || doc.saved_at || doc.created_at,
+          })));
+        }
+      } catch (err) {
+        if (!cancelled) {
+          console.error('Unexpected error fetching notifications:', err);
+          setItems([]);
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, [refreshKey]);
+
+  const seenReady = seenLoaded ? 1 : 0;
+  const unviewedSubmitted = seenReady ? Math.max(0, items.length - seenSubmittedCount) : 0;
+
+  const open = useCallback(() => setVisible(true), []);
+  const close = useCallback(() => setVisible(false), []);
+
+  // Called by the modal the moment it becomes visible — clears the badge
+  // immediately, the same way viewing a category does on the SK side.
+  const markViewed = useCallback(() => {
+    setSeenSubmittedCount(items.length);
+  }, [items.length]);
+
+  const modalProps = useMemo(() => ({
+    visible,
+    onClose: close,
+    items,
+    loading,
+    onViewed: markViewed,
+  }), [visible, close, items, loading, markViewed]);
+
+  return {
+    visible,
+    open,
+    close,
+    count: unviewedSubmitted,
+    hasUnviewed: unviewedSubmitted > 0,
+    modalProps,
+  };
+}
+
+// ─── LYDO BELL ICON ───────────────────────────────────────────────────────────
+// The bell glyph used in every LYDO screen's header. Pair with
+// `hasNotif={count > 0}` from useLydoNotificationCenter().
+const LYDO_MAROON = '#8B0000';
+const LYDO_GOLD = '#E8C547';
+
+export const LydoBellIcon = ({ hasNotif }) => (
+  <View style={lydoBellStyles.bellWrapper}>
+    <View style={lydoBellStyles.bellBody} />
+    <View style={lydoBellStyles.bellBottom} />
+    {hasNotif && <View style={lydoBellStyles.bellDot} />}
+  </View>
+);
+
+const lydoBellStyles = StyleSheet.create({
+  bellWrapper: { width: 20, height: 22, alignItems: 'center' },
+  bellBody: { width: 14, height: 12, borderRadius: 7, borderWidth: 2, borderColor: LYDO_MAROON, marginTop: 4 },
+  bellBottom: { width: 8, height: 4, borderBottomLeftRadius: 4, borderBottomRightRadius: 4, backgroundColor: LYDO_MAROON, marginTop: -1 },
+  bellDot: { position: 'absolute', top: 0, right: 1, width: 7, height: 7, borderRadius: 4, backgroundColor: LYDO_GOLD, borderWidth: 1.5, borderColor: WHITE },
+});
+
+// ─── LYDO NOTIFICATION MODAL ──────────────────────────────────────────────────
+// Lists documents SK officials have submitted to LYDO for review. Each row
+// shows the document title, source barangay, a status pill, and the
+// submit date/time, with a "Review" button that deep-links to the reviewer.
+// Identical across every LYDO screen.
+export function LydoNotificationModal({
+  visible,
+  onClose,
+  items = [],
+  loading,
+  onViewed,
+  onReview,
+}) {
+  const formatDate = (dateStr) => {
+    if (!dateStr) return '—';
+    return toPhilippineDate(dateStr, { month: 'short', day: 'numeric', year: 'numeric' });
+  };
+  const formatTime = (dateStr) => {
+    if (!dateStr) return '—';
+    return toPhilippineTime(dateStr, { hour: '2-digit', minute: '2-digit' });
+  };
+
+  // The moment the dropdown becomes visible, treat the current list as
+  // viewed — this clears the bell badge immediately.
+  useEffect(() => {
+    if (visible && onViewed) {
+      onViewed();
+    }
+  }, [visible, onViewed]);
+
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <TouchableOpacity style={lydoNotifModalStyles.backdrop} activeOpacity={1} onPress={onClose}>
+        <TouchableOpacity activeOpacity={1} onPress={() => {}} style={lydoNotifModalStyles.caret} />
+        <TouchableOpacity activeOpacity={1} onPress={() => {}} style={lydoNotifModalStyles.modal}>
+          <View style={lydoNotifModalStyles.header}>
+            <View style={{ flex: 1 }}>
+              <Text style={lydoNotifModalStyles.title}>Notifications</Text>
+              <Text style={lydoNotifModalStyles.subtitle}>
+                Documents sent by SK Officials for review
+              </Text>
+            </View>
+            <TouchableOpacity style={lydoNotifModalStyles.closeBtn} onPress={onClose} activeOpacity={0.8}>
+              <Text style={lydoNotifModalStyles.closeText}>✕</Text>
+            </TouchableOpacity>
+          </View>
+          <View style={lydoNotifModalStyles.divider} />
+
+          {loading ? (
+            <View style={lydoNotifModalStyles.loadingState}>
+              <ActivityIndicator color={NAVY} />
+              <Text style={lydoNotifModalStyles.loadingText}>Loading notifications…</Text>
+            </View>
+          ) : items.length === 0 ? (
+            <View style={lydoNotifModalStyles.emptyState}>
+              <Text style={lydoNotifModalStyles.emptyIcon}>🔔</Text>
+              <Text style={lydoNotifModalStyles.emptyText}>No new notifications</Text>
+              <Text style={lydoNotifModalStyles.emptySubText}>
+                When SK officials send documents to your office, they will appear here.
+              </Text>
+            </View>
+          ) : (
+            <ScrollView
+              style={lydoNotifModalStyles.body}
+              contentContainerStyle={lydoNotifModalStyles.bodyContent}
+              showsVerticalScrollIndicator={false}
+            >
+              <Text style={lydoNotifModalStyles.countLabel}>
+                {items.length} document{items.length !== 1 ? 's' : ''} awaiting review
+              </Text>
+              {items.map((doc, idx) => (
+                <View
+                  key={doc.id}
+                  style={[
+                    lydoNotifModalStyles.itemRow,
+                    idx < items.length - 1 && lydoNotifModalStyles.itemRowBorder,
+                  ]}
+                >
+                  <View style={lydoNotifModalStyles.docIconBox}>
+                    <Text style={lydoNotifModalStyles.docIcon}>📄</Text>
+                  </View>
+                  <View style={lydoNotifModalStyles.itemInfo}>
+                    <Text style={lydoNotifModalStyles.itemTitle} numberOfLines={1}>
+                      {doc.title}
+                    </Text>
+                    <Text style={lydoNotifModalStyles.itemMeta} numberOfLines={1}>
+                      From: {doc.barangay}
+                    </Text>
+                    <View style={lydoNotifModalStyles.itemFooter}>
+                      <View style={lydoNotifModalStyles.statusBadge}>
+                        <Text style={lydoNotifModalStyles.statusText}>For Review</Text>
+                      </View>
+                      <View style={lydoNotifModalStyles.itemTime}>
+                        <Text style={lydoNotifModalStyles.itemDate}>{formatDate(doc.submittedAt)}</Text>
+                        <Text style={lydoNotifModalStyles.itemTimeText}>{formatTime(doc.submittedAt)}</Text>
+                      </View>
+                    </View>
+                  </View>
+                  <TouchableOpacity
+                    style={lydoNotifModalStyles.reviewBtn}
+                    activeOpacity={0.8}
+                    onPress={() => onReview && onReview(doc)}
+                  >
+                    <Text style={lydoNotifModalStyles.reviewBtnText}>Review</Text>
+                  </TouchableOpacity>
+                </View>
+              ))}
+            </ScrollView>
+          )}
+        </TouchableOpacity>
+      </TouchableOpacity>
+    </Modal>
+  );
+}
+
+// ─── LYDO NOTIFICATION MODAL STYLES ────────────────────────────────────────────
+const LYDO_DARK_TEXT = '#1A2332';
+const LYDO_SUB_TEXT = '#6B7A8F';
+const LYDO_LIGHT_GRAY = '#ECECEC';
+const LYDO_BLUE_LIGHT = '#DBEAFE';
+const LYDO_ORANGE = '#F97316';
+const LYDO_ORANGE_LIGHT = '#FEF3C7';
+
+const lydoNotifModalStyles = StyleSheet.create({
+  backdrop: {
+    flex: 1, backgroundColor: 'rgba(15,23,42,0.25)',
+    alignItems: 'flex-end',
+    paddingTop: isMobile ? 58 : 84,
+    paddingRight: isMobile ? 10 : 24,
+  },
+  caret: {
+    width: 16, height: 16, backgroundColor: NAVY,
+    borderTopLeftRadius: 3,
+    transform: [{ rotate: '45deg' }],
+    marginBottom: -8, marginRight: isMobile ? 18 : 26,
+  },
+  modal: {
+    backgroundColor: WHITE, borderRadius: 16,
+    width: isMobile ? SCREEN_WIDTH - 20 : 400,
+    height: isMobile ? 460 : 560,
+    overflow: 'hidden', elevation: 18,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.22, shadowRadius: 22,
+  },
+  header: {
+    flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between',
+    paddingHorizontal: 16, paddingVertical: 14, backgroundColor: NAVY,
+  },
+  title: { fontSize: 16, fontWeight: '800', color: WHITE },
+  subtitle: { fontSize: 12, fontWeight: '600', color: 'rgba(255,255,255,0.75)', marginTop: 3 },
+  closeBtn: {
+    width: 28, height: 28, borderRadius: 14,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    alignItems: 'center', justifyContent: 'center',
+    marginLeft: 12,
+  },
+  closeText: { fontSize: 12, fontWeight: '700', color: WHITE },
+  divider: { height: 1, backgroundColor: LYDO_LIGHT_GRAY },
+  body: { flex: 1 },
+  bodyContent: { padding: 16, flexGrow: 1 },
+  countLabel: {
+    fontSize: 11, fontWeight: '700', color: LYDO_SUB_TEXT,
+    textTransform: 'uppercase', letterSpacing: 1,
+    marginBottom: 12,
+  },
+  itemRow: {
+    flexDirection: 'row', alignItems: 'center',
+    paddingVertical: 12, gap: 10,
+  },
+  itemRowBorder: { borderBottomWidth: 1, borderBottomColor: LYDO_LIGHT_GRAY },
+  docIconBox: {
+    width: 40, height: 40, borderRadius: 10,
+    backgroundColor: LYDO_BLUE_LIGHT,
+    alignItems: 'center', justifyContent: 'center',
+    flexShrink: 0,
+  },
+  docIcon: { fontSize: 18 },
+  itemInfo: { flex: 1 },
+  itemTitle: { fontSize: 14, fontWeight: '700', color: LYDO_DARK_TEXT, marginBottom: 2 },
+  itemMeta: { fontSize: 12, color: LYDO_SUB_TEXT, marginBottom: 6 },
+  itemFooter: {
+    flexDirection: 'row', alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  statusBadge: {
+    paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12,
+    backgroundColor: LYDO_ORANGE_LIGHT,
+  },
+  statusText: { fontSize: 10, fontWeight: '700', color: LYDO_ORANGE },
+  itemTime: { alignItems: 'flex-end' },
+  itemDate: { fontSize: 11, color: LYDO_SUB_TEXT },
+  itemTimeText: {
+    fontSize: 12, fontWeight: '700', color: NAVY,
+    fontVariant: ['tabular-nums'],
+  },
+  reviewBtn: {
+    paddingHorizontal: 12, paddingVertical: 8,
+    borderRadius: 16, borderWidth: 1.5,
+    borderColor: NAVY, backgroundColor: WHITE,
+    flexShrink: 0,
+    marginLeft: 6,
+  },
+  reviewBtnText: { fontSize: 11, fontWeight: '700', color: NAVY, letterSpacing: 0.2 },
+  loadingState: {
+    flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 40, gap: 10,
+  },
+  loadingText: { fontSize: 13, color: LYDO_SUB_TEXT },
+  emptyState: {
+    flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 60, paddingHorizontal: 24,
+  },
+  emptyIcon: { fontSize: 36, marginBottom: 12 },
+  emptyText: { fontSize: 15, fontWeight: '700', color: LYDO_DARK_TEXT, marginBottom: 4 },
+  emptySubText: {
+    fontSize: 13, color: LYDO_SUB_TEXT,
+    textAlign: 'center', lineHeight: 18,
   },
 });
