@@ -47,48 +47,8 @@ const COLORS = {
 
 // ─── TABS ─────────────────────────────────────────────────────────────────────
 const NAV_TABS      = ['Dashboard', 'Documents', 'Planning', 'Portal', 'Logs','Account'];
-const DOCUMENT_TABS = ['Financial', 'Planning', 'Governance', 'Activities'];
-
-// Document types per folder category (from database schema)
-const DOCUMENT_TYPES = {
-  planning: [
-    'Comprehensive Barangay Youth Development Plan (CBYDP)',
-    'Annual Barangay Youth Investment Program (ABYIP)',
-    'SK PPK Template',
-    'Program of Work',
-    'Work Plans',
-    'Project Proposals',
-  ],
-  financial: [
-    'Approved Annual Budget',
-    'SK Supplemental Budget',
-    'Registry of Cash Receipts and Deposits',
-    'Registry of Cash Disbursements',
-    'Monthly Itemized List',
-    'Quarterly Financial Reports',
-    'Disbursement Vouchers',
-    'Liquidation Reports',
-  ],
-  governance: [
-    'Resolutions',
-    'Ordinances',
-  ],
-  performance: [
-    'Accomplishment Reports',
-    'Documentation',
-    'Event Reports',
-    'Minutes of Meetings',
-    'Barangay Youth Investment Monitoring Form',
-    'Monthly/Quarterly Accomplishment Report',
-  ],
-};
-
-const FOLDER_CATEGORIES = [
-  { label: 'Planning', value: 'planning' },
-  { label: 'Financial', value: 'financial' },
-  { label: 'Governance', value: 'governance' },
-  { label: 'Performance', value: 'performance' },
-];
+// DOCUMENT_TABS is built dynamically from document_category table; default fallback
+const DEFAULT_DOCUMENT_TABS = ['Financial', 'Planning', 'Governance', 'Activities'];
 
 // ─── DOCUMENT DATA ────────────────────────────────────────────────────────────
 // (Data now fetched from Supabase based on barangay_id)
@@ -248,17 +208,30 @@ export default function SKDocumentListScreen() {
     }
   };
 
-  // Determine initial tab from params (category passed from sk-document)
-  // Map the category param to the correct tab name
+  // Reference table data — fetched from database; start empty so the UI doesn't
+  // show stale hardcoded values before the fetch completes.
+  const [documentCategories, setDocumentCategories] = useState([]);
+  const [documentTypes, setDocumentTypes] = useState([]);
+  const [folderYears, setFolderYears] = useState([]);
+
+  // Build DOCUMENT_TABS from fetched documentCategories.
+  // Use fallback list while categories are loading so the tab bar renders.
+  const DOCUMENT_TABS = documentCategories.length > 0
+    ? documentCategories.map(c => c.document_category)
+    : DEFAULT_DOCUMENT_TABS;
+
+  // Determine initial tab from params (category passed from sk-document).
+  // Lookup is done against fetched categories by id or by name.
   const getInitialTab = () => {
-    const categoryMap = {
-      'Planning': 'Planning',
-      'Financial': 'Financial',
-      'Governance': 'Governance',
-      'Activities': 'Activities',
-    };
-    const mappedTab = categoryMap[params?.category];
-    return DOCUMENT_TABS.includes(mappedTab) ? mappedTab : 'Financial';
+    const catParam = params?.category;
+    if (!catParam) return DOCUMENT_TABS[0] || 'Financial';
+    const found = documentCategories.find(
+      c => c.document_category === catParam || String(c.id) === String(catParam)
+    );
+    if (found && DOCUMENT_TABS.includes(found.document_category)) {
+      return found.document_category;
+    }
+    return DOCUMENT_TABS[0] || 'Financial';
   };
   const initSubType = params?.subType || null;
 
@@ -272,7 +245,7 @@ export default function SKDocumentListScreen() {
       setActiveDocTab(newTab);
       setActiveSubType(initSubType);
     }
-  }, [params?.category, params?.subType]);
+  }, [params?.category, params?.subType, documentCategories]);
   const [searchText, setSearchText]         = useState('');
   const [sortMode, setSortMode]             = useState('Newest'); // 'Newest' | 'Name'
   const [sidebarVisible, setSidebarVisible] = useState(false);
@@ -286,44 +259,6 @@ export default function SKDocumentListScreen() {
   const [uploadDocType, setUploadDocType] = useState(null);   // Will store document_type_id
   const [uploadYear, setUploadYear] = useState(null);        // Will store folder_year_id
 
-  // Reference table data
-  // Fallback data in case database fetch fails - based on your table data
-  const DEFAULT_CATEGORIES = [
-    { id: 1, document_category: 'Planning' },
-    { id: 2, document_category: 'Financial' },
-    { id: 3, document_category: 'Governance' },
-    { id: 4, document_category: 'Performance' }
-  ];
-  const DEFAULT_DOCUMENT_TYPES = [
-    { id: 1, document_type: 'Annual Barangay Youth Investment Program', category: 1 },
-    { id: 2, document_type: 'Comprehensive Barangay Youth Development Plan', category: 1 },
-    { id: 3, document_type: 'Monthly Itemized List', category: 2 },
-    { id: 4, document_type: 'Quarterly Register of Cash in Bank', category: 2 },
-    { id: 5, document_type: 'Approved Annual Budget', category: 2 },
-    { id: 6, document_type: 'Disbursement Vouchers', category: 2 },
-    { id: 7, document_type: 'Resolution', category: 3 },
-    { id: 8, document_type: 'Ordinance', category: 3 },
-    { id: 9, document_type: 'Minutes of the Katipunan ng Kabataan Assembly', category: 3 },
-    { id: 10, document_type: 'Accomplishment Report', category: 4 },
-    { id: 11, document_type: 'Activity Documentation', category: 4 },
-    { id: 12, document_type: 'Event Report', category: 4 },
-    { id: 13, document_type: 'SK PPA Template', category: 1 },
-    { id: 14, document_type: 'SK Internal Rules of Procedure', category: 3 },
-    { id: 15, document_type: 'Barangay Youth Investment Monitoring Form', category: 4 },
-    { id: 16, document_type: 'SKIT Executive Order Template', category: 3 },
-    { id: 17, document_type: 'Program of Work', category: 1 }
-  ];
-  const DEFAULT_FOLDER_YEARS = [
-    { id: 1, fiscal_year: 2026 },
-    { id: 2, fiscal_year: 2027 },
-    { id: 3, fiscal_year: 2028 },
-    { id: 4, fiscal_year: 2029 },
-    { id: 5, fiscal_year: 2030 }
-  ];
-
-  const [documentCategories, setDocumentCategories] = useState(DEFAULT_CATEGORIES);
-  const [documentTypes, setDocumentTypes] = useState(DEFAULT_DOCUMENT_TYPES);
-  const [folderYears, setFolderYears] = useState(DEFAULT_FOLDER_YEARS);
 
   // Fetch reference tables data on mount
   useEffect(() => {
@@ -400,21 +335,30 @@ export default function SKDocumentListScreen() {
   // Handle openUpload param from dashboard compliance tasks
   useEffect(() => {
     if (params?.openUpload === 'true') {
-      // Set the category and document type from params
-      // Map category names to IDs: 1=Planning, 2=Financial, 3=Governance, 4=Performance
-      if (params?.category) {
-        const categoryIdMap = {
-          'Planning': 1,
-          'Financial': 2,
-          'Governance': 3,
-          'Activities': 4,
-        };
-        setUploadCategory(categoryIdMap[params.category] || 1);
+      // Resolve category id by name from fetched categories
+      if (params?.category && documentCategories.length > 0) {
+        const found = documentCategories.find(c => c.document_category === params.category);
+        if (found) {
+          setUploadCategory(found.id);
+        }
       }
       if (params?.subType) {
-        setUploadDocType(params.subType);
-        // Pre-fill the title with the docTitle if provided, otherwise use subType
-        setUploadTitle(params.docTitle || params.subType);
+        // Resolve docType by name (params may pass either an id or a name)
+        if (documentTypes.length > 0) {
+          const matchedType = documentTypes.find(
+            t => t.document_type === params.subType || String(t.id) === String(params.subType)
+          );
+          if (matchedType) {
+            setUploadDocType(matchedType.id);
+            setUploadTitle(params.docTitle || matchedType.document_type);
+          } else {
+            setUploadDocType(params.subType);
+            setUploadTitle(params.docTitle || params.subType);
+          }
+        } else {
+          setUploadDocType(params.subType);
+          setUploadTitle(params.docTitle || params.subType);
+        }
       }
       // Open the upload modal
       setUploadModalVisible(true);
@@ -423,7 +367,7 @@ export default function SKDocumentListScreen() {
         router.setParams({ openUpload: undefined });
       }, 500);
     }
-  }, [params?.openUpload, params?.category, params?.subType]);
+  }, [params?.openUpload, params?.category, params?.subType, documentCategories, documentTypes]);
 
   const [categoryDropdownOpen, setCategoryDropdownOpen] = useState(false);
   const [docTypeDropdownOpen, setDocTypeDropdownOpen] = useState(false);
@@ -459,7 +403,7 @@ export default function SKDocumentListScreen() {
   // Get document types for selected category, excluding already-uploaded ones
   // Now using the database reference table
   const currentDocTypes = documentTypes.filter(
-    type => type.category === uploadCategory
+    type => type.category === uploadCategory && !existingDocTypes.includes(type.id)
   );
 
   // Fetch documents for this barangay filtered by category — re-fetch every time screen is focused
@@ -467,15 +411,11 @@ export default function SKDocumentListScreen() {
     if (!barangayId) return;
 
     try {
-      // Map tab categories to folder_category IDs (from document_category table)
-      // 1=Planning, 2=Financial, 3=Governance, 4=Performance
-      const categoryIdMap = {
-        'Financial': 2,
-        'Planning': 1,
-        'Governance': 3,
-        'Activities': 4
-      };
-      const categoryId = categoryIdMap[activeDocTab];
+      // Resolve the active tab name → category id from the fetched categories
+      const activeCategory = documentCategories.find(
+        c => c.document_category === activeDocTab
+      );
+      const categoryId = activeCategory?.id;
 
       const query = supabase
         .from('documents')
@@ -508,13 +448,13 @@ export default function SKDocumentListScreen() {
     } catch (error) {
       console.error('Error:', error);
     }
-  }, [barangayId, activeDocTab]);
+  }, [barangayId, activeDocTab, documentCategories, documentTypes, folderYears]);
 
   // Re-fetch whenever the screen comes into focus
   useFocusEffect(
     useCallback(() => {
       fetchDocuments();
-    }, [barangayId, activeDocTab])
+    }, [barangayId, activeDocTab, documentCategories])
   );
 
   // Also re-fetch immediately when the active tab changes
@@ -530,9 +470,6 @@ export default function SKDocumentListScreen() {
   // Accent color based on active tab
   const tabColor = COLORS[activeDocTab.toLowerCase()] || COLORS.planning;
 
-  // SubTypes for active tab (from fetched documents)
-  const subTypes = [];
-
   // When tab changes, reset subType
   const handleTabChange = (tab) => {
     setActiveDocTab(tab);
@@ -541,13 +478,28 @@ export default function SKDocumentListScreen() {
     setSearchText('');
   };
 
+  // Build subTypes from the document types that belong to the active category.
+  // Each entry carries both id and name so filtering can match by id (exact)
+  // while still rendering the human-readable label.
+  const subTypes = useMemo(() => {
+    const activeCategory = documentCategories.find(c => c.document_category === activeDocTab);
+    if (!activeCategory) return [];
+    return documentTypes
+      .filter(t => t.category === activeCategory.id)
+      .map(t => ({ id: t.id, name: t.document_type }));
+  }, [documentCategories, documentTypes, activeDocTab]);
+
   // All docs for current tab (or filtered by subType)
   const allDocs = useMemo(() => {
     if (activeSubType) {
+      // If params passed docTypeId, prefer an exact id match; otherwise substring on title.
+      if (params?.docTypeId) {
+        return documents.filter(d => String(d.document_type) === String(params.docTypeId));
+      }
       return documents.filter(d => d.name.includes(activeSubType));
     }
     return documents;
-  }, [activeDocTab, activeSubType, documents]);
+  }, [activeDocTab, activeSubType, documents, params?.docTypeId]);
 
   // Apply search + sort
   const visibleDocs = useMemo(() => {
@@ -865,10 +817,14 @@ export default function SKDocumentListScreen() {
         <View style={styles.docTabBar}>
           {DOCUMENT_TABS.map(tab => {
             const active = activeDocTab === tab;
+            const tabTint = COLORS[tab.toLowerCase()] || COLORS.planning;
             return (
               <TouchableOpacity
                 key={tab}
-                style={[styles.docTab, active && styles.docTabActive]}
+                style={[
+                  styles.docTab,
+                  active && [styles.docTabActive, { backgroundColor: tabTint.header, borderColor: tabTint.header, shadowColor: tabTint.header }],
+                ]}
                 onPress={() => handleTabChange(tab)}
                 activeOpacity={0.8}
               >
@@ -910,35 +866,6 @@ export default function SKDocumentListScreen() {
           </TouchableOpacity>
         </View>
       </View>
-
-      {/* SubType filter pills */}
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        style={styles.pillsScroll}
-        contentContainerStyle={styles.pillsRow}
-      >
-        <TouchableOpacity
-          style={[styles.pill, !activeSubType && { backgroundColor: tabColor.header }]}
-          onPress={() => setActiveSubType(null)}
-          activeOpacity={0.8}
-        >
-          <Text style={[styles.pillText, !activeSubType && styles.pillTextActive]}>All</Text>
-        </TouchableOpacity>
-        {subTypes.map(sub => {
-          const active = activeSubType === sub;
-          return (
-            <TouchableOpacity
-              key={sub}
-              style={[styles.pill, active && { backgroundColor: tabColor.header }]}
-              onPress={() => setActiveSubType(active ? null : sub)}
-              activeOpacity={0.8}
-            >
-              <Text style={[styles.pillText, active && styles.pillTextActive]}>{sub}</Text>
-            </TouchableOpacity>
-          );
-        })}
-      </ScrollView>
 
       {/* Document List Table */}
       <View style={[styles.tableContainer, { borderColor: tabColor.header + '55' }]}>
@@ -1089,11 +1016,11 @@ export default function SKDocumentListScreen() {
                 </TouchableOpacity>
                 {docTypeDropdownOpen && (
                   <ScrollView style={styles.modalDropdownMenu} showsVerticalScrollIndicator={false}>
-                    {documentTypes.filter(t => t.category === uploadCategory).length > 0 ? documentTypes.filter(t => t.category === uploadCategory).map(type => (
+                    {currentDocTypes.length > 0 ? currentDocTypes.map(type => (
                       <TouchableOpacity
                         key={type.id}
                         style={[styles.modalDropdownItem, uploadDocType === type.id && styles.modalDropdownItemActive]}
-                        onPress={() => { setUploadDocType(type.id); setDocTypeDropdownOpen(false); }}
+                        onPress={() => { setUploadDocType(type.id); setUploadTitle(type.document_type); setDocTypeDropdownOpen(false); }}
                         activeOpacity={0.8}
                       >
                         <Text style={[styles.modalDropdownItemText, uploadDocType === type.id && styles.modalDropdownItemTextActive]}>
@@ -1104,7 +1031,9 @@ export default function SKDocumentListScreen() {
                     )) : (
                       <View style={{ paddingVertical: 16, paddingHorizontal: 14 }}>
                         <Text style={{ fontSize: 13, color: COLORS.subText, textAlign: 'center' }}>
-                          No document types available for this category.
+                          {documentTypes.some(t => t.category === uploadCategory)
+                            ? 'All document types for this category have already been uploaded.'
+                            : 'No document types available for this category.'}
                         </Text>
                       </View>
                     )}
@@ -1336,7 +1265,7 @@ const styles = StyleSheet.create({
 
   // Filter row
   filterRow: {
-    flexDirection: 'row', alignItems: 'flex-start', marginBottom: 12, gap: 6,
+    flexDirection: 'row', alignItems: 'flex-start', marginBottom: 16, gap: 6,
     zIndex: 10,
   },
   dropdownContainer: {
@@ -1380,7 +1309,7 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.15)', alignItems: 'center', justifyContent: 'center',
   },
   docTabActive: {
-    backgroundColor: COLORS.gold, borderRadius: 4, borderColor: COLORS.gold,
+    backgroundColor: COLORS.gold, borderColor: COLORS.gold,
     shadowColor: COLORS.gold, shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.4, shadowRadius: 4, elevation: 3,
   },

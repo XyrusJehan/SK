@@ -1723,7 +1723,7 @@ const seenReady = seenLoaded ? 1 : 0;
             <View style={[styles.card, styles.flex1, { alignSelf: 'flex-start' }]}>
               <View style={styles.quickActionsHeader}>
                 <Text style={styles.cardTitle}>Quick Actions</Text>
-                <Text style={styles.scanLabel}>Scan</Text>
+                
               </View>
               <View style={styles.divider} />
               <View style={styles.quickGrid}>

@@ -59,56 +59,50 @@ const COLORS = {
 const NAV_TABS      = ['Dashboard', 'Documents', 'Planning', 'Portal', 'Logs', 'Account'];
 const DOCUMENT_TABS = ['Folder', 'Document Management'];
 
-// ─── DOCUMENT CATEGORIES ─────────────────────────────────────────────────────
-const DOC_CATEGORIES = [
-  {
+// ─── DOCUMENT CATEGORIES (built from database) ────────────────────────────────
+// Map category names to color palette + icon for the folder cards
+const CATEGORY_META = {
+  Planning: {
     id: 'planning',
     title: 'PLANNING DOCUMENTS',
-    category: 'Planning',
     icon: '📅',
     colors: COLORS.planning,
     tab: 'Planning',
-    items: ['ABYIP', 'CBYDP', 'Work Plans', 'Project Proposals'],
   },
-  {
+  Financial: {
     id: 'financial',
     title: 'FINANCIAL DOCUMENTS',
-    category: 'Financial',
     icon: '💲',
     colors: COLORS.financial,
     tab: 'Financial',
-    items: [
-      'Monthly Itemized List',
-      'Quarterly Register of Bank',
-      'Annual Budget',
-      'Disbursement Vouchers',
-      'Liquidation Reports',
-    ],
   },
-  {
+  Governance: {
     id: 'governance',
     title: 'GOVERNANCE DOCUMENTS',
-    category: 'Governance',
     icon: '⚖️',
     colors: COLORS.governance,
     tab: 'Governance',
-    items: ['Resolutions', 'Ordinances'],
   },
-  {
+  Performance: {
     id: 'performance',
     title: 'PERFORMANCE DOCUMENTS',
-    category: 'Activities',
     icon: '👥',
     colors: COLORS.performance,
     tab: 'Activities',
-    items: [
-      'Accomplishment Reports',
-      'Activity Documentation',
-      'Event Reports',
-      'Minutes of the meetings',
-    ],
   },
-];
+};
+
+const getCategoryMeta = (name) => {
+  if (CATEGORY_META[name]) return CATEGORY_META[name];
+  // Fallback for any category not in the predefined map
+  return {
+    id: name.toLowerCase(),
+    title: `${name.toUpperCase()} DOCUMENTS`,
+    icon: '📁',
+    colors: COLORS.planning,
+    tab: name,
+  };
+};
 
 // ─── ICONS ────────────────────────────────────────────────────────────────────
 const BellIcon = ({ hasNotif }) => (
@@ -224,7 +218,7 @@ const LogoutNavIcon = ({ color = '#fff', size = 16 }) => (
 );
 
 // ─── DOCUMENT CARD (lydo-style) ───────────────────────────────────────────────
-const DocumentCard = ({ group, onItemPress, submittedSet, labelToDocType }) => {
+const DocumentCard = ({ group, onItemPress, submittedSet }) => {
   const { colors, title, icon, items } = group;
   return (
     <View style={[styles.card, { backgroundColor: colors.bg, borderColor: colors.border || '#E5E5E5' }]}>
@@ -234,17 +228,16 @@ const DocumentCard = ({ group, onItemPress, submittedSet, labelToDocType }) => {
       </View>
       <View style={styles.cardBody}>
         {items.map((item, idx) => {
-          const docType = (labelToDocType && labelToDocType[item]) || item;
-          const hasSubmission = submittedSet && submittedSet.has(docType);
+          const hasSubmission = submittedSet && submittedSet.has(Number(item.id));
           return (
             <TouchableOpacity
-              key={idx}
+              key={item.id || idx}
               style={styles.docItem}
               onPress={() => onItemPress && onItemPress(item, group)}
               activeOpacity={0.7}
             >
               <View style={[styles.docBullet, { backgroundColor: colors.header }]} />
-              <Text style={[styles.docItemText, { color: hasSubmission ? colors.subText : '#E53935' }]}>{item}</Text>
+              <Text style={[styles.docItemText, { color: hasSubmission ? colors.subText : '#E53935' }]}>{item.name}</Text>
               {!hasSubmission && <View style={styles.redDot} />}
             </TouchableOpacity>
           );
@@ -268,6 +261,16 @@ export default function SKDocumentScreen() {
   const [searchText, setSearchText]         = useState('');
   const [sidebarVisible, setSidebarVisible] = useState(false);
   const [documents, setDocuments]           = useState([]);
+
+  // This screen is always the "Folder" view. Tapping "Document Management" sets
+  // activeDocTab locally before navigating away so the tab highlights briefly,
+  // but since this screen stays mounted in the background, that stale value
+  // would otherwise still be active when the user comes back. Reset it on focus.
+  useFocusEffect(
+    useCallback(() => {
+      setActiveDocTab('Folder');
+    }, [])
+  );
 
   // ── Shared notification bell (returned/approved docs, templates, deadlines) ──
   const notif = useNotificationCenter(barangayId);
@@ -368,33 +371,27 @@ export default function SKDocumentScreen() {
 
   const handleLogout = () => { logout(); router.replace('/'); };
 
-  // Tap a bullet item → navigate to list screen with category + subType params
-  const handleItemPress = (itemName, group) => {
+  // Tap a bullet item → navigate to list screen filtered to just the category (shows All)
+  const handleItemPress = (item, group) => {
     router.push({
       pathname: '/(tabs)/sk-document-list',
-      params: { category: group.category, subType: itemName },
+      params: { category: group.category },
     });
   };
 
-  // Map short card labels → document_type IDs stored in the DB
-  // Based on document_types table: 1-2=Planning, 3-6=Financial, 7-9=Governance, 10-12=Performance
-  const LABEL_TO_DOC_TYPE = {
-    'ABYIP':                      1,  // Annual Barangay Youth Investment Program
-    'CBYDP':                      2,  // Comprehensive Barangay Youth Development Plan
-    'Work Plans':                 null,
-    'Project Proposals':         null,
-    'Monthly Itemized List':      3,
-    'Quarterly Register of Bank': 4,
-    'Annual Budget':              5,  // Approved Annual Budget
-    'Disbursement Vouchers':      6,
-    'Liquidation Reports':        null,
-    'Resolutions':                7,
-    'Ordinances':                 8,
-    'Accomplishment Reports':     10,
-    'Activity Documentation':     11,
-    'Event Reports':              12,
-    'Minutes of the meetings':    9,
-  };
+  // Build categories dynamically from fetched document_types grouped by document_category
+  const fetchedCategories = documentCategories.map(cat => {
+    const meta = getCategoryMeta(cat.document_category);
+    const items = documentTypes
+      .filter(t => t.category === cat.id)
+      .map(t => ({ id: t.id, name: t.document_type }));
+    return {
+      ...meta,
+      categoryId: cat.id,
+      category: cat.document_category,
+      items,
+    };
+  });
 
   // Build a set of document_type IDs that have been submitted/approved/returned
   const submittedSet = new Set(
@@ -405,10 +402,10 @@ export default function SKDocumentScreen() {
   );
 
   // Filter by search only (Folder tab shows all categories)
-  const visibleCategories = DOC_CATEGORIES.filter(cat => {
+  const visibleCategories = fetchedCategories.filter(cat => {
     const matchesSearch = searchText === '' ||
       cat.title.toLowerCase().includes(searchText.toLowerCase()) ||
-      cat.items.some(i => i.toLowerCase().includes(searchText.toLowerCase()));
+      cat.items.some(i => i.name.toLowerCase().includes(searchText.toLowerCase()));
     return matchesSearch;
   });
 
@@ -563,7 +560,7 @@ export default function SKDocumentScreen() {
         {visibleCategories.length > 0 ? (
           visibleCategories.map(cat => (
             <View key={cat.id} style={isMobile ? styles.cardWrapperMobile : styles.cardWrapper}>
-              <DocumentCard group={cat} onItemPress={handleItemPress} submittedSet={submittedSet} labelToDocType={LABEL_TO_DOC_TYPE} />
+              <DocumentCard group={cat} onItemPress={handleItemPress} submittedSet={submittedSet} />
             </View>
           ))
         ) : (
@@ -743,7 +740,7 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.15)', alignItems: 'center', justifyContent: 'center',
   },
   docTabActive: {
-    backgroundColor: COLORS.gold, borderRadius: 4, borderColor: COLORS.gold,
+    backgroundColor: COLORS.gold, borderColor: COLORS.gold,
     shadowColor: COLORS.gold, shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.4, shadowRadius: 4, elevation: 3,
   },

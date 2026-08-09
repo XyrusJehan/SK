@@ -49,7 +49,9 @@ const COLORS = {
 const NAV_TABS       = ['Dashboard', 'Documents', 'Planning', 'Portal', 'Logs', 'Account'];
 const DOCUMENT_TABS  = ['Folder', 'Document Management'];
 const STATUS_TABS    = ['All', 'Drafts', 'Saved', 'Submitted', 'Approved', 'Returned'];
-const DRAFT_TYPES    = ['All Types', 'Planning', 'Financial', 'Governance', 'Performance'];
+// DRAFT_TYPES is built dynamically from the fetched document_category table.
+// "All Types" remains a fixed sentinel for the unfiltered view.
+const DRAFT_ALL_LABEL = 'All Types';
 const SORT_OPTIONS   = ['Newest', 'Oldest', 'Title A-Z', 'Title Z-A'];
 
 // ─── MOCK DATA ────────────────────────────────────────────────────────────────
@@ -551,39 +553,57 @@ export default function SKDocumentManagementScreen() {
   };
   const hideAlert = () => setAlertModal(a => ({ ...a, visible: false }));
 
-  // Reference tables for mapping IDs to names
-  const [documentCategories, setDocumentCategories] = useState([
-    { id: 1, document_category: 'Planning' },
-    { id: 2, document_category: 'Financial' },
-    { id: 3, document_category: 'Governance' },
-    { id: 4, document_category: 'Performance' }
-  ]);
-  const [documentTypes, setDocumentTypes] = useState([
-    { id: 1, document_type: 'Annual Barangay Youth Investment Program', category: 1 },
-    { id: 2, document_type: 'Comprehensive Barangay Youth Development Plan', category: 1 },
-    { id: 3, document_type: 'Monthly Itemized List', category: 2 },
-    { id: 4, document_type: 'Quarterly Register of Cash in Bank', category: 2 },
-    { id: 5, document_type: 'Approved Annual Budget', category: 2 },
-    { id: 6, document_type: 'Disbursement Vouchers', category: 2 },
-    { id: 7, document_type: 'Resolution', category: 3 },
-    { id: 8, document_type: 'Ordinance', category: 3 },
-    { id: 9, document_type: 'Minutes of the Katipunan ng Kabataan Assembly', category: 3 },
-    { id: 10, document_type: 'Accomplishment Report', category: 4 },
-    { id: 11, document_type: 'Activity Documentation', category: 4 },
-    { id: 12, document_type: 'Event Report', category: 4 },
-    { id: 13, document_type: 'SK PPA Template', category: 1 },
-    { id: 14, document_type: 'SK Internal Rules of Procedure', category: 3 },
-    { id: 15, document_type: 'Barangay Youth Investment Monitoring Form', category: 4 },
-    { id: 16, document_type: 'SKIT Executive Order Template', category: 3 },
-    { id: 17, document_type: 'Program of Work', category: 1 }
-  ]);
-  const [folderYears, setFolderYears] = useState([
-    { id: 1, fiscal_year: 2026 },
-    { id: 2, fiscal_year: 2027 },
-    { id: 3, fiscal_year: 2028 },
-    { id: 4, fiscal_year: 2029 },
-    { id: 5, fiscal_year: 2030 }
-  ]);
+  // Reference tables for mapping IDs to names — fetched from database.
+  const [documentCategories, setDocumentCategories] = useState([]);
+  const [documentTypes, setDocumentTypes] = useState([]);
+  const [folderYears, setFolderYears] = useState([]);
+
+  // Build the DRAFT_TYPES list from fetched categories (with "All Types" sentinel first).
+  const DRAFT_TYPES = useMemo(
+    () => [DRAFT_ALL_LABEL, ...documentCategories.map(c => c.document_category)],
+    [documentCategories]
+  );
+
+  // Fetch reference tables on mount
+  useEffect(() => {
+    const fetchReferenceData = async () => {
+      try {
+        // Fetch document categories
+        const { data: categories, error: catError } = await supabase
+          .from('document_category')
+          .select('id, document_category, year')
+          .order('document_category');
+
+        if (!catError && categories) {
+          setDocumentCategories(categories);
+        }
+
+        // Fetch document types
+        const { data: types, error: typeError } = await supabase
+          .from('document_types')
+          .select('id, document_type, category, year')
+          .order('document_type');
+
+        if (!typeError && types) {
+          setDocumentTypes(types);
+        }
+
+        // Fetch folder years
+        const { data: years, error: yearError } = await supabase
+          .from('folder_year')
+          .select('id, fiscal_year')
+          .order('fiscal_year', { ascending: false });
+
+        if (!yearError && years) {
+          setFolderYears(years);
+        }
+      } catch (error) {
+        console.error('Error fetching reference data:', error);
+      }
+    };
+
+    fetchReferenceData();
+  }, []);
 
   const handleViewPress = (doc) => {
     if (!doc.fileUrl) {
@@ -666,7 +686,7 @@ export default function SKDocumentManagementScreen() {
     } catch (error) {
       console.error('Error:', error);
     }
-  }, [barangayId, supabase, user]);
+  }, [barangayId, supabase, user, documentCategories, documentTypes, folderYears]);
 
   // Auto-fetch on screen focus - always fetch fresh data
   useFocusEffect(
@@ -977,11 +997,6 @@ export default function SKDocumentManagementScreen() {
       )}
 
       
-
-      {/* Category label */}
-      <View style={styles.categoryRow}>
-        <Text style={styles.categoryLabel}>Category:</Text>
-      </View>
 
       {/* Folder / Document Management Tab Bar */}
       <View style={styles.filterRow}>
@@ -1633,7 +1648,7 @@ const styles = StyleSheet.create({
   // Desktop header
   header: {
     flexDirection: 'row', alignItems: 'flex-start',
-    justifyContent: 'space-between', marginBottom: 16,
+    justifyContent: 'space-between', marginBottom: 12,
   },
   headerSub:   { fontSize: 10, fontWeight: '600', color: COLORS.subText, letterSpacing: 2, textTransform: 'uppercase', marginBottom: 2 },
   headerTitle: {
@@ -1669,7 +1684,7 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.15)', alignItems: 'center', justifyContent: 'center',
   },
   docTabActive: {
-    backgroundColor: COLORS.gold, borderRadius: 4, borderColor: COLORS.gold,
+    backgroundColor: COLORS.gold, borderColor: COLORS.gold,
     shadowColor: COLORS.gold, shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.4, shadowRadius: 4, elevation: 3,
   },
