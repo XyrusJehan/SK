@@ -8,6 +8,7 @@ import { useNav } from './navContext';
 import { useAuth } from './authContext';
 import { supabase } from '../../utils/supabase';
 import { NotificationModal, useNotificationCenter } from './notificationCenter';
+import Sidebar from './../components/Sidebar';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const isMobile = SCREEN_WIDTH < 768;
@@ -390,52 +391,16 @@ export default function LogsScreen() {
   const formatTime = (date) =>
     new Date(date).toLocaleTimeString('en-PH', { timeZone: 'Asia/Manila', hour: 'numeric', minute: '2-digit', hour12: true });
 
-  // ── Sidebar ────────────────────────────────────────────────────────────────
-  const NAV_ITEMS = [
-    { tab: 'Dashboard', IconComponent: DashboardIcon },
-    { tab: 'Documents', IconComponent: DocumentsIcon },
-    { tab: 'Planning',  IconComponent: PlanningIcon  },
-    { tab: 'Portal',    IconComponent: PortalIcon    },
-    { tab: 'Logs',      IconComponent: LogsIcon      },
-    { tab: 'Account',   IconComponent: AccountIcon   },
-  ];
 
-  const renderSidebar = () => (
-    <View style={[styles.sidebar, isMobile && !sidebarVisible && styles.sidebarHidden]}>
-      <View style={styles.logoPill}>
-        <Image
-          source={require('./../../assets/images/sk-logo.png')}
-          style={styles.logoImage}
-          resizeMode="contain"
-        />
-      </View>
-      <View style={{ height: 28 }} />
-      {NAV_ITEMS.map(({ tab, IconComponent }) => {
-        const active = activeTab === tab;
-        const iconColor = active ? '#133E75' : 'rgba(255,255,255,0.85)';
-        return (
-          <TouchableOpacity
-            key={tab}
-            style={[styles.navItem, active && styles.navItemActive]}
-            onPress={() => handleNavPress(tab)}
-            activeOpacity={0.8}
-          >
-            <View style={styles.navItemInner}>
-              <IconComponent color={iconColor} size={16} />
-              <Text style={[styles.navLabel, active && styles.navLabelActive]}>{tab}</Text>
-            </View>
-          </TouchableOpacity>
-        );
-      })}
-      <View style={{ flex: 1 }} />
-      <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout} activeOpacity={0.8}>
-        <View style={styles.navItemInner}>
-          <LogoutNavIcon color="rgba(255,255,255,0.85)" size={16} />
-          <Text style={styles.logoutText}>Logout</Text>
-        </View>
-      </TouchableOpacity>
-    </View>
-  );
+    const renderSidebar = () => (
+      <Sidebar
+        activeTab={activeTab}
+        onNavPress={handleNavPress}
+        onLogout={handleLogout}
+        isMobile={isMobile}
+        sidebarVisible={sidebarVisible}
+      />
+    );
 
   // ── Action badge ───────────────────────────────────────────────────────────
   const renderActionBadge = (action) => {
