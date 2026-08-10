@@ -4,13 +4,19 @@
 // Drop this file in your components folder (e.g. `/components/Sidebar.js`)
 // and import it from every screen that currently has its own copy-pasted
 // `renderSidebar()` (sk-dashboard, sk-document, sk-planning, sk-portal,
-// sk-logs, sk-account, …).
+// sk-logs, sk-account, lydo-dashboard, lydo-document, lydo-monitor,
+// lydo-accounts, lydo-logs, …).
 //
 // This keeps the ORIGINAL layout you already had — navy background, 250px
 // width, rounded pill nav items, white-filled active pill — and only
 // polishes the details (softer inactive state, subtle active shadow,
 // tighter spacing) so it feels a bit more refined without changing the
 // color or size of anything.
+//
+// Two ready-made nav configs are exported: NAV_ITEMS (SK side: Dashboard,
+// Documents, Planning, Portal, Logs, Account) and LYDO_NAV_ITEMS (LYDO
+// side: Dashboard, Documents, Monitor, Barangay, Logs). Pass whichever
+// fits via the `navItems` prop, or supply your own.
 //
 // USAGE (inside any sk-*.js screen):
 //
@@ -24,8 +30,23 @@
 //     sidebarVisible={sidebarVisible}
 //   />
 //
-// `handleNavPress` / `handleLogout` are the same functions each screen
-// already defines — nothing about your routing logic needs to change.
+// USAGE (inside any lydo-*.js screen):
+//
+//   import Sidebar, { LYDO_NAV_ITEMS } from '../../components/Sidebar';
+//   ...
+//   <Sidebar
+//     activeTab={activeTab}
+//     onNavPress={handleNav}
+//     onLogout={handleLogout}
+//     isMobile={isMobile}
+//     sidebarVisible={sidebarVisible}
+//     navItems={LYDO_NAV_ITEMS}
+//     logoSource={require('./../../assets/images/lydo-logo.png')}
+//   />
+//
+// `handleNavPress` / `handleNav` / `handleLogout` are the same functions
+// each screen already defines — nothing about your routing logic needs
+// to change.
 // ─────────────────────────────────────────────────────────────────────────
 
 import React from 'react';
@@ -105,6 +126,9 @@ export const PortalIcon = ({ color = '#fff', size = 16 }) => (
   </View>
 );
 
+// Monitor: same globe glyph as Portal — LYDO's "Monitor" tab reuses it.
+export const MonitorIcon = PortalIcon;
+
 export const LogsIcon = ({ color = '#fff', size = 16 }) => (
   <View style={{ width: size, height: size, justifyContent: 'center', alignItems: 'center' }}>
     <View style={{ width: size * 0.75, height: size * 0.85, borderWidth: 1.5, borderColor: color, borderRadius: size * 0.1, paddingHorizontal: size * 0.1, paddingVertical: size * 0.1, justifyContent: 'space-around' }}>
@@ -126,6 +150,21 @@ export const AccountIcon = ({ color = '#fff', size = 16 }) => (
   </View>
 );
 
+// Barangay: building/institution icon — roof + columned body. LYDO side only.
+export const BarangayIcon = ({ color = '#fff', size = 16 }) => {
+  const bw = 1.5;
+  return (
+    <View style={{ width: size, height: size, justifyContent: 'center', alignItems: 'center' }}>
+      <View style={{ width: size * 0.82, height: size * 0.22, borderLeftWidth: bw, borderRightWidth: bw, borderTopWidth: bw, borderColor: color, borderTopLeftRadius: size * 0.06, borderTopRightRadius: size * 0.06 }} />
+      <View style={{ width: size * 0.82, height: size * 0.52, borderLeftWidth: bw, borderRightWidth: bw, borderBottomWidth: bw, borderColor: color, flexDirection: 'row', justifyContent: 'space-around', alignItems: 'center', paddingHorizontal: size * 0.08, paddingBottom: size * 0.06 }}>
+        {[0, 1, 2].map(i => (
+          <View key={i} style={{ width: size * 0.1, height: size * 0.36, backgroundColor: color, borderRadius: size * 0.03 }} />
+        ))}
+      </View>
+    </View>
+  );
+};
+
 export const LogoutNavIcon = ({ color = '#fff', size = 16 }) => (
   <View style={{ width: size, height: size, justifyContent: 'center', alignItems: 'center' }}>
     <View style={{ position: 'absolute', left: 0, top: 0, width: size * 0.55, height: size, borderWidth: 1.5, borderColor: color, borderRadius: size * 0.08 }} />
@@ -134,8 +173,8 @@ export const LogoutNavIcon = ({ color = '#fff', size = 16 }) => (
   </View>
 );
 
-// ── Default nav config — same tabs/routes sk-dashboard already used.
-//    Override via the `navItems` prop on a screen-by-screen basis if needed. ──
+// ── Default nav config — SK side. Same tabs/routes sk-dashboard already
+//    used. Override via the `navItems` prop on a screen-by-screen basis. ──
 export const NAV_ITEMS = [
   { tab: 'Dashboard', label: 'Dashboard', IconComponent: DashboardIcon, route: '/(tabs)/sk-dashboard' },
   { tab: 'Documents', label: 'Documents', IconComponent: DocumentsIcon, route: '/(tabs)/sk-document' },
@@ -143,6 +182,16 @@ export const NAV_ITEMS = [
   { tab: 'Portal',    label: 'Portal',    IconComponent: PortalIcon,    route: '/(tabs)/sk-portal' },
   { tab: 'Logs',      label: 'Logs',      IconComponent: LogsIcon,      route: '/(tabs)/sk-logs' },
   { tab: 'Account',   label: 'Account',   IconComponent: AccountIcon,   route: '/(tabs)/sk-account' },
+];
+
+// ── LYDO nav config — LYDO side: Dashboard, Documents, Monitor, Barangay,
+//    Logs (no Portal/Account tabs). Pass via `navItems={LYDO_NAV_ITEMS}`. ──
+export const LYDO_NAV_ITEMS = [
+  { tab: 'Dashboard', label: 'Dashboard', IconComponent: DashboardIcon, route: '/(tabs)/lydo-dashboard' },
+  { tab: 'Documents', label: 'Documents', IconComponent: DocumentsIcon, route: '/(tabs)/lydo-document' },
+  { tab: 'Monitor',   label: 'Monitor',   IconComponent: MonitorIcon,   route: '/(tabs)/lydo-monitor' },
+  { tab: 'Barangay',  label: 'Barangay',  IconComponent: BarangayIcon,  route: '/(tabs)/lydo-accounts' },
+  { tab: 'Logs',      label: 'Logs',      IconComponent: LogsIcon,      route: '/(tabs)/lydo-logs' },
 ];
 
 // ─── SIDEBAR COMPONENT ──────────────────────────────────────────────────────
