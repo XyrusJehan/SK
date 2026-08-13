@@ -27,9 +27,10 @@
 //          share sheet so the user can save it to Files, Drive, etc.
 //        - web: rendered to a PDF in-browser with html2pdf.js and saved
 //          directly as a file download — no print dialog is shown.
-//   3. uploadReportPdf()   -> (native only, optional) uploads the generated
-//          PDF to a Supabase Storage bucket so it can be linked from the
-//          saved `documents` row and reopened later from the Documents tab.
+//   3. uploadReportPdf()   -> uploads the generated PDF to the 'documents'
+//          Supabase Storage bucket so it can be linked from a
+//          `compliance_documents` row and reopened later from the
+//          Documents > Reports tab.
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import * as FileSystem from 'expo-file-system';
@@ -461,30 +462,122 @@ export async function exportReportToPdf({ html, filename }) {
   return { uri: dest };
 }
 
-// ── Optional: persist the PDF to Supabase Storage so it's linked from the
-// saved `documents` row (file_url) and can be reopened from the Documents
-// tab later, not just from the device it was generated on.
+// ── Render the report HTML straight to a base64 PDF (no share sheet / no
+// print dialog). Used by the "Save" flow so the PDF can be uploaded to the
+// 'documents' Storage bucket without ever prompting the user to pick a
+// save location — the file lands in compliance_documents instead, and the
+// user re-opens it from Documents > Reports.
 //
-// Requires a Storage bucket named 'reports'. Create it once in the Supabase
-// dashboard (Storage -> New bucket -> "reports", public if you want direct
-// links, or private + use createSignedUrl if these should stay internal).
-export async function uploadReportPdf({ uri, filename }) {
-  if (!uri) return null; // web: no local file was produced to upload
+// Returns { base64, filename } on both web and native. On web the browser
+// doesn't write a real file, so the only thing the user can hand off to
+// Storage is the base64 string.
+export async function renderReportToBase64({ html, filename }) {
+  const isWeb = Platform.OS === 'web' || (typeof window !== 'undefined' && typeof document !== 'undefined');
 
+  if (isWeb) {
+    let html2pdfMod;
+    try {
+      html2pdfMod = await import('html2pdf.js/dist/html2pdf.bundle.js');
+    } catch (importErr) {
+      throw new Error(
+        'PDF generation library (html2pdf.js) is not available. Run "npm install html2pdf.js" and rebuild.'
+      );
+    }
+    const html2pdf = html2pdfMod.default || html2pdfMod;
+
+    // Same off-DOM / in-flow container pattern used in exportReportToPdf
+    // so html2canvas's clone measures the element correctly (see the long
+    // comment block there for the full explanation).
+    const clipper = document.createElement('div');
+    clipper.style.height = '0px';
+    clipper.style.overflow = 'hidden';
+    const container = document.createElement('div');
+    container.style.width = '722px';
+    container.innerHTML = html;
+    clipper.appendChild(container);
+    document.body.appendChild(clipper);
+
+    const bodyEl = container.querySelector('body') || container;
+    bodyEl.querySelectorAll('table').forEach((t) => {
+      t.style.display = 'table';
+      t.style.tableLayout = 'auto';
+      t.style.width = '100%';
+    });
+    bodyEl.querySelectorAll('thead').forEach((t) => { t.style.display = 'table-header-group'; });
+    bodyEl.querySelectorAll('tbody').forEach((t) => { t.style.display = 'table-row-group'; });
+    bodyEl.querySelectorAll('tr').forEach((t) => { t.style.display = 'table-row'; });
+    bodyEl.querySelectorAll('th').forEach((t) => { t.style.display = 'table-cell'; });
+    bodyEl.querySelectorAll('td').forEach((t) => { t.style.display = 'table-cell'; });
+
+    try {
+      // html2pdf's chain ends with .output(type), which can be 'datauristring',
+      // 'dataurl', 'blob', 'save' (triggers a browser download), etc. We want
+      // the raw PDF bytes as base64 so Storage can hold them — 'datauristring'
+      // returns a `data:application/pdf;base64,...` URL we strip the prefix
+      // from. The method is normally synchronous in html2pdf.js (returns a
+      // string), but be defensive in case a bundler ever returns a Promise.
+      const chain = html2pdf()
+        .set({
+          filename,
+          margin: [22.5, 27, 22.5, 27],
+          image: { type: 'jpeg', quality: 0.98 },
+          html2canvas: { scale: 2, useCORS: true },
+          jsPDF: { unit: 'pt', format: 'a4', orientation: 'portrait' },
+          pagebreak: { mode: ['css', 'avoid-all'] },
+        })
+        .from(bodyEl);
+      const dataUri = await Promise.resolve(chain.output('datauristring'));
+      const base64 = typeof dataUri === 'string' ? dataUri.split(',', 2)[1] || '' : '';
+      return { base64, filename };
+    } finally {
+      document.body.removeChild(clipper);
+    }
+  }
+
+  // Native: write a PDF to the cache dir, then read it back as base64.
+  const { uri } = await Print.printToFileAsync({ html, base64: false });
   const base64 = await FileSystem.readAsStringAsync(uri, {
     encoding: FileSystem.EncodingType.Base64,
   });
-  const path = `${Date.now()}_${filename}`;
+  return { base64, filename };
+}
+
+// ── Optional: persist the PDF to Supabase Storage so it's linked from the
+// saved `compliance_documents` row (scanned_file_url) and can be reopened
+// from the Documents > Reports tab later, not just from the device it was
+// generated on.
+//
+// Accepts either a local file uri (native, after Print.printToFileAsync) OR
+// a base64 string (web, after the in-browser render). Pass whichever one
+// you have — the function detects the format and uploads accordingly.
+//
+// Requires a Storage bucket named 'documents'. Create it once in the Supabase
+// dashboard (Storage -> New bucket -> "documents", public if you want direct
+// links, or private + use createSignedUrl if these should stay internal).
+export async function uploadReportPdf({ uri, base64, filename }) {
+  let bytes;
+  if (base64) {
+    bytes = decodeBase64(base64);
+  } else if (uri) {
+    const b64 = await FileSystem.readAsStringAsync(uri, {
+      encoding: FileSystem.EncodingType.Base64,
+    });
+    bytes = decodeBase64(b64);
+  } else {
+    return null;
+  }
+
+  const path = `reports/${Date.now()}_${filename}`;
 
   const { error } = await supabase.storage
-    .from('reports')
-    .upload(path, decodeBase64(base64), {
+    .from('documents')
+    .upload(path, bytes, {
       contentType: 'application/pdf',
       upsert: true,
     });
 
   if (error) throw error;
 
-  const { data } = supabase.storage.from('reports').getPublicUrl(path);
+  const { data } = supabase.storage.from('documents').getPublicUrl(path);
   return data?.publicUrl || null;
 }

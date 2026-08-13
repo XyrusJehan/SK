@@ -10,11 +10,16 @@ import {
   StatusBar,
   Dimensions,
   Image,
+  Alert,
+  Linking,
+  Platform,
+  ActivityIndicator,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useNav } from './navContext';
 import Sidebar, { LYDO_NAV_ITEMS } from './../components/Sidebar';
 import { useAuth } from './authContext';
+import { fetchSavedReports, fetchArchivedReports, restoreComplianceDocument } from './reportsApi';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const isMobile = SCREEN_WIDTH < 768;
@@ -38,19 +43,21 @@ const COLORS = {
 // ─── NAV / TAB CONSTANTS ──────────────────────────────────────────────────────
 const DOCUMENT_TABS  = ['Barangay Folders', 'Reports', 'Templates'];
 
-// ─── SAMPLE REPORT DATA ───────────────────────────────────────────────────────
-const REPORTS = [
-  { id: '1', name: 'SK_Rizal_ABYIP_Report_2026.pdf',   time: '3:00 PM', date: '1/02/2026' },
-  { id: '2', name: 'Annual Budget Allocation 2026',     time: '3:00 PM', date: '1/02/2026' },
-  { id: '3', name: 'Consolidated Compliance Report',    time: '3:00 PM', date: '1/02/2026' },
-];
-
-// ─── QUICK STATS (top-right info block) ───────────────────────────────────────
-const QUICK_STATS = [
-  { label: 'Reports',    value: '3' },
-  { label: 'Downloads',  value: '12' },
-  { label: 'Saved Annual Budget for barangays', value: null },
-];
+// ─── REPORT TYPE LABELS ───────────────────────────────────────────────────────
+// Map compliance_documents.document_type -> human-readable label and a tag
+// color for the row badge. Two values come from reportsApi.REPORT_TYPE_META.
+const REPORT_TYPE_META = {
+  FDP_Monitoring_Report: {
+    label: 'FDP Monitoring',
+    color: '#133E75',
+    bg:    '#E3ECF7',
+  },
+  Submission_Compliance_Report: {
+    label: 'Submission Compliance',
+    color: '#1B5E20',
+    bg:    '#E8F5E9',
+  },
+};
 
 // ─── ICON COMPONENTS ──────────────────────────────────────────────────────────
 const BellIcon = ({ hasNotif }) => (
@@ -69,20 +76,59 @@ const MenuIcon = () => (
   </View>
 );
 
-// ─── REPORT ROW ───────────────────────────────────────────────────────────────
-const ReportRow = ({ item, onPress }) => (
-  <TouchableOpacity
-    style={styles.reportRow}
-    onPress={() => onPress && onPress(item)}
-    activeOpacity={0.7}
-  >
-    <Text style={styles.reportName} numberOfLines={1}>{item.name}</Text>
-    <View style={styles.reportDateCell}>
-      <Text style={styles.reportTime}>{item.time}</Text>
-      <Text style={styles.reportDate}>  {item.date}</Text>
-    </View>
-  </TouchableOpacity>
-);
+// ─── DATE FORMATTERS ──────────────────────────────────────────────────────────
+function fmtShortDate(iso) {
+  if (!iso) return '—';
+  return new Date(iso).toLocaleDateString('en-PH', {
+    timeZone: 'Asia/Manila', month: '2-digit', day: '2-digit', year: 'numeric',
+  });
+}
+function fmtTime(iso) {
+  if (!iso) return '';
+  return new Date(iso).toLocaleTimeString('en-PH', {
+    timeZone: 'Asia/Manila', hour: 'numeric', minute: '2-digit',
+  });
+}
+
+// Fallback: react-native Alert.alert only logs on web. Use this so failure
+// / "no file" messages actually reach the user in the browser.
+function notify(title, message) {
+  if (Platform.OS === 'web') {
+    window.alert(message ? `${title}\n\n${message}` : title);
+    return;
+  }
+  Alert.alert(title, message);
+}
+
+// ─── REPORT ROW (active list) ──────────────────────────────────────────────
+const ReportRow = ({ item, onPress }) => {
+  const meta = REPORT_TYPE_META[item.document_type] || {
+    label: item.document_type || 'Report',
+    color: COLORS.navy,
+    bg: '#E3ECF7',
+  };
+  return (
+    <TouchableOpacity
+      style={styles.reportRow}
+      onPress={() => onPress && onPress(item)}
+      activeOpacity={0.7}
+    >
+      <View style={styles.reportNameWrap}>
+        <View style={[styles.reportBadge, { backgroundColor: meta.bg }]}>
+          <Text style={[styles.reportBadgeText, { color: meta.color }]}>{meta.label}</Text>
+        </View>
+        <Text style={styles.reportName} numberOfLines={1}>{item.title}</Text>
+        {item.barangay_name ? (
+          <Text style={styles.reportSubtext}>{item.barangay_name}</Text>
+        ) : null}
+      </View>
+      <View style={styles.reportDateCell}>
+        <Text style={styles.reportTime}>{fmtTime(item.upload_date)}</Text>
+        <Text style={styles.reportDate}>  {fmtShortDate(item.upload_date)}</Text>
+      </View>
+    </TouchableOpacity>
+  );
+};
 
 // ─── MAIN SCREEN ──────────────────────────────────────────────────────────────
 export default function LYDODocumentReportsScreen() {
@@ -95,6 +141,17 @@ export default function LYDODocumentReportsScreen() {
   const [sidebarVisible, setSidebarVisible] = useState(false);
   const [activeDocumentTab]                 = useState('Reports');
   const [currentTime, setCurrentTime]       = useState('');
+  const [reports, setReports]               = useState([]);
+  const [loading, setLoading]               = useState(false);
+  const [loadError, setLoadError]           = useState(null);
+
+  // ── Archive (superseded versions) ──
+  const [showArchiveView, setShowArchiveView] = useState(false);
+  const [archiveRecords, setArchiveRecords]   = useState([]);
+  const [archiveLoading, setArchiveLoading]   = useState(false);
+  const [archiveError, setArchiveError]       = useState(null);
+  const [expandedArchiveId, setExpandedArchiveId] = useState(null);
+  const [restoringId, setRestoringId]         = useState(null);
 
   const today = new Date().toLocaleDateString('en-PH', {
     timeZone: 'Asia/Manila', month: 'long', day: 'numeric', year: 'numeric',
@@ -119,10 +176,97 @@ export default function LYDODocumentReportsScreen() {
     return () => clearInterval(interval);
   }, []);
 
-  // ── Filtered reports ──
-  const filteredReports = REPORTS.filter(r =>
-    r.name.toLowerCase().includes(searchText.toLowerCase())
-  );
+  // ── Live fetch of saved reports from compliance_documents ──
+  // Lists FDP Monitoring and Submission Compliance report snapshots
+  // generated by the Monitor > Report screen. Newest first. Only ACTIVE
+  // (current) versions show here — saving a report of the same type/doc/
+  // year again archives the old row instead of piling up duplicates.
+  const loadReports = async () => {
+    setLoading(true);
+    setLoadError(null);
+    try {
+      const rows = await fetchSavedReports({ status: 'active' });
+      setReports(rows);
+    } catch (err) {
+      console.error('Failed to load saved reports:', err);
+      setLoadError(err.message || 'Failed to load saved reports.');
+      setReports([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // ── Fetch superseded versions for the Archive view ──
+  const loadArchive = async () => {
+    setArchiveLoading(true);
+    setArchiveError(null);
+    try {
+      const rows = await fetchArchivedReports({});
+      setArchiveRecords(rows);
+    } catch (err) {
+      console.error('Failed to load archived reports:', err);
+      setArchiveError(err.message || 'Failed to load archived reports.');
+      setArchiveRecords([]);
+    } finally {
+      setArchiveLoading(false);
+    }
+  };
+
+  const refreshAll = () => { loadReports(); loadArchive(); };
+
+  useEffect(() => { refreshAll(); }, []);
+
+  // ── Restore an archived version back to active ──
+  // Whatever is currently active for that same report gets archived in
+  // its place (handled server-side), so there's still only one active
+  // row per report at a time. Refresh both lists afterward since a
+  // restore moves a row between them.
+  const handleRestore = async (item) => {
+    setRestoringId(item.compliance_id);
+    try {
+      await restoreComplianceDocument(item.compliance_id);
+      notify('Restored', `"${item.title}" is now the active version.`);
+      setExpandedArchiveId(null);
+      refreshAll();
+    } catch (err) {
+      console.error('Failed to restore report:', err);
+      notify('Restore Failed', err.message || 'Could not restore this report. Please try again.');
+    } finally {
+      setRestoringId(null);
+    }
+  };
+
+  // ── Filtered reports (search applies to whichever view is showing) ──
+  const matchesSearch = (r) =>
+    (r.title || '').toLowerCase().includes(searchText.toLowerCase()) ||
+    (r.document_type || '').toLowerCase().includes(searchText.toLowerCase()) ||
+    (r.barangay_name || '').toLowerCase().includes(searchText.toLowerCase());
+
+  const filteredReports = reports.filter(matchesSearch);
+  const filteredArchive = archiveRecords.filter(matchesSearch);
+
+  // ── Open / download the saved PDF ──
+  // The scanned_file_url is a public URL in the 'documents' bucket. On web
+  // we open it in a new tab; on native, Linking hands the URL off to the
+  // device's default PDF viewer / browser.
+  const handleReportPress = async (item) => {
+    const url = item.scanned_file_url;
+    if (!url) {
+      notify('File Unavailable', 'This report does not have a file URL.');
+      return;
+    }
+    try {
+      const supported = await Linking.canOpenURL(url);
+      if (!supported) {
+        notify('Cannot Open', 'No app is available to open this file.');
+        return;
+      }
+      await Linking.openURL(url);
+    } catch (err) {
+      console.error('Failed to open report URL:', err);
+      notify('Open Failed', err.message || 'Could not open the report.');
+    }
+  };
 
   // ── Navigation ──
   const handleNav = (tab) => {
@@ -220,7 +364,7 @@ export default function LYDODocumentReportsScreen() {
         })}
       </View>
 
-      {/* Search + Quick Stats Row */}
+      {/* Search Row */}
       <View style={styles.searchStatsRow}>
         {/* Search box */}
         <View style={styles.searchBox}>
@@ -238,59 +382,200 @@ export default function LYDODocumentReportsScreen() {
             </TouchableOpacity>
           )}
         </View>
-
-        {/* Quick stats — top right */}
-        {!isMobile && (
-          <View style={styles.quickStatsBlock}>
-            <View style={styles.quickStatRow}>
-              <Text style={styles.quickStatLabel}>Reports :</Text>
-              <Text style={styles.quickStatValue}>{REPORTS.length}</Text>
-            </View>
-            <View style={styles.quickStatRow}>
-              <Text style={styles.quickStatLabel}>Downloads</Text>
-            </View>
-            <View style={styles.quickStatRow}>
-              <Text style={styles.quickStatLabel}>Saved Annual Budget for barangays</Text>
-            </View>
-          </View>
-        )}
       </View>
 
-      {/* Section label */}
-      <Text style={styles.sectionLabel}>All Documents</Text>
-
-      {/* Report Table */}
-      <View style={styles.tableContainer}>
-        {/* Table Header */}
-        <View style={styles.tableHeader}>
-          <Text style={[styles.tableHeaderText, { flex: 1 }]}>Report</Text>
-          <Text style={[styles.tableHeaderText, { width: 160, textAlign: 'right' }]}>Created Date</Text>
+      {/* Section label + Refresh + Archive toggle (shown for both views) */}
+      <View style={styles.sectionLabelRow}>
+        <Text style={styles.sectionLabel}>
+          {showArchiveView ? 'Archived Report Versions' : 'Saved FDP & Submission Reports'}
+        </Text>
+        <View style={styles.sectionLabelActions}>
+          <TouchableOpacity
+            style={styles.refreshBtn}
+            onPress={refreshAll}
+            activeOpacity={0.7}
+            disabled={loading}
+          >
+            {loading
+              ? <ActivityIndicator size="small" color={COLORS.navy} />
+              : <Text style={styles.refreshBtnText}>↻ Refresh</Text>}
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.archiveBtn}
+            activeOpacity={0.8}
+            onPress={() => setShowArchiveView(v => !v)}
+          >
+            <Text style={styles.archiveBtnText}>
+              🗂 {showArchiveView ? 'Hide Archive' : `View Archive${archiveRecords.length > 0 ? ` (${archiveRecords.length})` : ''}`}
+            </Text>
+          </TouchableOpacity>
         </View>
-
-        {/* Rows */}
-        {filteredReports.length > 0 ? (
-          filteredReports.map((item, idx) => (
-            <React.Fragment key={item.id}>
-              <ReportRow item={item} />
-              {idx < filteredReports.length - 1 && <View style={styles.divider} />}
-            </React.Fragment>
-          ))
-        ) : (
-          <View style={styles.emptyState}>
-            <Text style={styles.emptyText}>No reports found</Text>
-          </View>
-        )}
-
-        {/* Empty rows to fill table height — visual only */}
-        {filteredReports.length < 8 &&
-          Array.from({ length: Math.max(0, 5 - filteredReports.length) }).map((_, i) => (
-            <View key={`empty-${i}`}>
-              <View style={styles.reportRowEmpty} />
-              {i < 4 - filteredReports.length && <View style={styles.divider} />}
-            </View>
-          ))
-        }
       </View>
+
+      {!showArchiveView ? (
+        <>
+          {/* Report Table */}
+          <View style={styles.tableContainer}>
+            {/* Table Header */}
+            <View style={styles.tableHeader}>
+              <Text style={[styles.tableHeaderText, { flex: 1 }]}>Report</Text>
+              <Text style={[styles.tableHeaderText, { width: 160, textAlign: 'right' }]}>Created Date</Text>
+            </View>
+
+            {/* Loading / error states */}
+            {loading && reports.length === 0 && (
+              <View style={styles.emptyState}>
+                <ActivityIndicator size="small" color={COLORS.navy} />
+                <Text style={styles.emptyText}>Loading saved reports…</Text>
+              </View>
+            )}
+
+            {!loading && loadError && (
+              <View style={styles.emptyState}>
+                <Text style={[styles.emptyText, { color: '#8B0000' }]}>
+                  Couldn't load saved reports: {loadError}
+                </Text>
+              </View>
+            )}
+
+            {/* Rows */}
+            {!loading && !loadError && filteredReports.length > 0 ? (
+              filteredReports.map((item, idx) => (
+                <React.Fragment key={item.compliance_id}>
+                  <ReportRow item={item} onPress={handleReportPress} />
+                  {idx < filteredReports.length - 1 && <View style={styles.divider} />}
+                </React.Fragment>
+              ))
+            ) : null}
+
+            {!loading && !loadError && filteredReports.length === 0 && (
+              <View style={styles.emptyState}>
+                <Text style={styles.emptyText}>
+                  {reports.length === 0
+                    ? 'No saved reports yet. Generate one from Monitor > Report.'
+                    : 'No reports match your search.'}
+                </Text>
+              </View>
+            )}
+          </View>
+        </>
+      ) : (
+        /* ── ARCHIVE VIEW (same pattern as Document Templates > View Archive) ── */
+        <View style={styles.tableContainer}>
+          {/* Archive header */}
+          <View style={styles.archiveSectionHeader}>
+            <Text style={styles.archiveSectionTitle}>Archives</Text>
+            <View style={styles.archiveLockBadge}>
+              <Text style={styles.archiveLockText}>🔒 Superseded versions • Restore to reactivate</Text>
+            </View>
+          </View>
+
+          {archiveLoading && archiveRecords.length === 0 && (
+            <View style={styles.emptyState}>
+              <ActivityIndicator size="small" color={COLORS.navy} />
+              <Text style={styles.emptyText}>Loading archived reports…</Text>
+            </View>
+          )}
+
+          {!archiveLoading && archiveError && (
+            <View style={styles.emptyState}>
+              <Text style={[styles.emptyText, { color: '#8B0000' }]}>
+                Couldn't load archived reports: {archiveError}
+              </Text>
+            </View>
+          )}
+
+          {!archiveLoading && !archiveError && filteredArchive.length === 0 && (
+            <View style={styles.emptyState}>
+              <Text style={styles.emptyText}>
+                {archiveRecords.length === 0
+                  ? 'No archived report versions yet. Older versions show up here after you re-save a report.'
+                  : 'No archived reports match your search.'}
+              </Text>
+            </View>
+          )}
+
+          {!archiveLoading && !archiveError && filteredArchive.map((record, idx) => {
+            const meta = REPORT_TYPE_META[record.document_type] || {
+              label: record.document_type || 'Report',
+              color: COLORS.navy,
+              bg: '#E3ECF7',
+            };
+            const expanded = expandedArchiveId === record.compliance_id;
+            const isRestoring = restoringId === record.compliance_id;
+            return (
+              <View key={record.compliance_id}>
+                <TouchableOpacity
+                  style={styles.archiveRow}
+                  onPress={() => setExpandedArchiveId(prev => (prev === record.compliance_id ? null : record.compliance_id))}
+                  activeOpacity={0.75}
+                >
+                  <View style={styles.archiveRowMain}>
+                    <Text style={styles.archiveRowName} numberOfLines={2}>{record.title}</Text>
+                    <Text style={styles.archiveOldVersionText}>Superseded</Text>
+                  </View>
+
+                  {/* Expanded detail */}
+                  {expanded && (
+                    <View style={styles.archiveExpandedDetail}>
+                      <View style={styles.archiveDetailRow}>
+                        <Text style={styles.archiveDetailLabel}>Version</Text>
+                        <View style={styles.archiveVersionBadge}>
+                          <Text style={styles.archiveVersionText}>v{record.version}</Text>
+                        </View>
+                      </View>
+                      <View style={styles.archiveDetailRow}>
+                        <Text style={styles.archiveDetailLabel}>Type</Text>
+                        <View style={[styles.reportBadge, { backgroundColor: meta.bg }]}>
+                          <Text style={[styles.reportBadgeText, { color: meta.color }]}>{meta.label}</Text>
+                        </View>
+                      </View>
+                      {record.barangay_name ? (
+                        <View style={styles.archiveDetailRow}>
+                          <Text style={styles.archiveDetailLabel}>Barangay</Text>
+                          <Text style={styles.archiveDetailValue}>{record.barangay_name}</Text>
+                        </View>
+                      ) : null}
+                      <View style={styles.archiveDetailRow}>
+                        <Text style={styles.archiveDetailLabel}>Archived On</Text>
+                        <Text style={styles.archiveDetailValue}>
+                          {fmtShortDate(record.upload_date)}  {fmtTime(record.upload_date)}
+                        </Text>
+                      </View>
+                      <View style={styles.archiveDetailRow}>
+                        <Text style={styles.archiveDetailLabel}>Reason</Text>
+                        <Text style={[styles.archiveDetailValue, { flex: 1, textAlign: 'right' }]}>
+                          Replaced by newer version
+                        </Text>
+                      </View>
+                      <View style={[styles.archiveDetailRow, { gap: 8, marginTop: 8 }]}>
+                        <TouchableOpacity
+                          style={styles.archiveActionBtn}
+                          onPress={() => handleReportPress(record)}
+                          activeOpacity={0.8}
+                        >
+                          <Text style={styles.archiveActionBtnText}>⬇ Download</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={[styles.archiveActionBtn, { backgroundColor: '#E8F5E9' }]}
+                          onPress={() => handleRestore(record)}
+                          activeOpacity={0.8}
+                          disabled={isRestoring}
+                        >
+                          {isRestoring
+                            ? <ActivityIndicator size="small" color="#1B5E20" />
+                            : <Text style={[styles.archiveActionBtnText, { color: '#1B5E20' }]}>↩ Restore</Text>}
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  )}
+                </TouchableOpacity>
+                {idx < filteredArchive.length - 1 && <View style={styles.divider} />}
+              </View>
+            );
+          })}
+        </View>
+      )}
 
     </ScrollView>
   );
@@ -498,25 +783,45 @@ const styles = StyleSheet.create({
   },
   searchInput: { flex: 1, fontSize: 13, color: COLORS.darkText },
 
-  // Quick Stats
-  quickStatsBlock: {
-    flex: 1, alignItems: 'flex-end', paddingTop: 2,
+  // Archive toggle button
+  archiveBtn: {
+    paddingHorizontal: 14, paddingVertical: 7,
+    backgroundColor: COLORS.white, borderRadius: 6,
+    borderWidth: 1, borderColor: COLORS.lightGray,
   },
-  quickStatRow: {
-    flexDirection: 'row', alignItems: 'center',
-    marginBottom: 2,
-  },
-  quickStatLabel: {
-    fontSize: 13, color: COLORS.darkText, fontWeight: '400',
-  },
-  quickStatValue: {
-    fontSize: 13, color: COLORS.darkText, fontWeight: '700', marginLeft: 4,
-  },
+  archiveBtnText: { color: COLORS.subText, fontSize: 12, fontWeight: '700' },
 
   // Section label
+  sectionLabelRow: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    marginBottom: 10,
+  },
   sectionLabel: {
     fontSize: 13, fontWeight: '700', color: COLORS.darkText,
-    marginBottom: 10,
+  },
+  sectionLabelActions: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+  },
+  refreshBtn: {
+    paddingHorizontal: 12, paddingVertical: 6, borderRadius: 6,
+    borderWidth: 1, borderColor: COLORS.lightGray, backgroundColor: COLORS.white,
+  },
+  refreshBtnText: {
+    fontSize: 12, fontWeight: '700', color: COLORS.navy,
+  },
+
+  // Report row layout
+  reportNameWrap: { flex: 1, paddingRight: 8 },
+  reportBadge: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: 8, paddingVertical: 2,
+    borderRadius: 10, marginBottom: 4,
+  },
+  reportBadgeText: {
+    fontSize: 10, fontWeight: '700', letterSpacing: 0.4, textTransform: 'uppercase',
+  },
+  reportSubtext: {
+    fontSize: 11, color: COLORS.subText, marginTop: 2,
   },
 
   // Table
@@ -563,4 +868,54 @@ const styles = StyleSheet.create({
   // Empty state
   emptyState: { padding: 40, alignItems: 'center' },
   emptyText:  { fontSize: 14, color: COLORS.midGray },
+
+  // ── Archive View (mirrors lydo-document-templates) ──
+  archiveSectionHeader: {
+    paddingHorizontal: 18, paddingTop: 16, paddingBottom: 10,
+    borderBottomWidth: 1, borderBottomColor: COLORS.lightGray,
+    backgroundColor: COLORS.offWhite,
+    borderTopLeftRadius: 10, borderTopRightRadius: 10,
+  },
+  archiveSectionTitle: {
+    fontSize: 15, fontWeight: '800', color: COLORS.darkText, marginBottom: 6,
+  },
+  archiveLockBadge: {
+    backgroundColor: '#FFF8E1', borderRadius: 6, borderWidth: 1,
+    borderColor: '#F9C74F', paddingHorizontal: 10, paddingVertical: 5,
+    alignSelf: 'flex-start',
+  },
+  archiveLockText: { fontSize: 11, color: '#7A5800', fontWeight: '600' },
+  archiveRow: {
+    paddingHorizontal: 18, paddingVertical: 16,
+  },
+  archiveRowMain: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12,
+  },
+  archiveRowName: {
+    flex: 1, fontSize: 13, color: COLORS.darkText, fontWeight: '500', lineHeight: 18,
+  },
+  archiveOldVersionText: {
+    fontSize: 12, fontWeight: '700', color: '#B71C1C',
+  },
+  archiveExpandedDetail: {
+    marginTop: 12, paddingTop: 12,
+    borderTopWidth: 1, borderTopColor: COLORS.lightGray,
+  },
+  archiveDetailRow: {
+    flexDirection: 'row', alignItems: 'center',
+    justifyContent: 'space-between', marginBottom: 8,
+  },
+  archiveDetailLabel: { fontSize: 12, color: COLORS.subText, fontWeight: '600' },
+  archiveDetailValue: { fontSize: 12, color: COLORS.darkText, fontWeight: '500' },
+  archiveVersionBadge: {
+    backgroundColor: '#EFEBE9', borderRadius: 6,
+    paddingHorizontal: 8, paddingVertical: 3,
+    borderWidth: 1, borderColor: '#BCAAA4',
+  },
+  archiveVersionText: { fontSize: 11, fontWeight: '800', color: '#6D4C41' },
+  archiveActionBtn: {
+    flex: 1, paddingVertical: 8, borderRadius: 8,
+    backgroundColor: '#EEF2FB', alignItems: 'center',
+  },
+  archiveActionBtnText: { fontSize: 12, fontWeight: '700', color: '#5B8DD9' },
 });
