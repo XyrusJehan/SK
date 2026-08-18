@@ -2,12 +2,14 @@ import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, TextInput, ScrollView, TouchableOpacity,
   StyleSheet, SafeAreaView, StatusBar, Dimensions,
-  Image, Alert,
+  Alert,
 } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { useNav } from './navContext';
 import { useAuth } from './authContext';
 import { supabase } from '../../utils/supabase';
+import { NotificationModal, useNotificationCenter } from './notificationCenter';
+import Sidebar from './../components/Sidebar';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const isMobile = SCREEN_WIDTH < 768;
@@ -58,56 +60,50 @@ const COLORS = {
 const NAV_TABS      = ['Dashboard', 'Documents', 'Planning', 'Portal', 'Logs', 'Account'];
 const DOCUMENT_TABS = ['Folder', 'Document Management'];
 
-// ─── DOCUMENT CATEGORIES ─────────────────────────────────────────────────────
-const DOC_CATEGORIES = [
-  {
+// ─── DOCUMENT CATEGORIES (built from database) ────────────────────────────────
+// Map category names to color palette + icon for the folder cards
+const CATEGORY_META = {
+  Planning: {
     id: 'planning',
     title: 'PLANNING DOCUMENTS',
-    category: 'Planning',
     icon: '📅',
     colors: COLORS.planning,
     tab: 'Planning',
-    items: ['ABYIP', 'CBYDP', 'Work Plans', 'Project Proposals'],
   },
-  {
+  Financial: {
     id: 'financial',
     title: 'FINANCIAL DOCUMENTS',
-    category: 'Financial',
     icon: '💲',
     colors: COLORS.financial,
     tab: 'Financial',
-    items: [
-      'Monthly Itemized List',
-      'Quarterly Register of Bank',
-      'Annual Budget',
-      'Disbursement Vouchers',
-      'Liquidation Reports',
-    ],
   },
-  {
+  Governance: {
     id: 'governance',
     title: 'GOVERNANCE DOCUMENTS',
-    category: 'Governance',
     icon: '⚖️',
     colors: COLORS.governance,
     tab: 'Governance',
-    items: ['Resolutions', 'Ordinances'],
   },
-  {
+  Performance: {
     id: 'performance',
     title: 'PERFORMANCE DOCUMENTS',
-    category: 'Activities',
     icon: '👥',
     colors: COLORS.performance,
     tab: 'Activities',
-    items: [
-      'Accomplishment Reports',
-      'Activity Documentation',
-      'Event Reports',
-      'Minutes of the meetings',
-    ],
   },
-];
+};
+
+const getCategoryMeta = (name) => {
+  if (CATEGORY_META[name]) return CATEGORY_META[name];
+  // Fallback for any category not in the predefined map
+  return {
+    id: name.toLowerCase(),
+    title: `${name.toUpperCase()} DOCUMENTS`,
+    icon: '📁',
+    colors: COLORS.planning,
+    tab: name,
+  };
+};
 
 // ─── ICONS ────────────────────────────────────────────────────────────────────
 const BellIcon = ({ hasNotif }) => (
@@ -124,106 +120,10 @@ const MenuIcon = () => (
   </View>
 );
 
-// Dashboard: 2×2 grid of rounded squares
-const DashboardIcon = ({ color = '#fff', size = 16 }) => {
-  const s = size * 0.38;
-  const gap = size * 0.12;
-  const r = size * 0.12;
-  const box = { width: s, height: s, borderRadius: r, backgroundColor: color };
-  return (
-    <View style={{ width: size, height: size, justifyContent: 'center', alignItems: 'center' }}>
-      <View style={{ flexDirection: 'row', gap }}>
-        <View style={box} />
-        <View style={box} />
-      </View>
-      <View style={{ height: gap }} />
-      <View style={{ flexDirection: 'row', gap }}>
-        <View style={box} />
-        <View style={box} />
-      </View>
-    </View>
-  );
-};
-
-// Documents: file shape with fold + two lines
-const DocumentsIcon = ({ color = '#fff', size = 16 }) => {
-  const w = size * 0.6, h = size * 0.78;
-  const fold = size * 0.22;
-  return (
-    <View style={{ width: size, height: size, justifyContent: 'center', alignItems: 'center' }}>
-      <View style={{ width: w, height: h, justifyContent: 'flex-end', paddingBottom: size * 0.08, paddingHorizontal: size * 0.1 }}>
-        <View style={{ position: 'absolute', left: 0, right: 0, top: fold, bottom: 0, borderWidth: 1.5, borderColor: color, borderRadius: size * 0.08 }} />
-        <View style={{ position: 'absolute', top: 0, right: 0, width: fold, height: fold, backgroundColor: color, borderBottomLeftRadius: size * 0.06 }} />
-        <View style={{ position: 'absolute', top: 0, left: 0, width: w - fold, height: fold, borderTopWidth: 1.5, borderLeftWidth: 1.5, borderColor: color, borderTopLeftRadius: size * 0.08 }} />
-        <View style={{ height: 1.5, backgroundColor: color, borderRadius: 1, marginBottom: size * 0.1, width: '80%' }} />
-        <View style={{ height: 1.5, backgroundColor: color, borderRadius: 1, width: '55%' }} />
-      </View>
-    </View>
-  );
-};
-
-// Planning: calendar grid
-const PlanningIcon = ({ color = '#fff', size = 16 }) => {
-  const bw = 1.5;
-  return (
-    <View style={{ width: size, height: size, justifyContent: 'center', alignItems: 'center' }}>
-      <View style={{ width: size * 0.82, height: size * 0.75, borderWidth: bw, borderColor: color, borderRadius: size * 0.1, overflow: 'hidden' }}>
-        <View style={{ height: size * 0.22, backgroundColor: color, width: '100%' }} />
-        <View style={{ flex: 1, flexDirection: 'row', justifyContent: 'space-around', alignItems: 'center', paddingHorizontal: size * 0.05 }}>
-          {[0,1,2].map(i => <View key={i} style={{ width: size * 0.1, height: size * 0.1, borderRadius: size * 0.05, backgroundColor: color }} />)}
-        </View>
-      </View>
-      <View style={{ position: 'absolute', top: 0, flexDirection: 'row', gap: size * 0.32 }}>
-        {[0,1].map(i => <View key={i} style={{ width: size * 0.1, height: size * 0.2, backgroundColor: color, borderRadius: size * 0.05 }} />)}
-      </View>
-    </View>
-  );
-};
-
-// Portal: simple globe
-const PortalIcon = ({ color = '#fff', size = 16 }) => (
-  <View style={{ width: size, height: size, justifyContent: 'center', alignItems: 'center' }}>
-    <View style={{ width: size * 0.82, height: size * 0.82, borderRadius: size * 0.41, borderWidth: 1.5, borderColor: color, justifyContent: 'center', alignItems: 'center', overflow: 'hidden' }}>
-      <View style={{ position: 'absolute', height: 1.5, width: '100%', backgroundColor: color }} />
-      <View style={{ width: size * 0.38, height: size * 0.78, borderRadius: size * 0.19, borderWidth: 1.5, borderColor: color, backgroundColor: 'transparent' }} />
-    </View>
-  </View>
-);
-
-// Logs: clipboard with checkmark lines
-const LogsIcon = ({ color = '#fff', size = 16 }) => (
-  <View style={{ width: size, height: size, justifyContent: 'center', alignItems: 'center' }}>
-    <View style={{ width: size * 0.75, height: size * 0.85, borderWidth: 1.5, borderColor: color, borderRadius: size * 0.1, paddingHorizontal: size * 0.1, paddingVertical: size * 0.1, justifyContent: 'space-around' }}>
-      <View style={{ position: 'absolute', top: -size * 0.08, alignSelf: 'center', width: size * 0.3, height: size * 0.14, backgroundColor: color, borderRadius: size * 0.04 }} />
-      {[0,1,2].map(i => (
-        <View key={i} style={{ flexDirection: 'row', alignItems: 'center', gap: size * 0.08, marginTop: i === 0 ? size * 0.1 : 0 }}>
-          <View style={{ width: size * 0.1, height: size * 0.1, borderRadius: size * 0.05, backgroundColor: color }} />
-          <View style={{ flex: 1, height: 1.5, backgroundColor: color, borderRadius: 1 }} />
-        </View>
-      ))}
-    </View>
-  </View>
-);
-
-// Account: head + shoulders silhouette
-const AccountIcon = ({ color = '#fff', size = 16 }) => (
-  <View style={{ width: size, height: size, justifyContent: 'center', alignItems: 'center' }}>
-    <View style={{ width: size * 0.38, height: size * 0.38, borderRadius: size * 0.19, borderWidth: 1.5, borderColor: color, marginBottom: size * 0.04 }} />
-    <View style={{ width: size * 0.72, height: size * 0.36, borderBottomLeftRadius: size * 0.36, borderBottomRightRadius: size * 0.36, borderWidth: 1.5, borderColor: color, borderTopWidth: 0, overflow: 'hidden' }} />
-  </View>
-);
-
-// Logout: door with arrow
-const LogoutNavIcon = ({ color = '#fff', size = 16 }) => (
-  <View style={{ width: size, height: size, justifyContent: 'center', alignItems: 'center' }}>
-    <View style={{ position: 'absolute', left: 0, top: 0, width: size * 0.55, height: size, borderWidth: 1.5, borderColor: color, borderRadius: size * 0.08 }} />
-    <View style={{ position: 'absolute', right: size * 0.02, width: size * 0.52, height: 1.8, backgroundColor: color, borderRadius: 1 }} />
-    <View style={{ position: 'absolute', right: size * 0.02, width: size * 0.2, height: size * 0.2, borderTopWidth: 1.8, borderRightWidth: 1.8, borderColor: color, transform: [{ rotate: '45deg' }], marginTop: -size * 0.01 }} />
-  </View>
-);
+// Nav icons + NAV_ITEMS now live in the shared Sidebar module (see import above).
 
 // ─── DOCUMENT CARD (lydo-style) ───────────────────────────────────────────────
-const DocumentCard = ({ group, onItemPress, submittedSet, labelToDocType }) => {
+const DocumentCard = ({ group, onItemPress, submittedSet }) => {
   const { colors, title, icon, items } = group;
   return (
     <View style={[styles.card, { backgroundColor: colors.bg, borderColor: colors.border || '#E5E5E5' }]}>
@@ -233,17 +133,16 @@ const DocumentCard = ({ group, onItemPress, submittedSet, labelToDocType }) => {
       </View>
       <View style={styles.cardBody}>
         {items.map((item, idx) => {
-          const docType = (labelToDocType && labelToDocType[item]) || item;
-          const hasSubmission = submittedSet && submittedSet.has(docType);
+          const hasSubmission = submittedSet && submittedSet.has(Number(item.id));
           return (
             <TouchableOpacity
-              key={idx}
+              key={item.id || idx}
               style={styles.docItem}
               onPress={() => onItemPress && onItemPress(item, group)}
               activeOpacity={0.7}
             >
               <View style={[styles.docBullet, { backgroundColor: colors.header }]} />
-              <Text style={[styles.docItemText, { color: hasSubmission ? colors.subText : '#E53935' }]}>{item}</Text>
+              <Text style={[styles.docItemText, { color: hasSubmission ? colors.subText : '#E53935' }]}>{item.name}</Text>
               {!hasSubmission && <View style={styles.redDot} />}
             </TouchableOpacity>
           );
@@ -265,9 +164,22 @@ export default function SKDocumentScreen() {
 
   const [activeDocTab, setActiveDocTab]     = useState('Folder');
   const [searchText, setSearchText]         = useState('');
-  const [notifCount]                        = useState(2);
   const [sidebarVisible, setSidebarVisible] = useState(false);
   const [documents, setDocuments]           = useState([]);
+
+  // This screen is always the "Folder" view. Tapping "Document Management" sets
+  // activeDocTab locally before navigating away so the tab highlights briefly,
+  // but since this screen stays mounted in the background, that stale value
+  // would otherwise still be active when the user comes back. Reset it on focus.
+  useFocusEffect(
+    useCallback(() => {
+      setActiveDocTab('Folder');
+    }, [])
+  );
+
+  // ── Shared notification bell (returned/approved docs, templates, deadlines) ──
+  const notif = useNotificationCenter(barangayId);
+  const notifCount = notif.count;
 
   // Reference tables - fetched from database
   const [documentCategories, setDocumentCategories] = useState([]);
@@ -364,44 +276,27 @@ export default function SKDocumentScreen() {
 
   const handleLogout = () => { logout(); router.replace('/'); };
 
-  // Handle bell/notification press
-  const handleNotificationPress = () => {
-    if (notifCount > 0) {
-      Alert.alert(
-        'Notifications',
-        `You have ${notifCount} notification${notifCount > 1 ? 's' : ''}.\n\nThis feature is coming soon!`,
-        [{ text: 'OK' }]
-      );
-    }
-  };
-
-  // Tap a bullet item → navigate to list screen with category + subType params
-  const handleItemPress = (itemName, group) => {
+  // Tap a bullet item → navigate to list screen filtered to just the category (shows All)
+  const handleItemPress = (item, group) => {
     router.push({
       pathname: '/(tabs)/sk-document-list',
-      params: { category: group.category, subType: itemName },
+      params: { category: group.category },
     });
   };
 
-  // Map short card labels → document_type IDs stored in the DB
-  // Based on document_types table: 1-2=Planning, 3-6=Financial, 7-9=Governance, 10-12=Performance
-  const LABEL_TO_DOC_TYPE = {
-    'ABYIP':                      1,  // Annual Barangay Youth Investment Program
-    'CBYDP':                      2,  // Comprehensive Barangay Youth Development Plan
-    'Work Plans':                 null,
-    'Project Proposals':         null,
-    'Monthly Itemized List':      3,
-    'Quarterly Register of Bank': 4,
-    'Annual Budget':              5,  // Approved Annual Budget
-    'Disbursement Vouchers':      6,
-    'Liquidation Reports':        null,
-    'Resolutions':                7,
-    'Ordinances':                 8,
-    'Accomplishment Reports':     10,
-    'Activity Documentation':     11,
-    'Event Reports':              12,
-    'Minutes of the meetings':    9,
-  };
+  // Build categories dynamically from fetched document_types grouped by document_category
+  const fetchedCategories = documentCategories.map(cat => {
+    const meta = getCategoryMeta(cat.document_category);
+    const items = documentTypes
+      .filter(t => t.category === cat.id)
+      .map(t => ({ id: t.id, name: t.document_type }));
+    return {
+      ...meta,
+      categoryId: cat.id,
+      category: cat.document_category,
+      items,
+    };
+  });
 
   // Build a set of document_type IDs that have been submitted/approved/returned
   const submittedSet = new Set(
@@ -412,59 +307,24 @@ export default function SKDocumentScreen() {
   );
 
   // Filter by search only (Folder tab shows all categories)
-  const visibleCategories = DOC_CATEGORIES.filter(cat => {
+  const visibleCategories = fetchedCategories.filter(cat => {
     const matchesSearch = searchText === '' ||
       cat.title.toLowerCase().includes(searchText.toLowerCase()) ||
-      cat.items.some(i => i.toLowerCase().includes(searchText.toLowerCase()));
+      cat.items.some(i => i.name.toLowerCase().includes(searchText.toLowerCase()));
     return matchesSearch;
   });
 
-  // ── Sidebar ──
-  const NAV_ITEMS = [
-    { tab: 'Dashboard', IconComponent: DashboardIcon },
-    { tab: 'Documents', IconComponent: DocumentsIcon },
-    { tab: 'Planning',  IconComponent: PlanningIcon  },
-    { tab: 'Portal',    IconComponent: PortalIcon    },
-    { tab: 'Logs',      IconComponent: LogsIcon      },
-    { tab: 'Account',   IconComponent: AccountIcon   },
-  ];
-
+  // ── Sidebar (rendered by the shared Sidebar module) ──
   const renderSidebar = () => (
-    <View style={[styles.sidebar, isMobile && !sidebarVisible && styles.sidebarHidden]}>
-      <View style={styles.logoPill}>
-        <Image
-          source={require('./../../assets/images/sk-logo.png')}
-          style={styles.logoImage}
-          resizeMode="contain"
-        />
-      </View>
-      <View style={{ height: 28 }} />
-      {NAV_ITEMS.map(({ tab, IconComponent }) => {
-        const active = activeTab === tab;
-        const iconColor = active ? '#133E75' : 'rgba(255,255,255,0.85)';
-        return (
-          <TouchableOpacity
-            key={tab}
-            style={[styles.navItem, active && styles.navItemActive]}
-            onPress={() => handleNavPress(tab)}
-            activeOpacity={0.8}
-          >
-            <View style={styles.navItemInner}>
-              <IconComponent color={iconColor} size={16} />
-              <Text style={[styles.navLabel, active && styles.navLabelActive]}>{tab}</Text>
-            </View>
-          </TouchableOpacity>
-        );
-      })}
-      <View style={{ flex: 1 }} />
-      <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout} activeOpacity={0.8}>
-        <View style={styles.navItemInner}>
-          <LogoutNavIcon color="rgba(255,255,255,0.85)" size={16} />
-          <Text style={styles.logoutText}>Logout</Text>
-        </View>
-      </TouchableOpacity>
-    </View>
+    <Sidebar
+      activeTab={activeTab}
+      onNavPress={handleNavPress}
+      onLogout={handleLogout}
+      isMobile={isMobile}
+      sidebarVisible={sidebarVisible}
+    />
   );
+
 
   // ── Main Content ──
   const renderContent = () => (
@@ -482,13 +342,13 @@ export default function SKDocumentScreen() {
           <Text style={styles.mobileTitle}>Documents</Text>
           <TouchableOpacity
             style={[styles.bellBtn, styles.bellBtnMobile]}
-            onPress={handleNotificationPress}
+            onPress={notif.open}
             activeOpacity={0.7}
           >
-            <BellIcon hasNotif={notifCount > 0} />
+            <BellIcon hasNotif={notif.hasUnviewed} />
             {notifCount > 0 && (
               <View style={styles.notifBadge}>
-                <Text style={styles.notifBadgeText}>{notifCount}</Text>
+                <Text style={styles.notifBadgeText}>{notifCount > 99 ? '99+' : notifCount}</Text>
               </View>
             )}
           </TouchableOpacity>
@@ -504,23 +364,20 @@ export default function SKDocumentScreen() {
           </View>
           <TouchableOpacity
             style={styles.bellBtn}
-            onPress={handleNotificationPress}
+            onPress={notif.open}
             activeOpacity={0.7}
           >
-            <BellIcon hasNotif={notifCount > 0} />
+            <BellIcon hasNotif={notif.hasUnviewed} />
             {notifCount > 0 && (
               <View style={styles.notifBadge}>
-                <Text style={styles.notifBadgeText}>{notifCount}</Text>
+                <Text style={styles.notifBadgeText}>{notifCount > 99 ? '99+' : notifCount}</Text>
               </View>
             )}
           </TouchableOpacity>
         </View>
       )}
 
-      {/* Category label + Tab bar */}
-      <View style={styles.categoryRow}>
-        <Text style={styles.categoryLabel}>Category:</Text>
-      </View>
+  
 
       <View style={styles.filterRow}>
         {/* Folder / Document Management tab bar */}
@@ -573,7 +430,7 @@ export default function SKDocumentScreen() {
         {visibleCategories.length > 0 ? (
           visibleCategories.map(cat => (
             <View key={cat.id} style={isMobile ? styles.cardWrapperMobile : styles.cardWrapper}>
-              <DocumentCard group={cat} onItemPress={handleItemPress} submittedSet={submittedSet} labelToDocType={LABEL_TO_DOC_TYPE} />
+              <DocumentCard group={cat} onItemPress={handleItemPress} submittedSet={submittedSet} />
             </View>
           ))
         ) : (
@@ -588,6 +445,14 @@ export default function SKDocumentScreen() {
   return (
     <SafeAreaView style={styles.safe}>
       <StatusBar barStyle="light-content" backgroundColor={COLORS.navy} />
+
+      <NotificationModal
+        {...notif.modalProps}
+        onOpenRoute={(route) => {
+          notif.close();
+          setTimeout(() => router.push(route), 120);
+        }}
+      />
 
       <View style={styles.layout}>
         {isMobile && sidebarVisible && (
@@ -609,44 +474,11 @@ const styles = StyleSheet.create({
   safe:   { flex: 1, backgroundColor: COLORS.navy },
   layout: { flex: 1, flexDirection: 'row' },
 
-  // ── Sidebar ──
-  sidebar: {
-    width: 250, backgroundColor: COLORS.navy,
-    alignItems: 'center', paddingTop: 20, paddingBottom: 24,
-    paddingHorizontal: 10, zIndex: 20,
-    ...(isMobile ? {
-      position: 'absolute', top: 0, left: 0, bottom: 0, zIndex: 20,
-    } : {}),
-  },
-  sidebarHidden: {
-    display: 'none',
-  },
+  // Sidebar styles now live in the shared Sidebar module.
   sidebarOverlay: {
     position: 'absolute', left: 0, top: 0, bottom: 0, right: 0,
     backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 15,
   },
-  logoPill: {
-    marginTop: 20, width: 70, height: 70, borderRadius: 35,
-    backgroundColor: 'rgba(255,255,255,0.15)',
-    alignItems: 'center', justifyContent: 'center',
-    marginBottom: 8, borderWidth: 2, borderColor: 'rgba(255,255,255,0.3)',
-  },
-  logoImage: { width: 100, height: 100 },
-  navItem: {
-    width: '100%', paddingVertical: 12, paddingHorizontal: 12,
-    borderRadius: 24, marginBottom: 8, alignItems: 'center',
-    borderWidth: 1.5, borderColor: COLORS.white, backgroundColor: COLORS.navy,
-  },
-  navItemInner: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  navItemActive: { backgroundColor: COLORS.white, borderColor: COLORS.white },
-  navLabel: { fontSize: 13, fontWeight: '600', color: 'rgba(255,255,255,0.85)', letterSpacing: 0.3 },
-  navLabelActive: { color: '#000', fontWeight: '800' },
-  logoutBtn: {
-    width: '100%', paddingVertical: 12, paddingHorizontal: 12, borderRadius: 24,
-    marginTop: 8, alignItems: 'center', borderWidth: 1.5, borderColor: COLORS.white,
-    backgroundColor: 'rgba(255,255,255,0.1)',
-  },
-  logoutText: { fontSize: 13, fontWeight: '600', color: '#fff', letterSpacing: 0.3 },
 
   // ── Main ──
   main:        { flex: 1, backgroundColor: COLORS.offWhite, borderTopLeftRadius: 20 },
@@ -676,7 +508,10 @@ const styles = StyleSheet.create({
     fontSize: 10, fontWeight: '600', color: COLORS.subText,
     letterSpacing: 2, textTransform: 'uppercase', marginBottom: 2,
   },
-  headerTitle: { fontSize: 22, fontWeight: '900', color: COLORS.darkText },
+  headerTitle: {
+    fontSize: 22, fontWeight: '900', color: COLORS.darkText, letterSpacing: 0.3,
+    borderBottomWidth: 2, borderBottomColor: COLORS.lightGray, paddingBottom: 4, marginBottom: 6,
+  },
 
   // Bell
   bellBtn: {
@@ -742,7 +577,7 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.15)', alignItems: 'center', justifyContent: 'center',
   },
   docTabActive: {
-    backgroundColor: COLORS.gold, borderRadius: 4, borderColor: COLORS.gold,
+    backgroundColor: COLORS.gold, borderColor: COLORS.gold,
     shadowColor: COLORS.gold, shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.4, shadowRadius: 4, elevation: 3,
   },

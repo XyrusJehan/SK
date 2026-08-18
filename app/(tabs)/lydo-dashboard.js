@@ -14,10 +14,8 @@ import {
   View
 } from 'react-native';
 import { supabase } from '../../utils/supabase';
+import { useLydoNotificationCenter, LydoNotificationModal, LydoBellIcon } from './notificationCenter';
 import Sidebar, { LYDO_NAV_ITEMS } from './../components/Sidebar';
-import { useAuth } from './authContext';
-import { useNav } from './navContext';
-import { LydoBellIcon, LydoNotificationModal, useLydoNotificationCenter } from './notificationCenter';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const isMobile = SCREEN_WIDTH < 768;

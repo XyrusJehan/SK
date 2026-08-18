@@ -16,6 +16,10 @@ import {
   TouchableOpacity,
   View
 } from 'react-native';
+import { useRouter } from 'expo-router';
+import { useNav } from './navContext';
+import Sidebar, { LYDO_NAV_ITEMS } from './../components/Sidebar';
+import { useAuth } from './authContext';
 import { supabase } from '../../utils/supabase';
 import Sidebar, { LYDO_NAV_ITEMS } from './../components/Sidebar';
 import { useAuth } from './authContext';

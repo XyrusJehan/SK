@@ -1,11 +1,10 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from '@react-navigation/native';
 import { useRouter } from 'expo-router';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
-  Dimensions,
-  Modal,
+  Dimensions, Image, Modal,
   SafeAreaView,
   ScrollView,
   StatusBar,
@@ -15,9 +14,9 @@ import {
   View
 } from 'react-native';
 import { supabase } from '../../utils/supabase';
-import Sidebar from './../components/Sidebar';
 import { useAuth } from './authContext';
 import { useNav } from './navContext';
+import Sidebar from './../components/Sidebar';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const isMobile = SCREEN_WIDTH < 768;
