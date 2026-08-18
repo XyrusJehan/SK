@@ -1,4 +1,5 @@
 import { Feather } from '@expo/vector-icons';
+import * as DocumentPicker from 'expo-document-picker';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -444,6 +445,12 @@ export default function SKDocumentManagementScreen() {
   const [viewerModal, setViewerModal] = useState({ visible: false, fileUrl: null, title: '' });
   const [webViewLoading, setWebViewLoading] = useState(false);
   const [returnedViewerDoc, setReturnedViewerDoc] = useState(null);
+  const [editModalVisible, setEditModalVisible] = useState(false);
+  const [documentToEdit, setDocumentToEdit] = useState(null);
+  const [editTitle, setEditTitle] = useState('');
+  const [editLoading, setEditLoading] = useState(false);
+  const [selectedEditFile, setSelectedEditFile] = useState(null);
+  const [uploadingEditFile, setUploadingEditFile] = useState(false);
 
   const showAlert = (type, title, message) => {
     setAlertModal({ visible: true, type, title, message });
@@ -673,6 +680,187 @@ export default function SKDocumentManagementScreen() {
     }
   };
 
+  // Handle edit button press for returned documents
+  const handleEditPress = (doc) => {
+    setDocumentToEdit(doc);
+    setEditTitle(doc.title);
+    setSelectedEditFile(null);
+    setEditModalVisible(true);
+  };
+
+  // Pick file for editing
+  const pickEditFile = async () => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'],
+        copyToCacheDirectory: true,
+      });
+
+      if (result.canceled) {
+        return;
+      }
+
+      setSelectedEditFile(result.assets[0]);
+    } catch (error) {
+      console.error('Error picking file:', error);
+      showAlert('error', 'Error', 'Failed to select file. Please try again.');
+    }
+  };
+
+  // Upload file to Supabase storage
+  const uploadEditFile = async (file) => {
+    if (!file) return null;
+
+    try {
+      const sanitizedName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+      const fileName = `${Date.now()}_${sanitizedName}`;
+
+      const response = await fetch(file.uri);
+      const blob = await response.blob();
+
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from('documents')
+        .upload(fileName, blob, {
+          contentType: file.type || 'application/octet-stream',
+        });
+
+      if (uploadError) {
+        console.error('Upload error:', uploadError);
+        return null;
+      }
+
+      const { data: urlData } = supabase.storage
+        .from('documents')
+        .getPublicUrl(fileName);
+
+      return urlData.publicUrl;
+    } catch (error) {
+      console.error('Error uploading file:', error);
+      return null;
+    }
+  };
+
+  // Handle confirm edit - update the document with new file and forward to LYDO
+  const handleConfirmEdit = async () => {
+    if (!documentToEdit) {
+      showAlert('error', 'Error', 'No document selected.');
+      return;
+    }
+
+    // Check if a new file is selected
+    if (!selectedEditFile) {
+      showAlert('error', 'Error', 'Please select a file to replace the current document.');
+      return;
+    }
+
+    setEditLoading(true);
+    try {
+      // First, get the current file URL from the document to save as the returned version
+      const { data: currentDoc } = await supabase
+        .from('documents')
+        .select('file_url, current_version')
+        .eq('document_id', documentToEdit.id)
+        .single();
+
+      const currentFileUrl = currentDoc?.file_url;
+      const currentVersion = currentDoc?.current_version || 1;
+
+      // Upload the new file
+      setUploadingEditFile(true);
+      const newFileUrl = await uploadEditFile(selectedEditFile);
+
+      if (!newFileUrl) {
+        showAlert('error', 'Upload Failed', 'Failed to upload the file. Please try again.');
+        setEditLoading(false);
+        setUploadingEditFile(false);
+        return;
+      }
+      setUploadingEditFile(false);
+
+      // Get current max version number
+      const { data: existingVersions } = await supabase
+        .from('document_versions')
+        .select('version_number')
+        .eq('document_id', documentToEdit.id)
+        .order('version_number', { ascending: false })
+        .limit(1);
+
+      const newVersionNumber = (existingVersions?.[0]?.version_number || 0) + 1;
+
+      // If there's a current file URL, save it as a 'returned' version before replacing
+      if (currentFileUrl) {
+        const { error: returnedVersionError } = await supabase
+          .from('document_versions')
+          .insert({
+            document_id: documentToEdit.id,
+            version_number: currentVersion,
+            file_url: currentFileUrl,
+            action: 'returned',
+            actioned_by: user.userId,
+          });
+
+        if (returnedVersionError) {
+          console.error('Error saving returned version:', returnedVersionError);
+          // Continue anyway - this is not critical
+        }
+      }
+
+      // Create version record with action 'submitted' for the new file
+      const { error: versionError } = await supabase
+        .from('document_versions')
+        .insert({
+          document_id: documentToEdit.id,
+          version_number: newVersionNumber,
+          file_url: newFileUrl,
+          action: 'submitted',
+          actioned_by: user.userId,
+        });
+
+      if (versionError) {
+        console.error('Error creating version:', versionError);
+        showAlert('error', 'Edit Failed', 'Failed to save document version. Please try again.');
+        setEditLoading(false);
+        return;
+      }
+
+      // Update document with new file URL, increment version, and set status to submitted (forward to LYDO)
+      const { error: updateError } = await supabase
+        .from('documents')
+        .update({
+          file_url: newFileUrl,
+          current_version: newVersionNumber,
+          status: 'submitted',
+          saved_at: new Date().toISOString(),
+          submitted_at: new Date().toISOString(),
+        })
+        .eq('document_id', documentToEdit.id);
+
+      if (updateError) {
+        console.error('Error updating document:', updateError);
+        showAlert('error', 'Edit Failed', 'Failed to update the document. Please try again.');
+        setEditLoading(false);
+        return;
+      }
+
+      setEditModalVisible(false);
+      setDocumentToEdit(null);
+      setEditTitle('');
+      setSelectedEditFile(null);
+
+      // Refresh documents
+      await fetchDocuments();
+
+      // Log the activity
+      await logActivity('Save & Forward', `Saved and forwarded "${documentToEdit?.title}" to LYDO`);
+
+      showAlert('success', 'Saved & Forwarded', 'The document has been saved and forwarded to LYDO.');
+    } catch (error) {
+      console.error('Error:', error);
+      showAlert('error', 'Unexpected Error', 'An error occurred while editing the document.');
+    }
+    setEditLoading(false);
+  };
+
   // Handle forward button press
   const handleForwardPress = (doc) => {
     console.log('Forward pressed for doc:', doc);
@@ -855,7 +1043,24 @@ export default function SKDocumentManagementScreen() {
         </View>
       )}
 
-      
+      {/* Search Bar */}
+      <View style={styles.searchRow}>
+        <View style={styles.searchBox}>
+          <Text style={styles.searchIcon}>🔍</Text>
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Search"
+            placeholderTextColor={COLORS.midGray}
+            value={searchText}
+            onChangeText={setSearchText}
+          />
+          {searchText.length > 0 && (
+            <TouchableOpacity onPress={() => setSearchText('')}>
+              <Text style={{ color: COLORS.midGray, fontSize: 12 }}>✕</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      </View>
 
       {/* Folder / Document Management Tab Bar */}
       <View style={styles.filterRow}>
@@ -880,25 +1085,6 @@ export default function SKDocumentManagementScreen() {
               </TouchableOpacity>
             );
           })}
-        </View>
-      </View>
-
-      {/* Search Bar */}
-      <View style={styles.searchRow}>
-        <View style={styles.searchBox}>
-          <Text style={styles.searchIcon}>🔍</Text>
-          <TextInput
-            style={styles.searchInput}
-            placeholder="Search"
-            placeholderTextColor={COLORS.midGray}
-            value={searchText}
-            onChangeText={setSearchText}
-          />
-          {searchText.length > 0 && (
-            <TouchableOpacity onPress={() => setSearchText('')}>
-              <Text style={{ color: COLORS.midGray, fontSize: 12 }}>✕</Text>
-            </TouchableOpacity>
-          )}
         </View>
       </View>
 
@@ -1090,7 +1276,7 @@ export default function SKDocumentManagementScreen() {
                   </TouchableOpacity>
                 ) : doc.status === 'returned' ? (
                   <>
-                    <TouchableOpacity activeOpacity={0.7} onPress={() => {}}>
+                    <TouchableOpacity activeOpacity={0.7} onPress={() => handleEditPress(doc)}>
                       <EditIcon />
                     </TouchableOpacity>
                     <TouchableOpacity activeOpacity={0.7} onPress={() => setReturnedViewerDoc(doc)}>
@@ -1431,6 +1617,95 @@ export default function SKDocumentManagementScreen() {
         </Modal>
       </View>
 
+      {/* ── Edit Returned Document Modal ── */}
+      <Modal
+        visible={editModalVisible}
+        animationType="fade"
+        transparent={true}
+        onRequestClose={() => setEditModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalIconStrip}>
+              <View style={[styles.modalIconCircle, { backgroundColor: '#DBEAFE' }]}>
+                <Feather name="send" size={28} color={COLORS.blue} />
+              </View>
+            </View>
+            <View style={styles.modalBody}>
+              <Text style={styles.modalTitle}>Save & Forward to LYDO</Text>
+              <Text style={styles.modalBodyText}>
+                Replace the returned file and forward to LYDO.{'\n'}Select a new file to replace the current one.
+              </Text>
+
+              {/* Document Title (Read-only) */}
+              <View style={styles.editInputContainer}>
+                <Text style={styles.editInputLabel}>Document Title:</Text>
+                <View style={styles.editTitleDisplay}>
+                  <Text style={styles.editTitleText}>{documentToEdit?.title}</Text>
+                </View>
+              </View>
+
+              {/* Current File */}
+              <View style={styles.editInputContainer}>
+                <Text style={styles.editInputLabel}>Current File:</Text>
+                <View style={styles.editFileDisplay}>
+                  <Feather name="file-text" size={16} color={COLORS.subText} />
+                  <Text style={styles.editFileName} numberOfLines={1}>
+                    {documentToEdit?.fileUrl ? documentToEdit.fileUrl.split('/').pop() : 'No file'}
+                  </Text>
+                </View>
+              </View>
+
+              {/* New File Selection */}
+              <View style={styles.editInputContainer}>
+                <Text style={styles.editInputLabel}>Replace with new file:</Text>
+                <TouchableOpacity
+                  style={styles.editFilePickerBtn}
+                  onPress={pickEditFile}
+                  activeOpacity={0.8}
+                >
+                  <Feather name="upload-cloud" size={18} color={COLORS.navy} />
+                  <Text style={styles.editFilePickerText}>
+                    {selectedEditFile ? selectedEditFile.name : 'Choose File (PDF, Word)'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+            <View style={styles.modalDivider} />
+            <View style={styles.modalFooter}>
+              <TouchableOpacity
+                style={styles.modalCancelBtn}
+                onPress={() => { setEditModalVisible(false); setDocumentToEdit(null); setSelectedEditFile(null); }}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.modalCancelBtnText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.modalActionBtn,
+                  { backgroundColor: COLORS.blue },
+                  (editLoading || !selectedEditFile) && styles.modalBtnDisabled
+                ]}
+                onPress={handleConfirmEdit}
+                disabled={editLoading || !selectedEditFile}
+                activeOpacity={0.8}
+              >
+                {editLoading ? (
+                  <Text style={styles.modalActionBtnText}>
+                    {uploadingEditFile ? 'Uploading...' : 'Saving...'}
+                  </Text>
+                ) : (
+                  <>
+                    <Feather name="send" size={14} color={COLORS.white} style={{ marginRight: 6 }} />
+                    <Text style={styles.modalActionBtnText}>Save & Forward</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
       {/* ── Returned Document Viewer (with LYDO comment panel) ── */}
       {returnedViewerDoc && (
         <ReturnedDocumentViewer
@@ -1759,6 +2034,83 @@ const styles = StyleSheet.create({
   viewerLoadingText: {
     fontSize: 13,
     color: COLORS.subText,
+  },
+
+  // Edit Input
+  editInputContainer: {
+    width: '100%',
+    marginTop: 16,
+  },
+  editInputLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: COLORS.darkText,
+    marginBottom: 6,
+  },
+  editInput: {
+    width: '100%',
+    backgroundColor: COLORS.offWhite,
+    borderWidth: 1,
+    borderColor: COLORS.lightGray,
+    borderRadius: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: 14,
+    color: COLORS.darkText,
+    minHeight: 48,
+  },
+  editTitleDisplay: {
+    width: '100%',
+    backgroundColor: COLORS.lightGray,
+    borderWidth: 1,
+    borderColor: COLORS.lightGray,
+    borderRadius: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    minHeight: 48,
+    justifyContent: 'center',
+  },
+  editTitleText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: COLORS.darkText,
+  },
+  editFileDisplay: {
+    width: '100%',
+    backgroundColor: COLORS.lightGray,
+    borderWidth: 1,
+    borderColor: COLORS.lightGray,
+    borderRadius: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    minHeight: 44,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  editFileName: {
+    flex: 1,
+    fontSize: 13,
+    color: COLORS.subText,
+  },
+  editFilePickerBtn: {
+    width: '100%',
+    backgroundColor: COLORS.white,
+    borderWidth: 1.5,
+    borderColor: COLORS.navy,
+    borderRadius: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    minHeight: 48,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  editFilePickerText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: COLORS.navy,
   },
 
 });

@@ -1,19 +1,20 @@
-import React, { useState, useEffect, useRef } from 'react';
+import * as DocumentPicker from 'expo-document-picker';
+import { useRouter } from 'expo-router';
+import React, { useEffect, useRef, useState } from 'react';
 import {
-  View,
-  Text,
-  TextInput,
-  ScrollView,
-  TouchableOpacity,
-  StyleSheet,
-  SafeAreaView,
-  StatusBar,
-  Dimensions,
-  Modal,
-  Image,
   ActivityIndicator,
   Alert,
+  Dimensions,
   Linking,
+  Modal,
+  SafeAreaView,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useNav } from './navContext';
