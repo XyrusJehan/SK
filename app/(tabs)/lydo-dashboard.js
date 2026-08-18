@@ -1,21 +1,18 @@
-import React, { useState, useEffect } from 'react';
+import { useFocusEffect, useRouter } from 'expo-router';
+import React, { useEffect, useState } from 'react';
 import {
-  View,
-  Text,
-  ScrollView,
-  TouchableOpacity,
-  StyleSheet,
-  SafeAreaView,
-  StatusBar,
+  ActivityIndicator,
   Alert,
   Dimensions,
-  Image,
   Modal,
-  ActivityIndicator,
+  SafeAreaView,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
 } from 'react-native';
-import { useRouter, useFocusEffect } from 'expo-router';
-import { useNav } from './navContext';
-import { useAuth } from './authContext';
 import { supabase } from '../../utils/supabase';
 import { useLydoNotificationCenter, LydoNotificationModal, LydoBellIcon } from './notificationCenter';
 import Sidebar, { LYDO_NAV_ITEMS } from './../components/Sidebar';
