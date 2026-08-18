@@ -8,7 +8,7 @@ import { useRouter, useLocalSearchParams, useFocusEffect, useNavigation } from '
 import { useNav } from './navContext';
 import { useAuth } from './authContext';
 import { supabase } from '../../utils/supabase';
-import { NotificationModal, useNotificationCenter } from './notificationCenter';
+import { NotificationModal, useNotificationCenter, BellIcon } from './notificationCenter';
 import * as DocumentPicker from 'expo-document-picker';
 import { DocumentScannerButton } from './scanner/DocumentScannerButton';
 import { useDocumentScanner } from './scanner/useDocumentScanner';
@@ -63,14 +63,6 @@ const MenuIcon = () => (
 );
 
 
-
-const BellIcon = ({ hasNotif }) => (
-  <View style={styles.bellWrapper}>
-    <View style={styles.bellBody} />
-    <View style={styles.bellBottom} />
-    {hasNotif && <View style={styles.bellDot} />}
-  </View>
-);
 
 // ─── FILE ICON ────────────────────────────────────────────────────────────────
 const FileIcon = ({ name }) => {

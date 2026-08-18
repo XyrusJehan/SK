@@ -17,6 +17,7 @@ import { useNav } from './navContext';
 import Sidebar, { LYDO_NAV_ITEMS } from './../components/Sidebar';
 import { useAuth } from './authContext';
 import { supabase } from '../../utils/supabase';
+import { useLydoNotificationCenter, LydoNotificationModal, LydoBellIcon } from './notificationCenter';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const isMobile = SCREEN_WIDTH < 768;
@@ -157,13 +158,8 @@ const SORT_OPTIONS = ['Newest', 'Oldest', 'A–Z'];
 const DOCUMENT_TABS = ['Barangay Document', 'Reports', 'Templates'];
 
 // ─── ICONS ────────────────────────────────────────────────────────────────────
-const BellIcon = ({ hasNotif }) => (
-  <View style={styles.bellWrapper}>
-    <View style={styles.bellBody} />
-    <View style={styles.bellBottom} />
-    {hasNotif && <View style={styles.bellDot} />}
-  </View>
-);
+// BellIcon now lives in notificationCenter.js and is imported above (as
+// LydoBellIcon) — shared across every screen instead of being redrawn here.
 const MenuIcon = () => (
   <View style={styles.menuIconContainer}>
     {[0,1,2].map(i => <View key={i} style={styles.menuLine} />)}
@@ -269,7 +265,7 @@ export default function LYDODocumentListScreen({ navigation }) {
   const [activeCategory, setActiveCategory]     = useState('All');
   const [sortBy, setSortBy]                     = useState('Newest');
   const [searchText, setSearchText]             = useState('');
-  const [notifCount]                            = useState(2);
+  const notif = useLydoNotificationCenter();
   const [sidebarVisible, setSidebarVisible]     = useState(false);
   const [dropdownVisible, setDropdownVisible]   = useState(false);
   const [dropdownOptions, setDropdownOptions]   = useState([]);
@@ -523,8 +519,8 @@ export default function LYDODocumentListScreen({ navigation }) {
             <MenuIcon />
           </TouchableOpacity>
           <Text style={styles.mobileTitle}>Documents</Text>
-          <TouchableOpacity style={styles.bellBtn}>
-            <BellIcon hasNotif={notifCount > 0} />
+          <TouchableOpacity style={styles.bellBtn} onPress={notif.open} activeOpacity={0.7}>
+            <LydoBellIcon hasNotif={notif.count > 0} />
           </TouchableOpacity>
         </View>
       )}
@@ -550,11 +546,11 @@ export default function LYDODocumentListScreen({ navigation }) {
                 </View>
               </View>
             </View>
-            <TouchableOpacity style={styles.bellBtn} activeOpacity={0.7}>
-              <BellIcon hasNotif={notifCount > 0} />
-              {notifCount > 0 && (
+            <TouchableOpacity style={styles.bellBtn} activeOpacity={0.7} onPress={notif.open}>
+              <LydoBellIcon hasNotif={notif.count > 0} />
+              {notif.count > 0 && (
                 <View style={styles.notifBadge}>
-                  <Text style={styles.notifBadgeText}>{notifCount}</Text>
+                  <Text style={styles.notifBadgeText}>{notif.count > 99 ? '99+' : notif.count}</Text>
                 </View>
               )}
             </TouchableOpacity>
@@ -604,8 +600,8 @@ export default function LYDODocumentListScreen({ navigation }) {
             <MenuIcon />
           </TouchableOpacity>
           <Text style={styles.mobileTitle}>Documents</Text>
-          <TouchableOpacity style={styles.bellBtn}>
-            <BellIcon hasNotif={notifCount > 0} />
+          <TouchableOpacity style={styles.bellBtn} onPress={notif.open} activeOpacity={0.7}>
+            <LydoBellIcon hasNotif={notif.count > 0} />
           </TouchableOpacity>
         </View>
       )}
@@ -624,11 +620,11 @@ export default function LYDODocumentListScreen({ navigation }) {
             >
               <Text style={styles.uploadBtnText}>+ Upload</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.bellBtn} activeOpacity={0.7}>
-              <BellIcon hasNotif={notifCount > 0} />
-              {notifCount > 0 && (
+            <TouchableOpacity style={styles.bellBtn} activeOpacity={0.7} onPress={notif.open}>
+              <LydoBellIcon hasNotif={notif.count > 0} />
+              {notif.count > 0 && (
                 <View style={styles.notifBadge}>
-                  <Text style={styles.notifBadgeText}>{notifCount}</Text>
+                  <Text style={styles.notifBadgeText}>{notif.count > 99 ? '99+' : notif.count}</Text>
                 </View>
               )}
             </TouchableOpacity>
@@ -783,6 +779,18 @@ export default function LYDODocumentListScreen({ navigation }) {
     <SafeAreaView style={styles.safe}>
       <StatusBar barStyle="light-content" backgroundColor={COLORS.navy} />
 
+      {/* Notification Modal — lists documents sent by SK officials */}
+      <LydoNotificationModal
+        {...notif.modalProps}
+        onReview={(doc) => {
+          notif.close();
+          router.push({
+            pathname: '/(tabs)/lydo-monitor',
+            params: { viewFilter: 'submitted' },
+          });
+        }}
+      />
+
       <View style={styles.layout}>
         {/* Mobile: Sidebar as overlay */}
         {isMobile && sidebarVisible && (
@@ -879,10 +887,6 @@ const styles = StyleSheet.create({
     shadowColor: COLORS.shadow, shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 1, shadowRadius: 6, elevation: 3,
   },
-  bellWrapper: { width: 20, height: 22, alignItems: 'center' },
-  bellBody: { width: 14, height: 12, borderRadius: 7, borderWidth: 2, borderColor: COLORS.maroon, marginTop: 4 },
-  bellBottom: { width: 8, height: 4, borderBottomLeftRadius: 4, borderBottomRightRadius: 4, backgroundColor: '#8B0000', marginTop: -1 },
-  bellDot: { position: 'absolute', top: 0, right: 1, width: 7, height: 7, borderRadius: 4, backgroundColor: COLORS.gold, borderWidth: 1.5, borderColor: COLORS.cardBg },
   notifBadge: { position: 'absolute', top: -2, right: -2, width: 16, height: 16, borderRadius: 8, backgroundColor: COLORS.gold, alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: COLORS.white },
   notifBadgeText: { fontSize: 8, fontWeight: '900', color: COLORS.navy },
 

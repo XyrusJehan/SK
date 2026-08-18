@@ -17,6 +17,7 @@ import { supabase } from '../../utils/supabase';
 import { useAuth } from './authContext';
 import { useNav } from './navContext';
 import Sidebar from './../components/Sidebar';
+import { BellIcon } from './notificationCenter';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const isMobile = SCREEN_WIDTH < 768;
@@ -104,20 +105,9 @@ const CAL_DOWS = ['SUN','MON','TUE','WED','THU','FRI','SAT'];
 // Nav icons + NAV_ITEMS now live in the shared Sidebar module (see import above).
 
 // ─── ICON COMPONENTS ──────────────────────────────────────────────────────────
-const BellIcon = ({ hasNotif }) => (
-  <View style={ic.bellWrapper}>
-    <View style={ic.bellBody} />
-    <View style={ic.bellBottom} />
-    {hasNotif && <View style={ic.bellDot} />}
-  </View>
-);
-
-const ic = StyleSheet.create({
- bellWrapper: { width: 20, height: 22, alignItems: 'center' },
-  bellBody:    { width: 14, height: 12, borderRadius: 7, borderWidth: 2, borderColor: '#8B0000', marginTop: 4 },
-  bellBottom:  { width: 8, height: 4, borderBottomLeftRadius: 4, borderBottomRightRadius: 4, backgroundColor: '#8B0000', marginTop: -1 },
-  bellDot:     { position: 'absolute', top: 0, right: 1, width: 7, height: 7, borderRadius: 4, backgroundColor: COLORS.gold, borderWidth: 1.5, borderColor: COLORS.cardBg },
-});
+// BellIcon now lives in notificationCenter.js and is imported above — kept
+// there so every screen (SK + LYDO) shares one definition instead of each
+// file redrawing its own bell.
 
 const SearchIcon = () => (
   <View style={styles.searchIcon}>
@@ -1440,12 +1430,12 @@ const seenReady = seenLoaded ? 1 : 0;
           )}
 
           {/* Desktop Header */}
-          <View style={styles.header}>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.headerSub}>SANGGUNIANG KABATAAN</Text>
-              <Text style={styles.headerTitle}>{barangayName.toUpperCase()}</Text>
-            </View>
-            {!isMobile && (
+          {!isMobile && (
+            <View style={styles.header}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.headerSub}>SANGGUNIANG KABATAAN</Text>
+                <Text style={styles.headerTitle}>{barangayName.toUpperCase()}</Text>
+              </View>
               <View style={styles.headerActions}>
                 <TouchableOpacity style={styles.bellBtn} activeOpacity={0.7} onPress={() => {
                   setNotificationModalVisible(true);
@@ -1460,8 +1450,8 @@ const seenReady = seenLoaded ? 1 : 0;
                   )}
                 </TouchableOpacity>
               </View>
-            )}
-          </View>
+            </View>
+          )}
 
           {/* ── STAT CARDS ROW ── */}
           <View style={isMobile ? styles.statsCol : styles.statsRow}>
@@ -1943,14 +1933,14 @@ const styles = StyleSheet.create({
   // ── Main area ──
   main: { flex: 1, backgroundColor: COLORS.offWhite, borderTopLeftRadius: 20 },
   mainMobile: { borderTopLeftRadius: 0 },
-  mainContent: { padding: isMobile ? 12 : 20, paddingBottom: isMobile ? 24 : 40 },
+  mainContent: { padding: 20, paddingBottom: 40 },
 
   // ── Mobile header ──
   mobileHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, paddingBottom: 10, borderBottomWidth: 1, borderBottomColor: COLORS.lightGray },
   menuBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: COLORS.cardBg, alignItems: 'center', justifyContent: 'center' },
   menuIconContainer: { width: 20, height: 16, justifyContent: 'space-between' },
   menuLine: { width: 20, height: 2, backgroundColor: COLORS.navy, borderRadius: 1 },
-  mobileTitle: { fontSize: 16, fontWeight: '800', color: COLORS.darkText },
+  mobileTitle: { fontSize: 18, fontWeight: '800', color: COLORS.darkText },
   mobileHeaderActions: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   mobileActionBtn: { width: 32, height: 32, borderRadius: 16, backgroundColor: COLORS.cardBg, alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.1, shadowRadius: 2, elevation: 2 },
   mobileArchivesBtn: { backgroundColor: '#133E75' },
@@ -2008,7 +1998,6 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.white, alignItems: 'center', justifyContent: 'center',
     shadowColor: COLORS.navy, shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.15, shadowRadius: 6, elevation: 4,
-    borderWidth: 1.5, borderColor: COLORS.navy + '30',
   },
   notifBadgeMobile: {
     position: 'absolute', top: 2, right: 2,

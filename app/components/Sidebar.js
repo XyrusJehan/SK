@@ -207,7 +207,13 @@ export default function Sidebar({
   const isMobile = isMobileProp ?? SCREEN_WIDTH < 768;
 
   return (
-    <View style={[styles.sidebar, isMobile && !sidebarVisible && styles.sidebarHidden]}>
+    <View
+      style={[
+        styles.sidebar,
+        isMobile && styles.sidebarMobile,
+        isMobile && !sidebarVisible && styles.sidebarHidden,
+      ]}
+    >
       <View style={styles.logoPill}>
         <Image source={logoSource} style={styles.logoImage} resizeMode="contain" />
       </View>
@@ -257,6 +263,20 @@ const styles = StyleSheet.create({
     zIndex: 20,
   },
   sidebarHidden: { display: 'none' },
+
+  // On mobile the sidebar overlays as a drawer instead of taking up
+  // space in the row layout, so it never pushes or resizes the main
+  // content — it just sits on top, positioned relative to the parent
+  // `layout` row (React Native views are position:'relative' by default).
+  sidebarMobile: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    left: 0,
+    height: '100%',
+    zIndex: 30,
+    elevation: 20, // keep above Android's overlay backdrop too
+  },
 
   logoPill: {
     marginTop: 20,

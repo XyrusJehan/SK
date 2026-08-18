@@ -19,7 +19,7 @@ import {
 import { supabase } from '../../utils/supabase';
 import { useAuth } from './authContext';
 import { useNav } from './navContext';
-import { NotificationModal, useNotificationCenter } from './notificationCenter';
+import { NotificationModal, useNotificationCenter, BellIcon } from './notificationCenter';
 import Sidebar from './../components/Sidebar';
 // WebView: use react-native-webview on native, iframe on web
 let WebView = null;
@@ -68,14 +68,6 @@ const MenuIcon = () => (
 );
 
 // Nav icons + NAV_ITEMS now live in the shared Sidebar module (see import above).
-
-const BellIcon = ({ hasNotif }) => (
-  <View style={styles.bellWrapper}>
-    <View style={styles.bellBody} />
-    <View style={styles.bellBottom} />
-    {hasNotif && <View style={styles.bellDot} />}
-  </View>
-);
 
 // Edit icon
 const EditIcon = () => (

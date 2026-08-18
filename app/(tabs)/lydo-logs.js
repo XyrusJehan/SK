@@ -9,6 +9,7 @@ import { useNav } from './navContext';
 import Sidebar, { LYDO_NAV_ITEMS } from './../components/Sidebar';
 import { useAuth } from './authContext';
 import { supabase } from '../../utils/supabase';
+import { useLydoNotificationCenter, LydoNotificationModal, LydoBellIcon } from './notificationCenter';
 
 // Supabase returns timestamps without a timezone suffix (e.g. '2026-05-28 03:50:28').
 // JS treats that as local time, not UTC, causing an 8-hour display error in PHT.
@@ -79,14 +80,6 @@ const ACTION_FILTER_OPTIONS = [
 const DATE_RANGES = ['All time', 'Today', 'This week', 'This month', 'Last 3 months'];
 
 // ─── ICON COMPONENTS ──────────────────────────────────────────────────────────
-const BellIcon = ({ hasNotif }) => (
-  <View style={styles.bellWrapper}>
-    <View style={styles.bellBody} />
-    <View style={styles.bellBottom} />
-    {hasNotif && <View style={styles.bellDot} />}
-  </View>
-);
-
 const MenuIcon = () => (
   <View style={styles.menuIconContainer}>
     <View style={styles.menuLine} />
@@ -166,7 +159,7 @@ export default function LYDOLogsScreen() {
   const dateButtonRef = useRef(null);
   const safeAreaRef = useRef(null);
   const [sidebarVisible, setSidebarVisible] = useState(false);
-  const [notifCount]                        = useState(2);
+  const notif = useLydoNotificationCenter();
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [currentTime, setCurrentTime]       = useState('');
@@ -326,6 +319,12 @@ export default function LYDOLogsScreen() {
       <StatusBar barStyle="light-content" backgroundColor={COLORS.navy} />
 
       <SafeAreaView ref={safeAreaRef} style={styles.safe}>
+        {/* Notification Modal — lists documents sent by SK officials */}
+        <LydoNotificationModal
+          {...notif.modalProps}
+          onReview={() => { notif.close(); }}
+        />
+
         {/* Dropdown overlays — anchored above everything */}
         <AnchoredDropdown
           visible={actionDropVisible}
@@ -372,7 +371,9 @@ export default function LYDOLogsScreen() {
                   <MenuIcon />
                 </TouchableOpacity>
                 <Text style={styles.mobileTitle}>Activity Logs</Text>
-                <View style={{ width: 40 }} />
+                <TouchableOpacity style={styles.bellBtn} onPress={notif.open}>
+                  <LydoBellIcon hasNotif={notif.count > 0} />
+                </TouchableOpacity>
               </View>
             )}
 
@@ -399,11 +400,11 @@ export default function LYDOLogsScreen() {
                       </View>
                     </View>
                   </View>
-                  <TouchableOpacity style={styles.bellBtn} activeOpacity={0.7}>
-                    <BellIcon hasNotif={notifCount > 0} />
-                    {notifCount > 0 && (
+                  <TouchableOpacity style={styles.bellBtn} activeOpacity={0.7} onPress={notif.open}>
+                    <LydoBellIcon hasNotif={notif.count > 0} />
+                    {notif.count > 0 && (
                       <View style={styles.notifBadge}>
-                        <Text style={styles.notifBadgeText}>{notifCount}</Text>
+                        <Text style={styles.notifBadgeText}>{notif.count > 99 ? '99+' : notif.count}</Text>
                       </View>
                     )}
                   </TouchableOpacity>

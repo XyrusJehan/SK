@@ -4,6 +4,7 @@ import { useFocusEffect } from 'expo-router';
 import {
   ActivityIndicator, Dimensions, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View,
 } from 'react-native';
+import { BellIcon as HeroBellIcon } from 'react-native-heroicons/outline';
 import { supabase } from '../../utils/supabase';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -927,25 +928,27 @@ export function useLydoNotificationCenter() {
   };
 }
 
-// ─── LYDO BELL ICON ───────────────────────────────────────────────────────────
-// The bell glyph used in every LYDO screen's header. Pair with
-// `hasNotif={count > 0}` from useLydoNotificationCenter().
-const LYDO_MAROON = '#8B0000';
-const LYDO_GOLD = '#E8C547';
+// ─── SHARED BELL ICON ─────────────────────────────────────────────────────────
+// The bell glyph used in every screen's header (SK and LYDO alike) — Heroicons'
+// outline bell, maroon-tinted, with a gold "unread" dot overlaid. Import this
+// instead of redefining it in each screen file. Pair with `hasNotif={count > 0}`
+// from the relevant notification-center hook (e.g. useLydoNotificationCenter()).
+const BELL_MAROON = '#8B0000';
+const BELL_GOLD = '#E8C547';
 
-export const LydoBellIcon = ({ hasNotif }) => (
-  <View style={lydoBellStyles.bellWrapper}>
-    <View style={lydoBellStyles.bellBody} />
-    <View style={lydoBellStyles.bellBottom} />
-    {hasNotif && <View style={lydoBellStyles.bellDot} />}
+export const BellIcon = ({ hasNotif, size = 22, color = BELL_MAROON }) => (
+  <View style={bellStyles.bellWrapper}>
+    <HeroBellIcon size={size} color={color} strokeWidth={2} />
+    {hasNotif && <View style={bellStyles.bellDot} />}
   </View>
 );
 
-const lydoBellStyles = StyleSheet.create({
-  bellWrapper: { width: 20, height: 22, alignItems: 'center' },
-  bellBody: { width: 14, height: 12, borderRadius: 7, borderWidth: 2, borderColor: LYDO_MAROON, marginTop: 4 },
-  bellBottom: { width: 8, height: 4, borderBottomLeftRadius: 4, borderBottomRightRadius: 4, backgroundColor: LYDO_MAROON, marginTop: -1 },
-  bellDot: { position: 'absolute', top: 0, right: 1, width: 7, height: 7, borderRadius: 4, backgroundColor: LYDO_GOLD, borderWidth: 1.5, borderColor: WHITE },
+// Back-compat alias in case other files still import the old LYDO-specific name.
+export const LydoBellIcon = BellIcon;
+
+const bellStyles = StyleSheet.create({
+  bellWrapper: { width: 24, height: 24, alignItems: 'center', justifyContent: 'center' },
+  bellDot: { position: 'absolute', top: -1, right: -1, width: 8, height: 8, borderRadius: 4, backgroundColor: BELL_GOLD, borderWidth: 1.5, borderColor: WHITE },
 });
 
 // ─── LYDO NOTIFICATION MODAL ──────────────────────────────────────────────────

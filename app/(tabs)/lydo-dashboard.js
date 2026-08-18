@@ -1417,7 +1417,6 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.white, alignItems: 'center', justifyContent: 'center',
     shadowColor: COLORS.navy, shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.15, shadowRadius: 8, elevation: 4,
-    borderWidth: 1.5, borderColor: COLORS.navy + '30',
   },
   notifBadge: {
     position: 'absolute', top: 2, right: 2,
@@ -1432,7 +1431,6 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.white, alignItems: 'center', justifyContent: 'center',
     shadowColor: COLORS.navy, shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.15, shadowRadius: 6, elevation: 4,
-    borderWidth: 1.5, borderColor: COLORS.navy + '30',
   },
   notifBadgeMobile: {
     position: 'absolute', top: 2, right: 2,

@@ -8,8 +8,9 @@ import { useRouter, useFocusEffect } from 'expo-router';
 import { useNav } from './navContext';
 import { useAuth } from './authContext';
 import { supabase } from '../../utils/supabase';
-import { NotificationModal, useNotificationCenter } from './notificationCenter';
+import { NotificationModal, useNotificationCenter, BellIcon } from './notificationCenter';
 import Sidebar from './../components/Sidebar';
+import { MagnifyingGlassIcon } from 'react-native-heroicons/outline';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const isMobile = SCREEN_WIDTH < 768;
@@ -39,13 +40,8 @@ const FEEDBACK_FILTERS = ['All', 'Recent', 'Unread'];
 // (Data now fetched from Supabase based on barangay_id)
 
 // ─── ICONS ───────────────────────────────────────────────────────────────────
-const BellIcon = ({ hasNotif }) => (
-  <View style={styles.bellWrapper}>
-    <View style={styles.bellBody} />
-    <View style={styles.bellBottom} />
-    {hasNotif && <View style={styles.bellDot} />}
-  </View>
-);
+// BellIcon now lives in notificationCenter.js and is imported above — shared
+// across every screen (SK + LYDO, desktop + mobile) instead of being redrawn here.
 
 const MenuIcon = () => (
   <View style={styles.menuIconContainer}>
@@ -131,11 +127,31 @@ export default function SKPortalFeedbackScreen() {
     if (!barangayId) return;
 
     try {
-      // Fetch resident comments
+      // comments table has no barangay_id, so first find this barangay's posts
+      const { data: barangayPosts, error: postsErr } = await supabase
+        .from('website_posts')
+        .select('website_post_id, title')
+        .eq('barangay_id', barangayId);
+
+      if (postsErr) {
+        console.error('Error fetching posts:', postsErr);
+        return;
+      }
+
+      const postMap = barangayPosts?.reduce((acc, p) => ({ ...acc, [p.website_post_id]: p }), {}) || {};
+      const barangayPostIds = barangayPosts?.map(p => p.website_post_id) || [];
+
+      if (barangayPostIds.length === 0) {
+        setFeedbackList([]);
+        return;
+      }
+
+      // Fetch top-level comments (parent_id null = not a reply) for this barangay's posts
       const { data: feedback, error } = await supabase
-        .from('resident_comments')
+        .from('comments')
         .select('*')
-        .eq('barangay_id', barangayId)
+        .in('website_post_id', barangayPostIds)
+        .is('parent_id', null)
         .order('created_at', { ascending: false });
 
       if (error) {
@@ -143,12 +159,9 @@ export default function SKPortalFeedbackScreen() {
         return;
       }
 
-      // Fetch user info and post info separately
-      const userIds = [...new Set(feedback?.map(f => f.resident_id).filter(Boolean) || [])];
-      const postIds = [...new Set(feedback?.map(f => f.website_post_id).filter(Boolean) || [])];
-
+      // Fetch author info
+      const userIds = [...new Set(feedback?.map(f => f.author_id).filter(Boolean) || [])];
       let userMap = {};
-      let postMap = {};
 
       if (userIds.length > 0) {
         const { data: users } = await supabase
@@ -158,43 +171,35 @@ export default function SKPortalFeedbackScreen() {
         userMap = users?.reduce((acc, u) => ({ ...acc, [u.user_id]: u }), {}) || {};
       }
 
-      if (postIds.length > 0) {
-        const { data: posts } = await supabase
-          .from('website_posts')
-          .select('website_post_id, title')
-          .in('website_post_id', postIds);
-        postMap = posts?.reduce((acc, p) => ({ ...acc, [p.website_post_id]: p }), {}) || {};
-      }
-
-      // Fetch replies
+      // Fetch replies (rows in comments whose parent_id points to a top-level comment)
       const commentIds = feedback?.map(f => f.comment_id).filter(Boolean) || [];
       let replyMap = {};
       if (commentIds.length > 0) {
         const { data: replies } = await supabase
-          .from('sk_replies')
+          .from('comments')
           .select('*')
-          .in('comment_id', commentIds)
+          .in('parent_id', commentIds)
           .order('created_at', { ascending: true });
 
-        // Map replies by comment_id (get latest reply per comment)
+        // Map replies by parent comment_id (get latest reply per comment)
         replies?.forEach(r => {
-          if (!replyMap[r.comment_id]) {
-            replyMap[r.comment_id] = r.content;
+          if (!replyMap[r.parent_id]) {
+            replyMap[r.parent_id] = r.content;
           }
         });
       }
 
       const formattedFeedback = feedback?.map(f => {
-        const user = userMap[f.resident_id] || {};
+        const author = userMap[f.author_id] || {};
         const post = postMap[f.website_post_id] || {};
-        const firstName = user.first_name || '';
-        const lastName = user.last_name || '';
-        const middleInitial = user.middle_initial || '';
+        const firstName = author.first_name || '';
+        const lastName = author.last_name || '';
+        const middleInitial = author.middle_initial || '';
         const name = `${firstName} ${middleInitial ? middleInitial + '. ' : ''}${lastName}`.trim() || 'Anonymous';
 
         return {
           id: f.comment_id,
-          residentId: f.resident_id,
+          authorId: f.author_id,
           name: name,
           document: post.title || 'Unknown Document',
           comment: f.content || '',
@@ -241,11 +246,11 @@ export default function SKPortalFeedbackScreen() {
 
   const handleViewReply = (item) => {
     setSelectedFeedback(item);
-    setReplyText(item.reply || '');
+    setReplyText('');
     // Mark as read in database
     if (item.status === 'Unread') {
       supabase
-        .from('resident_comments')
+        .from('comments')
         .update({ is_read: true })
         .eq('comment_id', item.id)
         .then(({ error }) => {
@@ -264,12 +269,13 @@ export default function SKPortalFeedbackScreen() {
       return;
     }
 
-    // Insert reply to sk_replies table
+    // Insert reply as a new row in comments, threaded via parent_id
     const { error } = await supabase
-      .from('sk_replies')
+      .from('comments')
       .insert({
-        comment_id: selectedFeedback.id,
-        replied_by: userId,
+        website_post_id: selectedFeedback.postId,
+        author_id: userId,
+        parent_id: selectedFeedback.id,
         content: replyText.trim(),
       });
 
@@ -278,9 +284,9 @@ export default function SKPortalFeedbackScreen() {
       return;
     }
 
-    // Also mark comment as read
+    // Also mark the original comment as read
     await supabase
-      .from('resident_comments')
+      .from('comments')
       .update({ is_read: true })
       .eq('comment_id', selectedFeedback.id);
 
@@ -535,7 +541,7 @@ export default function SKPortalFeedbackScreen() {
 
         {/* Search */}
         <View style={styles.searchBox}>
-          <Text style={{ fontSize: 12, color: COLORS.midGray, marginRight: 4 }}>🔍</Text>
+          <MagnifyingGlassIcon size={14} color={COLORS.midGray} strokeWidth={2} style={{ marginRight: 4 }} />
           <TextInput
             style={styles.searchInput}
             placeholder="Search"
@@ -691,10 +697,6 @@ const styles = StyleSheet.create({
     shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.08, shadowRadius: 6, elevation: 3,
   },
-  bellWrapper: { width: 20, height: 22, alignItems: 'center' },
-  bellBody:    { width: 14, height: 12, borderRadius: 7, borderWidth: 2, borderColor: '#8B0000', marginTop: 4 },
-  bellBottom:  { width: 8, height: 4, borderBottomLeftRadius: 4, borderBottomRightRadius: 4, backgroundColor: '#8B0000', marginTop: -1 },
-  bellDot:     { position: 'absolute', top: 0, right: 1, width: 7, height: 7, borderRadius: 4, backgroundColor: COLORS.gold, borderWidth: 1.5, borderColor: COLORS.cardBg },
   notifBadge:  { position: 'absolute', top: -2, right: -2, width: 16, height: 16, borderRadius: 8, backgroundColor: COLORS.gold, alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: COLORS.white },
   notifBadgeText: { fontSize: 8, fontWeight: '900', color: COLORS.navy },
 

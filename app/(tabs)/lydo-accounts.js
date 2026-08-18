@@ -9,6 +9,7 @@ import { useNav } from './navContext';
 import Sidebar, { LYDO_NAV_ITEMS } from './../components/Sidebar';
 import { useAuth, encryptPassword, decryptPassword } from './authContext';
 import { supabase } from '../../utils/supabase';
+import { useLydoNotificationCenter, LydoNotificationModal, LydoBellIcon } from './notificationCenter';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const isMobile = SCREEN_WIDTH < 768;
@@ -67,14 +68,6 @@ const ROLE_OPTIONS = Object.values(ROLE_DISPLAY);
 const POSITION_OPTIONS = Object.values(POSITION_DISPLAY);
 
 // ─── ICONS ────────────────────────────────────────────────────────────────────
-const BellIcon = ({ hasNotif }) => (
-  <View style={styles.bellWrapper}>
-    <View style={styles.bellBody} />
-    <View style={styles.bellBottom} />
-    {hasNotif && <View style={styles.bellDot} />}
-  </View>
-);
-
 const MenuIcon = () => (
   <View style={styles.menuIconContainer}>
     {[0, 1, 2].map(i => <View key={i} style={styles.menuLine} />)}
@@ -701,7 +694,7 @@ export default function LYDOMonitorAccountScreen() {
   const [selectedIds, setSelectedIds]   = useState(new Set());
   const [filterBrgy, setFilterBrgy]     = useState('All Barangays');
   const [searchText, setSearchText]     = useState('');
-  const [notifCount]                    = useState(2);
+  const notif = useLydoNotificationCenter();
   const [currentTime, setCurrentTime]   = useState('');
   const [sidebarVisible, setSidebarVisible] = useState(false);
   const [loading, setLoading]           = useState(true);
@@ -904,8 +897,8 @@ export default function LYDOMonitorAccountScreen() {
             <MenuIcon />
           </TouchableOpacity>
           <Text style={styles.mobileTitle}>Account Management</Text>
-          <TouchableOpacity style={styles.bellBtn}>
-            <BellIcon hasNotif={notifCount > 0} />
+          <TouchableOpacity style={styles.bellBtn} onPress={notif.open}>
+            <LydoBellIcon hasNotif={notif.count > 0} />
           </TouchableOpacity>
         </View>
       )}
@@ -933,11 +926,11 @@ export default function LYDOMonitorAccountScreen() {
                 </View>
               </View>
             </View>
-            <TouchableOpacity style={styles.bellBtn} activeOpacity={0.7}>
-              <BellIcon hasNotif={notifCount > 0} />
-              {notifCount > 0 && (
+            <TouchableOpacity style={styles.bellBtn} activeOpacity={0.7} onPress={notif.open}>
+              <LydoBellIcon hasNotif={notif.count > 0} />
+              {notif.count > 0 && (
                 <View style={styles.notifBadge}>
-                  <Text style={styles.notifBadgeText}>{notifCount}</Text>
+                  <Text style={styles.notifBadgeText}>{notif.count > 99 ? '99+' : notif.count}</Text>
                 </View>
               )}
             </TouchableOpacity>
@@ -1052,6 +1045,19 @@ export default function LYDOMonitorAccountScreen() {
     <GlobalDropdownProvider>
       <SafeAreaView style={styles.safe}>
         <StatusBar barStyle="light-content" backgroundColor={COLORS.navy} />
+
+        {/* Notification Modal — lists documents sent by SK officials */}
+        <LydoNotificationModal
+          {...notif.modalProps}
+          onReview={(doc) => {
+            notif.close();
+            router.push({
+              pathname: '/(tabs)/lydo-monitor',
+              params: { viewFilter: 'submitted' },
+            });
+          }}
+        />
+
         <View style={styles.layout}>
           {isMobile && sidebarVisible && (
             <TouchableOpacity
@@ -1132,10 +1138,6 @@ const styles = StyleSheet.create({
   datetimeValue: { fontSize: 13, fontWeight: '700', color: '#1A1A1A', letterSpacing: 0.2 },
   datetimeTime: { fontVariant: ['tabular-nums'], color: '#133E75', fontSize: 14, fontWeight: '800' },
   bellBtn:        { width: 40, height: 40, borderRadius: 20, backgroundColor: COLORS.cardBg, alignItems: 'center', justifyContent: 'center', shadowColor: 'rgba(0,0,0,0.08)', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 1, shadowRadius: 6, elevation: 3 },
-  bellWrapper:    { width: 20, height: 22, alignItems: 'center' },
-  bellBody:       { width: 14, height: 12, borderRadius: 7, borderWidth: 2, borderColor: '#8B0000', marginTop: 4 },
-  bellBottom:     { width: 8, height: 4, borderBottomLeftRadius: 4, borderBottomRightRadius: 4, backgroundColor: '#8B0000', marginTop: -1 },
-  bellDot:        { position: 'absolute', top: 0, right: 1, width: 7, height: 7, borderRadius: 4, backgroundColor: COLORS.gold, borderWidth: 1.5, borderColor: COLORS.cardBg },
   notifBadge:     { position: 'absolute', top: -2, right: -2, width: 16, height: 16, borderRadius: 8, backgroundColor: COLORS.gold, alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: COLORS.white },
   notifBadgeText: { fontSize: 8, fontWeight: '900', color: COLORS.navy },
 

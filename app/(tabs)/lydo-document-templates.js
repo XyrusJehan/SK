@@ -21,6 +21,7 @@ import Sidebar, { LYDO_NAV_ITEMS } from './../components/Sidebar';
 import { useAuth } from './authContext';
 import { supabase } from '../../utils/supabase';
 import * as DocumentPicker from 'expo-document-picker';
+import { useLydoNotificationCenter, LydoNotificationModal, LydoBellIcon } from './notificationCenter';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const isMobile = SCREEN_WIDTH < 768;
@@ -60,14 +61,6 @@ const FILTER_OPTIONS = ['All', 'Currently in use'];
 // Document types grouped by category — will be fetched from database
 // (Now uses state inside component - see LYDODocumentTemplatesScreen component)
 
-// ─── ICON COMPONENTS ──────────────────────────────────────────────────────────
-const BellIcon = ({ hasNotif }) => (
-  <View style={styles.bellWrapper}>
-    <View style={styles.bellBody} />
-    <View style={styles.bellBottom} />
-    {hasNotif && <View style={styles.bellDot} />}
-  </View>
-);
 
 const MenuIcon = () => (
   <View style={styles.menuIconContainer}>
@@ -139,7 +132,7 @@ export default function LYDODocumentTemplatesScreen() {
   const [searchText, setSearchText]             = useState('');
   const [activeFilter, setActiveFilter]         = useState('All');
   const [categoryFilter, setCategoryFilter]     = useState('All Categories');
-  const [notifCount]                            = useState(2);
+  const notif = useLydoNotificationCenter();
   const [sidebarVisible, setSidebarVisible]     = useState(false);
   const [activeDocumentTab, setActiveDocumentTab] = useState('Templates');
   const [loading, setLoading]                   = useState(true);
@@ -1538,8 +1531,8 @@ export default function LYDODocumentTemplatesScreen() {
             <MenuIcon />
           </TouchableOpacity>
           <Text style={styles.mobileTitle}>Templates</Text>
-          <TouchableOpacity style={styles.bellBtn}>
-            <BellIcon hasNotif={notifCount > 0} />
+          <TouchableOpacity style={styles.bellBtn} onPress={notif.open} activeOpacity={0.7}>
+            <LydoBellIcon hasNotif={notif.count > 0} />
           </TouchableOpacity>
         </View>
       )}
@@ -1567,11 +1560,11 @@ export default function LYDODocumentTemplatesScreen() {
                 </View>
               </View>
             </View>
-            <TouchableOpacity style={styles.bellBtn} activeOpacity={0.7}>
-              <BellIcon hasNotif={notifCount > 0} />
-              {notifCount > 0 && (
+            <TouchableOpacity style={styles.bellBtn} activeOpacity={0.7} onPress={notif.open}>
+              <LydoBellIcon hasNotif={notif.count > 0} />
+              {notif.count > 0 && (
                 <View style={styles.notifBadge}>
-                  <Text style={styles.notifBadgeText}>{notifCount}</Text>
+                  <Text style={styles.notifBadgeText}>{notif.count > 99 ? '99+' : notif.count}</Text>
                 </View>
               )}
             </TouchableOpacity>
@@ -1814,6 +1807,18 @@ export default function LYDODocumentTemplatesScreen() {
       {renderForwardModal()}
       {renderLoadingOverlay()}
 
+      {/* Notification Modal — lists documents sent by SK officials */}
+      <LydoNotificationModal
+        {...notif.modalProps}
+        onReview={(doc) => {
+          notif.close();
+          router.push({
+            pathname: '/(tabs)/lydo-monitor',
+            params: { viewFilter: 'submitted' },
+          });
+        }}
+      />
+
       <View style={styles.layout}>
         {/* Mobile Sidebar Overlay */}
         {isMobile && sidebarVisible && (
@@ -1943,21 +1948,6 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.cardBg, alignItems: 'center', justifyContent: 'center',
     shadowColor: COLORS.shadow, shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 1, shadowRadius: 6, elevation: 3,
-  },
-  bellWrapper: { width: 20, height: 22, alignItems: 'center' },
-  bellBody: {
-    width: 14, height: 12, borderRadius: 7,
-    borderWidth: 2, borderColor: COLORS.maroon, marginTop: 4,
-  },
-  bellBottom: {
-    width: 8, height: 4,
-    borderBottomLeftRadius: 4, borderBottomRightRadius: 4,
-    backgroundColor: '#8B0000', marginTop: -1,
-  },
-  bellDot: {
-    position: 'absolute', top: 0, right: 1,
-    width: 7, height: 7, borderRadius: 4,
-    backgroundColor: COLORS.gold, borderWidth: 1.5, borderColor: COLORS.cardBg,
   },
   notifBadge: {
     position: 'absolute', top: -2, right: -2,

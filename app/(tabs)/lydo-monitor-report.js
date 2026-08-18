@@ -8,6 +8,7 @@ import { useRouter } from 'expo-router';
 import { useNav } from './navContext';
 import Sidebar, { LYDO_NAV_ITEMS } from './../components/Sidebar';
 import { useAuth } from './authContext';
+import { useLydoNotificationCenter, LydoNotificationModal, LydoBellIcon } from './notificationCenter';
 import {
   fetchTransparencyReport,
   fetchSubmissionReport,
@@ -103,14 +104,6 @@ const DOC_FULL_NAMES = API_DOC_FULL_NAMES;
 //   Submission   -> fetchSubmissionReport()    (submission_deadlines.is_met)
 
 // ─── ICONS ────────────────────────────────────────────────────────────────────
-const BellIcon = ({ hasNotif }) => (
-  <View style={styles.bellWrapper}>
-    <View style={styles.bellBody} />
-    <View style={styles.bellBottom} />
-    {hasNotif && <View style={styles.bellDot} />}
-  </View>
-);
-
 const MenuIcon = () => (
   <View style={styles.menuIconContainer}>
     {[0, 1, 2].map(i => <View key={i} style={styles.menuLine} />)}
@@ -616,7 +609,7 @@ export default function LYDOMonitorReportScreen() {
   const [selectedDoc,  setSelectedDoc]  = useState('All');
   const [selectedYear, setSelectedYear] = useState('2026');
   const [searchText,   setSearchText]   = useState('');
-  const [notifCount]                    = useState(2);
+  const notif = useLydoNotificationCenter();
   const [sidebarVisible, setSidebarVisible] = useState(false);
   const [currentTime, setCurrentTime]   = useState('');
 
@@ -788,8 +781,8 @@ export default function LYDOMonitorReportScreen() {
             <MenuIcon />
           </TouchableOpacity>
           <Text style={styles.mobileTitle}>Report Monitor</Text>
-          <TouchableOpacity style={styles.bellBtn}>
-            <BellIcon hasNotif={notifCount > 0} />
+          <TouchableOpacity style={styles.bellBtn} onPress={notif.open}>
+            <LydoBellIcon hasNotif={notif.count > 0} />
           </TouchableOpacity>
         </View>
       )}
@@ -820,11 +813,11 @@ export default function LYDOMonitorReportScreen() {
                 </View>
               </View>
             </View>
-            <TouchableOpacity style={styles.bellBtn} activeOpacity={0.7}>
-              <BellIcon hasNotif={notifCount > 0} />
-              {notifCount > 0 && (
+            <TouchableOpacity style={styles.bellBtn} activeOpacity={0.7} onPress={notif.open}>
+              <LydoBellIcon hasNotif={notif.count > 0} />
+              {notif.count > 0 && (
                 <View style={styles.notifBadge}>
-                  <Text style={styles.notifBadgeText}>{notifCount}</Text>
+                  <Text style={styles.notifBadgeText}>{notif.count > 99 ? '99+' : notif.count}</Text>
                 </View>
               )}
             </TouchableOpacity>
@@ -1045,6 +1038,12 @@ export default function LYDOMonitorReportScreen() {
   return (
     <SafeAreaView style={styles.safe}>
       <StatusBar barStyle="light-content" backgroundColor={COLORS.navy} />
+
+      {/* Notification Modal — lists documents sent by SK officials */}
+      <LydoNotificationModal
+        {...notif.modalProps}
+        onReview={() => { notif.close(); }}
+      />
 
       <View style={styles.layout}>
         {/* Mobile: Sidebar as overlay */}
