@@ -1,5 +1,4 @@
-import * as DocumentPicker from 'expo-document-picker';
-import { useRouter } from 'expo-router';
+
 import React, { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
