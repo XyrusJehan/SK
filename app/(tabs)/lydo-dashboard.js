@@ -1,22 +1,23 @@
-import React, { useState, useEffect } from 'react';
+import { useFocusEffect, useRouter } from 'expo-router';
+import React, { useEffect, useState } from 'react';
 import {
-  View,
-  Text,
-  ScrollView,
-  TouchableOpacity,
-  StyleSheet,
-  SafeAreaView,
-  StatusBar,
+  ActivityIndicator,
   Alert,
   Dimensions,
-  Image,
   Modal,
-  ActivityIndicator,
+  SafeAreaView,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
 } from 'react-native';
-import { useRouter, useFocusEffect } from 'expo-router';
-import { useNav } from './navContext';
-import { useAuth } from './authContext';
 import { supabase } from '../../utils/supabase';
+import Sidebar, { LYDO_NAV_ITEMS } from './../components/Sidebar';
+import { useAuth } from './authContext';
+import { useNav } from './navContext';
+import { LydoBellIcon, LydoNotificationModal, useLydoNotificationCenter } from './notificationCenter';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const isMobile = SCREEN_WIDTH < 768;
@@ -72,88 +73,6 @@ const NAV_TABS = ['Dashboard', 'Documents', 'Monitor', 'Barangay', 'Logs'];
 const CAL_MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 const CAL_DOWS = ['SUN','MON','TUE','WED','THU','FRI','SAT'];
 
-// ─── SIDEBAR NAV ICONS (pure React Native Views — no react-native-svg) ────────
-
-// Dashboard: 2×2 grid of rounded squares
-const DashboardIcon = ({ color = '#fff', size = 16 }) => {
-  const s = size * 0.38, gap = size * 0.12, r = size * 0.12;
-  const box = { width: s, height: s, borderRadius: r, backgroundColor: color };
-  return (
-    <View style={{ width: size, height: size, justifyContent: 'center', alignItems: 'center' }}>
-      <View style={{ flexDirection: 'row', gap }}><View style={box} /><View style={box} /></View>
-      <View style={{ height: gap }} />
-      <View style={{ flexDirection: 'row', gap }}><View style={box} /><View style={box} /></View>
-    </View>
-  );
-};
-
-// Documents: file shape with fold + two lines
-const DocumentsIcon = ({ color = '#fff', size = 16 }) => {
-  const w = size * 0.6, h = size * 0.78, fold = size * 0.22;
-  return (
-    <View style={{ width: size, height: size, justifyContent: 'center', alignItems: 'center' }}>
-      <View style={{ width: w, height: h, justifyContent: 'flex-end', paddingBottom: size * 0.08, paddingHorizontal: size * 0.1 }}>
-        <View style={{ position: 'absolute', left: 0, right: 0, top: fold, bottom: 0, borderWidth: 1.5, borderColor: color, borderRadius: size * 0.08 }} />
-        <View style={{ position: 'absolute', top: 0, right: 0, width: fold, height: fold, backgroundColor: color, borderBottomLeftRadius: size * 0.06 }} />
-        <View style={{ position: 'absolute', top: 0, left: 0, width: w - fold, height: fold, borderTopWidth: 1.5, borderLeftWidth: 1.5, borderColor: color, borderTopLeftRadius: size * 0.08 }} />
-        <View style={{ height: 1.5, backgroundColor: color, borderRadius: 1, marginBottom: size * 0.1, width: '80%' }} />
-        <View style={{ height: 1.5, backgroundColor: color, borderRadius: 1, width: '55%' }} />
-      </View>
-    </View>
-  );
-};
-
-// Monitor: simple globe — circle + horizontal line + vertical oval hint
-const MonitorIcon = ({ color = '#fff', size = 16 }) => (
-  <View style={{ width: size, height: size, justifyContent: 'center', alignItems: 'center' }}>
-    <View style={{ width: size * 0.82, height: size * 0.82, borderRadius: size * 0.41, borderWidth: 1.5, borderColor: color, justifyContent: 'center', alignItems: 'center', overflow: 'hidden' }}>
-      <View style={{ position: 'absolute', height: 1.5, width: '100%', backgroundColor: color }} />
-      <View style={{ width: size * 0.38, height: size * 0.78, borderRadius: size * 0.19, borderWidth: 1.5, borderColor: color, backgroundColor: 'transparent' }} />
-    </View>
-  </View>
-);
-
-// Barangay: building/institution icon — base + columns hint
-const BarangayIcon = ({ color = '#fff', size = 16 }) => {
-  const bw = 1.5;
-  return (
-    <View style={{ width: size, height: size, justifyContent: 'center', alignItems: 'center' }}>
-      {/* roof / triangle top */}
-      <View style={{ width: size * 0.82, height: size * 0.22, borderLeftWidth: bw, borderRightWidth: bw, borderTopWidth: bw, borderColor: color, borderTopLeftRadius: size * 0.06, borderTopRightRadius: size * 0.06 }} />
-      {/* body */}
-      <View style={{ width: size * 0.82, height: size * 0.52, borderLeftWidth: bw, borderRightWidth: bw, borderBottomWidth: bw, borderColor: color, flexDirection: 'row', justifyContent: 'space-around', alignItems: 'center', paddingHorizontal: size * 0.08, paddingBottom: size * 0.06 }}>
-        {[0, 1, 2].map(i => (
-          <View key={i} style={{ width: size * 0.1, height: size * 0.36, backgroundColor: color, borderRadius: size * 0.03 }} />
-        ))}
-      </View>
-    </View>
-  );
-};
-
-// Logs: clipboard with lines
-const LogsIcon = ({ color = '#fff', size = 16 }) => (
-  <View style={{ width: size, height: size, justifyContent: 'center', alignItems: 'center' }}>
-    <View style={{ width: size * 0.75, height: size * 0.85, borderWidth: 1.5, borderColor: color, borderRadius: size * 0.1, paddingHorizontal: size * 0.1, paddingVertical: size * 0.1, justifyContent: 'space-around' }}>
-      <View style={{ position: 'absolute', top: -size * 0.08, alignSelf: 'center', width: size * 0.3, height: size * 0.14, backgroundColor: color, borderRadius: size * 0.04 }} />
-      {[0, 1, 2].map(i => (
-        <View key={i} style={{ flexDirection: 'row', alignItems: 'center', gap: size * 0.08, marginTop: i === 0 ? size * 0.1 : 0 }}>
-          <View style={{ width: size * 0.1, height: size * 0.1, borderRadius: size * 0.05, backgroundColor: color }} />
-          <View style={{ flex: 1, height: 1.5, backgroundColor: color, borderRadius: 1 }} />
-        </View>
-      ))}
-    </View>
-  </View>
-);
-
-// Logout: door with arrow
-const LogoutNavIcon = ({ color = '#fff', size = 16 }) => (
-  <View style={{ width: size, height: size, justifyContent: 'center', alignItems: 'center' }}>
-    <View style={{ position: 'absolute', left: 0, top: 0, width: size * 0.55, height: size, borderWidth: 1.5, borderColor: color, borderRadius: size * 0.08 }} />
-    <View style={{ position: 'absolute', right: size * 0.02, width: size * 0.52, height: 1.8, backgroundColor: color, borderRadius: 1 }} />
-    <View style={{ position: 'absolute', right: size * 0.02, width: size * 0.2, height: size * 0.2, borderTopWidth: 1.8, borderRightWidth: 1.8, borderColor: color, transform: [{ rotate: '45deg' }], marginTop: -size * 0.01 }} />
-  </View>
-);
-
 // ─── COLORS ───────────────────────────────────────────────────────────────────
 const COLORS = {
   navy:       '#133E75',
@@ -198,14 +117,7 @@ const QUICK_ACTIONS = [
 ];
 
 // ─── ICON COMPONENTS ──────────────────────────────────────────────────────────
-const BellIcon = ({ hasNotif }) => (
-  <View style={ic.bellWrapper}>
-    <View style={ic.bellBody} />
-    <View style={ic.bellBottom} />
-    {hasNotif && <View style={ic.bellDot} />}
-  </View>
-);
-
+// Bell glyph now lives in notificationCenter.js as LydoBellIcon (shared).
 const MenuIcon = () => (
   <View style={ic.menuIconContainer}>
     <View style={ic.menuLine} />
@@ -217,10 +129,6 @@ const MenuIcon = () => (
 const ic = StyleSheet.create({
   menuIconContainer: { width: 20, height: 16, justifyContent: 'space-between' },
   menuLine: { width: 20, height: 2, backgroundColor: COLORS.navy, borderRadius: 1 },
-  bellWrapper: { width: 20, height: 22, alignItems: 'center' },
-  bellBody: { width: 14, height: 12, borderRadius: 7, borderWidth: 2, borderColor: '#8B0000', marginTop: 4 },
-  bellBottom: { width: 8, height: 4, borderBottomLeftRadius: 4, borderBottomRightRadius: 4, backgroundColor: '#8B0000', marginTop: -1 },
-  bellDot: { position: 'absolute', top: 0, right: 1, width: 7, height: 7, borderRadius: 4, backgroundColor: '#E8C547', borderWidth: 1.5, borderColor: COLORS.white },
 });
 
 // ─── SEGMENTED DONUT CHART (SVG-free, stacked arc rings) ─────────────────────
@@ -598,103 +506,7 @@ function CalendarModal({ visible, onClose }) {
   );
 }
 
-// ─── NOTIFICATION MODAL ──────────────────────────────────────────────────────
-// Lists every document the SK officials have submitted to LYDO for review.
-// Each row shows the document title, barangay, status (with color-coded
-// pill), and the date/time it was sent.
-function NotificationModal({ visible, onClose, items, loading, onReview }) {
-  const formatDate = (dateStr) => {
-    if (!dateStr) return '—';
-    return toPhilippineDate(dateStr, { month: 'short', day: 'numeric', year: 'numeric' });
-  };
-  const formatTime = (dateStr) => {
-    if (!dateStr) return '—';
-    return toPhilippineTime(dateStr, { hour: '2-digit', minute: '2-digit' });
-  };
-
-  return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <View style={notifModalStyles.backdrop}>
-        <View style={notifModalStyles.modal}>
-          <View style={notifModalStyles.header}>
-            <View style={{ flex: 1 }}>
-              <Text style={notifModalStyles.title}>Notifications</Text>
-              <Text style={notifModalStyles.subtitle}>
-                Documents sent by SK Officials for review
-              </Text>
-            </View>
-            <TouchableOpacity style={notifModalStyles.closeBtn} onPress={onClose} activeOpacity={0.8}>
-              <Text style={notifModalStyles.closeText}>✕</Text>
-            </TouchableOpacity>
-          </View>
-          <View style={notifModalStyles.divider} />
-
-          {loading ? (
-            <View style={notifModalStyles.loadingState}>
-              <ActivityIndicator color={COLORS.navy} />
-              <Text style={notifModalStyles.loadingText}>Loading notifications…</Text>
-            </View>
-          ) : items.length === 0 ? (
-            <View style={notifModalStyles.emptyState}>
-              <Text style={notifModalStyles.emptyIcon}>🔔</Text>
-              <Text style={notifModalStyles.emptyText}>No new notifications</Text>
-              <Text style={notifModalStyles.emptySubText}>
-                When SK officials send documents to your office, they will appear here.
-              </Text>
-            </View>
-          ) : (
-            <ScrollView
-              style={notifModalStyles.body}
-              contentContainerStyle={notifModalStyles.bodyContent}
-              showsVerticalScrollIndicator={false}
-            >
-              <Text style={notifModalStyles.countLabel}>
-                {items.length} document{items.length !== 1 ? 's' : ''} awaiting review
-              </Text>
-              {items.map((doc, idx) => (
-                <View
-                  key={doc.id}
-                  style={[
-                    notifModalStyles.itemRow,
-                    idx < items.length - 1 && notifModalStyles.itemRowBorder,
-                  ]}
-                >
-                  <View style={notifModalStyles.docIconBox}>
-                    <Text style={notifModalStyles.docIcon}>📄</Text>
-                  </View>
-                  <View style={notifModalStyles.itemInfo}>
-                    <Text style={notifModalStyles.itemTitle} numberOfLines={1}>
-                      {doc.title}
-                    </Text>
-                    <Text style={notifModalStyles.itemMeta} numberOfLines={1}>
-                      From: {doc.barangay}
-                    </Text>
-                    <View style={notifModalStyles.itemFooter}>
-                      <View style={notifModalStyles.statusBadge}>
-                        <Text style={notifModalStyles.statusText}>For Review</Text>
-                      </View>
-                      <View style={notifModalStyles.itemTime}>
-                        <Text style={notifModalStyles.itemDate}>{formatDate(doc.submittedAt)}</Text>
-                        <Text style={notifModalStyles.itemTimeText}>{formatTime(doc.submittedAt)}</Text>
-                      </View>
-                    </View>
-                  </View>
-                  <TouchableOpacity
-                    style={notifModalStyles.reviewBtn}
-                    activeOpacity={0.8}
-                    onPress={() => onReview && onReview(doc)}
-                  >
-                    <Text style={notifModalStyles.reviewBtnText}>Review</Text>
-                  </TouchableOpacity>
-                </View>
-              ))}
-            </ScrollView>
-          )}
-        </View>
-      </View>
-    </Modal>
-  );
-}
+// Notification modal now lives in notificationCenter.js as LydoNotificationModal (shared).
 
 // ─── STAT CARD ────────────────────────────────────────────────────────────────
 const StatCard = ({ icon, value, label, sub, iconBg, iconColor, borderColor }) => (
@@ -726,7 +538,6 @@ export default function LYDOHomeScreen() {
   const [approved, setApproved] = useState(0);
   const [missingDocs, setMissingDocs] = useState(0);
   const [currentTime, setCurrentTime] = useState('');
-  const [notifCount, setNotifCount] = useState(0);
   const [progressData, setProgressData] = useState({ submitted: 0, awaiting: 0, incomplete: 0, total: 0 });
   const [approachingDeadlines, setApproachingDeadlines] = useState([]);
   const [proposalsForReview, setProposalsForReview] = useState(0);
@@ -734,9 +545,10 @@ export default function LYDOHomeScreen() {
   const [lydoActivities, setLydoActivities] = useState([]);
   const [missingDocsModalVisible, setMissingDocsModalVisible] = useState(false);
   const [missingDocsList, setMissingDocsList] = useState([]);
-  const [notifModalVisible, setNotifModalVisible] = useState(false);
-  const [skSentDocs, setSkSentDocs] = useState([]);
-  const [loadingNotifs, setLoadingNotifs] = useState(false);
+
+  // Shared LYDO bell badge + dropdown (documents SK officials submitted for
+  // review). See notificationCenter.js — reused by every LYDO screen.
+  const notif = useLydoNotificationCenter();
 
   useEffect(() => {
     if (user && user.role !== 'lydo') router.replace('/');
@@ -1041,64 +853,6 @@ export default function LYDOHomeScreen() {
     }, [])
   );
 
-  // ── Fetch SK-submitted documents for notification modal ──────────────────────
-  const fetchSKSubmittedNotifications = async () => {
-    setLoadingNotifs(true);
-    try {
-      // Get documents that were submitted (status = 'submitted') — these are
-      // documents sent by the SK officials to the LYDO for review.
-      const { data: submittedDocs, error } = await supabase
-        .from('documents')
-        .select(`
-          document_id,
-          title,
-          document_type,
-          status,
-          created_at,
-          saved_at,
-          submitted_at,
-          barangay_id,
-          barangays(barangay_name)
-        `)
-        .eq('status', 'submitted')
-        .order('submitted_at', { ascending: false })
-        .limit(50);
-
-      if (error) {
-        console.error('Error fetching SK submitted documents:', error);
-        setSkSentDocs([]);
-      } else {
-        const formatted = (submittedDocs || []).map((doc) => ({
-          id: doc.document_id,
-          title: doc.title || doc.document_type || 'Document',
-          documentType: doc.document_type,
-          barangay: doc.barangays?.barangay_name || 'Unknown Barangay',
-          submittedAt: doc.submitted_at || doc.saved_at || doc.created_at,
-        }));
-        setSkSentDocs(formatted);
-      }
-    } catch (err) {
-      console.error('Unexpected error fetching notifications:', err);
-      setSkSentDocs([]);
-    } finally {
-      setLoadingNotifs(false);
-    }
-  };
-
-  // Refresh notifications whenever the modal becomes visible so the list
-  // reflects the latest SK submissions without a full page refetch.
-  useEffect(() => {
-    if (notifModalVisible) {
-      fetchSKSubmittedNotifications();
-    }
-  }, [notifModalVisible]);
-
-  // ── Update notification count when badge counts change ───────────────────────
-  useEffect(() => {
-    const total = proposalsForReview + consultationsCount + forRevision + missingDocs;
-    setNotifCount(total);
-  }, [proposalsForReview, consultationsCount, forRevision, missingDocs]);
-
   // ── Approaching Deadline card — org-wide, grouped across all barangays ──
   // Each submission_deadlines row is per-barangay, so a single logical
   // deadline (e.g. "ABYIP due Jan 6") appears as one row per barangay. We
@@ -1197,52 +951,6 @@ export default function LYDOHomeScreen() {
     }
   };
 
-  // ── SIDEBAR ──
-  const NAV_ITEMS = [
-    { tab: 'Dashboard', IconComponent: DashboardIcon },
-    { tab: 'Documents', IconComponent: DocumentsIcon },
-    { tab: 'Monitor',   IconComponent: MonitorIcon   },
-    { tab: 'Barangay',  IconComponent: BarangayIcon  },
-    { tab: 'Logs',      IconComponent: LogsIcon      },
-  ];
-
-  const renderSidebar = () => (
-    <View style={styles.sidebar}>
-      <View style={styles.logoPill}>
-        <Image
-          source={require('./../../assets/images/lydo-logo.png')}
-          style={styles.logoImage}
-          resizeMode="contain"
-        />
-      </View>
-      <View style={styles.sidebarSpacer} />
-      {NAV_ITEMS.map(({ tab, IconComponent }) => {
-        const active = activeTab === tab;
-        const iconColor = active ? '#133E75' : 'rgba(255,255,255,0.85)';
-        return (
-          <TouchableOpacity
-            key={tab}
-            style={[styles.navItem, active && styles.navItemActive]}
-            onPress={() => handleNav(tab)}
-            activeOpacity={0.8}
-          >
-            <View style={styles.navItemInner}>
-              <IconComponent color={iconColor} size={16} />
-              <Text style={[styles.navLabel, active && styles.navLabelActive]}>{tab}</Text>
-            </View>
-          </TouchableOpacity>
-        );
-      })}
-      <View style={{ flex: 1 }} />
-      <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout} activeOpacity={0.8}>
-        <View style={styles.navItemInner}>
-          <LogoutNavIcon color="rgba(255,255,255,0.85)" size={16} />
-          <Text style={styles.logoutText}>Logout</Text>
-        </View>
-      </TouchableOpacity>
-    </View>
-  );
-
   const activityIconColor = (type) => {
     if (type === 'approved') return COLORS.green;
     if (type === 'returned') return COLORS.orange;
@@ -1255,13 +963,10 @@ export default function LYDOHomeScreen() {
       <CalendarModal visible={calendarVisible} onClose={() => setCalendarVisible(false)} />
 
       {/* Notification Modal — lists documents sent by SK officials */}
-      <NotificationModal
-        visible={notifModalVisible}
-        onClose={() => setNotifModalVisible(false)}
-        items={skSentDocs}
-        loading={loadingNotifs}
+      <LydoNotificationModal
+        {...notif.modalProps}
         onReview={(doc) => {
-          setNotifModalVisible(false);
+          notif.close();
           router.push({
             pathname: '/(tabs)/lydo-monitor',
             params: { viewFilter: 'submitted' },
@@ -1325,7 +1030,15 @@ export default function LYDOHomeScreen() {
         {isMobile && sidebarVisible && (
           <TouchableOpacity style={styles.sidebarOverlay} activeOpacity={1} onPress={() => setSidebarVisible(false)} />
         )}
-        {isMobile ? (sidebarVisible && renderSidebar()) : renderSidebar()}
+        <Sidebar
+          activeTab={activeTab}
+          onNavPress={handleNav}
+          onLogout={handleLogout}
+          isMobile={isMobile}
+          sidebarVisible={sidebarVisible}
+          navItems={LYDO_NAV_ITEMS}
+          logoSource={require('./../../assets/images/lydo-logo.png')}
+        />
 
         {/* ── MAIN CONTENT ── */}
         <ScrollView
@@ -1340,11 +1053,11 @@ export default function LYDOHomeScreen() {
                 <MenuIcon />
               </TouchableOpacity>
               <Text style={styles.mobileTitle}>LYDO Dashboard</Text>
-              <TouchableOpacity style={styles.bellBtn} activeOpacity={0.7} onPress={() => setNotifModalVisible(true)}>
-                <BellIcon hasNotif={notifCount > 0} />
-                {notifCount > 0 && (
-                  <View style={styles.notifBadge}>
-                    <Text style={styles.notifBadgeText}>{notifCount}</Text>
+              <TouchableOpacity style={styles.bellBtnMobile} activeOpacity={0.7} onPress={notif.open}>
+                <LydoBellIcon hasNotif={notif.count > 0} />
+                {notif.count > 0 && (
+                  <View style={styles.notifBadgeMobile}>
+                    <Text style={styles.notifBadgeTextMobile}>{notif.count > 99 ? '99+' : notif.count}</Text>
                   </View>
                 )}
               </TouchableOpacity>
@@ -1373,11 +1086,11 @@ export default function LYDOHomeScreen() {
                   </View>
                 </View>
               </View>
-              <TouchableOpacity style={styles.bellBtn} activeOpacity={0.7} onPress={() => setNotifModalVisible(true)}>
-                <BellIcon hasNotif={notifCount > 0} />
-                {notifCount > 0 && (
+              <TouchableOpacity style={styles.bellBtn} activeOpacity={0.7} onPress={notif.open}>
+                <LydoBellIcon hasNotif={notif.count > 0} />
+                {notif.count > 0 && (
                   <View style={styles.notifBadge}>
-                    <Text style={styles.notifBadgeText}>{notifCount}</Text>
+                    <Text style={styles.notifBadgeText}>{notif.count > 99 ? '99+' : notif.count}</Text>
                   </View>
                 )}
               </TouchableOpacity>
@@ -1607,45 +1320,10 @@ const styles = StyleSheet.create({
   layout: { flex: 1, flexDirection: 'row' },
 
   // Sidebar
-  sidebar: {
-    width: 250,
-    backgroundColor: COLORS.navy,
-    alignItems: 'center',
-    paddingTop: 20,
-    paddingBottom: 24,
-    paddingHorizontal: 10,
-    zIndex: 10,
-  },
   sidebarOverlay: {
     position: 'absolute', left: 0, top: 0, bottom: 0, right: 0,
     backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 5,
   },
-  logoPill: {
-    marginTop: 20,
-    width: 70, height: 70, borderRadius: 35,
-    backgroundColor: 'rgba(255,255,255,0.15)',
-    alignItems: 'center', justifyContent: 'center',
-    marginBottom: 8, borderWidth: 2, borderColor: 'rgba(255,255,255,0.3)',
-  },
-  logoImage: { width: 110, height: 110 },
-  sidebarSpacer: { height: 28 },
-  navItem: {
-    width: '100%', paddingVertical: 12, paddingHorizontal: 12,
-    borderRadius: 24, marginBottom: 8, alignItems: 'center',
-    borderWidth: 1.5, borderColor: COLORS.white,
-    backgroundColor: COLORS.navy,
-  },
-  navItemInner: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  navItemActive: { backgroundColor: COLORS.white, borderColor: '#000' },
-  navLabel: { fontSize: 13, fontWeight: '600', color: COLORS.white, letterSpacing: 0.3 },
-  navLabelActive: { color: '#000', fontWeight: '800' },
-  logoutBtn: {
-    width: '100%', paddingVertical: 12, paddingHorizontal: 12,
-    borderRadius: 24, marginTop: 8, alignItems: 'center',
-    borderWidth: 1.5, borderColor: COLORS.white,
-    backgroundColor: 'rgba(255,255,255,0.1)',
-  },
-  logoutText: { fontSize: 13, fontWeight: '600', color: COLORS.white, letterSpacing: 0.3 },
 
   // Main
   main: { flex: 1, backgroundColor: COLORS.offWhite, borderTopLeftRadius: 20 },
@@ -1673,7 +1351,10 @@ const styles = StyleSheet.create({
     fontSize: 10, fontWeight: '600', color: COLORS.subText,
     letterSpacing: 2, textTransform: 'uppercase', marginBottom: 2,
   },
-  headerTitle: { fontSize: 20, fontWeight: '900', color: COLORS.darkText, letterSpacing: 0.5 },
+  headerTitle: {
+    fontSize: 20, fontWeight: '900', color: COLORS.darkText, letterSpacing: 0.5,
+    borderBottomWidth: 2, borderBottomColor: COLORS.lightGray, paddingBottom: 4, marginBottom: 6,
+  },
   datetimeCard: {
     backgroundColor: '#F7F5F2',
     borderRadius: 12,
@@ -1731,18 +1412,35 @@ const styles = StyleSheet.create({
 
   // Bell
   bellBtn: {
-    width: 40, height: 40, borderRadius: 20,
-    backgroundColor: COLORS.cardBg, alignItems: 'center', justifyContent: 'center',
-    shadowColor: 'rgba(0,0,0,0.08)', shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 1, shadowRadius: 6, elevation: 3,
+    width: 44, height: 44, borderRadius: 22,
+    backgroundColor: COLORS.white, alignItems: 'center', justifyContent: 'center',
+    shadowColor: COLORS.navy, shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.15, shadowRadius: 8, elevation: 4,
+    borderWidth: 1.5, borderColor: COLORS.navy + '30',
   },
   notifBadge: {
-    position: 'absolute', top: -2, right: -2,
-    width: 16, height: 16, borderRadius: 8,
-    backgroundColor: '#E8C547', alignItems: 'center', justifyContent: 'center',
-    borderWidth: 1.5, borderColor: COLORS.white,
+    position: 'absolute', top: 2, right: 2,
+    minWidth: 18, height: 18, borderRadius: 9,
+    backgroundColor: '#EF4444', alignItems: 'center', justifyContent: 'center',
+    borderWidth: 2, borderColor: COLORS.white,
+    paddingHorizontal: 4,
   },
-  notifBadgeText: { fontSize: 8, fontWeight: '900', color: '#133E75' },
+  notifBadgeText: { fontSize: 10, fontWeight: '800', color: COLORS.white },
+  bellBtnMobile: {
+    width: 40, height: 40, borderRadius: 20,
+    backgroundColor: COLORS.white, alignItems: 'center', justifyContent: 'center',
+    shadowColor: COLORS.navy, shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15, shadowRadius: 6, elevation: 4,
+    borderWidth: 1.5, borderColor: COLORS.navy + '30',
+  },
+  notifBadgeMobile: {
+    position: 'absolute', top: 2, right: 2,
+    minWidth: 16, height: 16, borderRadius: 8,
+    backgroundColor: '#EF4444', alignItems: 'center', justifyContent: 'center',
+    borderWidth: 1.5, borderColor: COLORS.white,
+    paddingHorizontal: 3,
+  },
+  notifBadgeTextMobile: { fontSize: 9, fontWeight: '800', color: COLORS.white },
 
   // Stat Cards
   statsRow: { flexDirection: 'row', gap: 10, marginBottom: 18, flexWrap: 'wrap' },
@@ -2115,90 +1813,4 @@ const missingModalStyles = StyleSheet.create({
   statusNotSubmittedText: { color: '#DC2626' },
 });
 
-// ─── NOTIFICATION MODAL STYLES ─────────────────────────────────────────────────
-const notifModalStyles = StyleSheet.create({
-  backdrop: {
-    flex: 1, backgroundColor: 'rgba(0,0,0,0.65)',
-    justifyContent: 'center', alignItems: 'center', padding: 24,
-  },
-  modal: {
-    backgroundColor: COLORS.white, borderRadius: 16,
-    width: isMobile ? '92%' : 520,
-    height: isMobile ? '80%' : 600,
-    overflow: 'hidden', elevation: 20,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.25, shadowRadius: 20,
-  },
-  header: {
-    flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between',
-    paddingHorizontal: 16, paddingVertical: 14, backgroundColor: COLORS.navy,
-  },
-  title: { fontSize: 16, fontWeight: '800', color: COLORS.white },
-  subtitle: { fontSize: 12, fontWeight: '600', color: 'rgba(255,255,255,0.75)', marginTop: 3 },
-  closeBtn: {
-    width: 28, height: 28, borderRadius: 14,
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    alignItems: 'center', justifyContent: 'center',
-    marginLeft: 12,
-  },
-  closeText: { fontSize: 12, fontWeight: '700', color: COLORS.white },
-  divider: { height: 1, backgroundColor: COLORS.lightGray },
-  body: { flex: 1 },
-  bodyContent: { padding: 16, flexGrow: 1 },
-  countLabel: {
-    fontSize: 11, fontWeight: '700', color: COLORS.subText,
-    textTransform: 'uppercase', letterSpacing: 1,
-    marginBottom: 12,
-  },
-  itemRow: {
-    flexDirection: 'row', alignItems: 'center',
-    paddingVertical: 12, gap: 10,
-  },
-  itemRowBorder: { borderBottomWidth: 1, borderBottomColor: COLORS.lightGray },
-  docIconBox: {
-    width: 40, height: 40, borderRadius: 10,
-    backgroundColor: COLORS.blueLight,
-    alignItems: 'center', justifyContent: 'center',
-    flexShrink: 0,
-  },
-  docIcon: { fontSize: 18 },
-  itemInfo: { flex: 1 },
-  itemTitle: { fontSize: 14, fontWeight: '700', color: COLORS.darkText, marginBottom: 2 },
-  itemMeta: { fontSize: 12, color: COLORS.subText, marginBottom: 6 },
-  itemFooter: {
-    flexDirection: 'row', alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  statusBadge: {
-    paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12,
-    backgroundColor: COLORS.orangeLight,
-  },
-  statusText: { fontSize: 10, fontWeight: '700', color: COLORS.orange },
-  itemTime: { alignItems: 'flex-end' },
-  itemDate: { fontSize: 11, color: COLORS.subText },
-  itemTimeText: {
-    fontSize: 12, fontWeight: '700', color: COLORS.navy,
-    fontVariant: ['tabular-nums'],
-  },
-  reviewBtn: {
-    paddingHorizontal: 12, paddingVertical: 8,
-    borderRadius: 16, borderWidth: 1.5,
-    borderColor: COLORS.navy, backgroundColor: COLORS.white,
-    flexShrink: 0,
-    marginLeft: 6,
-  },
-  reviewBtnText: { fontSize: 11, fontWeight: '700', color: COLORS.navy, letterSpacing: 0.2 },
-  loadingState: {
-    flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 40, gap: 10,
-  },
-  loadingText: { fontSize: 13, color: COLORS.subText },
-  emptyState: {
-    flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 60, paddingHorizontal: 24,
-  },
-  emptyIcon: { fontSize: 36, marginBottom: 12 },
-  emptyText: { fontSize: 15, fontWeight: '700', color: COLORS.darkText, marginBottom: 4 },
-  emptySubText: {
-    fontSize: 13, color: COLORS.subText,
-    textAlign: 'center', lineHeight: 18,
-  },
-});
+// Notification modal styles now live in notificationCenter.js (shared).
