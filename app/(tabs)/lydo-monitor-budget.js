@@ -404,9 +404,9 @@ export default function LYDOMonitorBudgetScreen() {
             <MenuIcon />
           </TouchableOpacity>
           <Text style={S.mobileTitle}>Budget Monitor</Text>
-          <TouchableOpacity style={S.bellBtn} onPress={notif.open}>
-            <LydoBellIcon hasNotif={notif.count > 0} />
-          </TouchableOpacity>
+              <TouchableOpacity style={styles.bellBtn} activeOpacity={0.7} onPress={notif.open}>
+                <LydoBellIcon count={notif.count} />
+              </TouchableOpacity>
         </View>
       )}
 
@@ -436,14 +436,9 @@ export default function LYDOMonitorBudgetScreen() {
                 </View>
               </View>
             </View>
-            <TouchableOpacity style={S.bellBtn} activeOpacity={0.7} onPress={notif.open}>
-              <LydoBellIcon hasNotif={notif.count > 0} />
-              {notif.count > 0 && (
-                <View style={S.notifBadge}>
-                  <Text style={S.notifBadgeText}>{notif.count > 99 ? '99+' : notif.count}</Text>
-                </View>
-              )}
-            </TouchableOpacity>
+              <TouchableOpacity style={styles.bellBtn} activeOpacity={0.7} onPress={notif.open}>
+                <LydoBellIcon count={notif.count} />
+              </TouchableOpacity>
           </View>
         </View>
       )}

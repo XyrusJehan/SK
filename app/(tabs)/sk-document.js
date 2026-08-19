@@ -340,12 +340,7 @@ export default function SKDocumentScreen() {
             onPress={notif.open}
             activeOpacity={0.7}
           >
-            <BellIcon hasNotif={notif.hasUnviewed} />
-            {notifCount > 0 && (
-              <View style={styles.notifBadge}>
-                <Text style={styles.notifBadgeText}>{notifCount > 99 ? '99+' : notifCount}</Text>
-              </View>
-            )}
+            <BellIcon count={notifCount} />
           </TouchableOpacity>
         </View>
       )}
@@ -362,12 +357,7 @@ export default function SKDocumentScreen() {
             onPress={notif.open}
             activeOpacity={0.7}
           >
-            <BellIcon hasNotif={notif.hasUnviewed} />
-            {notifCount > 0 && (
-              <View style={styles.notifBadge}>
-                <Text style={styles.notifBadgeText}>{notifCount > 99 ? '99+' : notifCount}</Text>
-              </View>
-            )}
+            <BellIcon count={notifCount} />
           </TouchableOpacity>
         </View>
       )}
@@ -519,8 +509,9 @@ const styles = StyleSheet.create({
   bellBtnMobile: {
     position: 'relative',
   },
-  notifBadge:  { position: 'absolute', top: -2, right: -2, width: 16, height: 16, borderRadius: 8, backgroundColor: COLORS.gold, alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: COLORS.white },
-  notifBadgeText: { fontSize: 8, fontWeight: '900', color: COLORS.navy },
+  // Unread-count badge now lives in BellIcon (notificationCenter.js) — it
+  // used to be redefined here in gold/navy, out of sync with SK dashboard's
+  // red/white design. Removed in favor of the shared component.
 
   // Search + Scan
   searchRow: {

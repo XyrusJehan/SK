@@ -520,7 +520,7 @@ export default function LYDODocumentListScreen({ navigation }) {
           </TouchableOpacity>
           <Text style={styles.mobileTitle}>Documents</Text>
           <TouchableOpacity style={styles.bellBtn} onPress={notif.open} activeOpacity={0.7}>
-            <LydoBellIcon hasNotif={notif.count > 0} />
+            <LydoBellIcon count={notif.count} />
           </TouchableOpacity>
         </View>
       )}
@@ -547,12 +547,7 @@ export default function LYDODocumentListScreen({ navigation }) {
               </View>
             </View>
             <TouchableOpacity style={styles.bellBtn} activeOpacity={0.7} onPress={notif.open}>
-              <LydoBellIcon hasNotif={notif.count > 0} />
-              {notif.count > 0 && (
-                <View style={styles.notifBadge}>
-                  <Text style={styles.notifBadgeText}>{notif.count > 99 ? '99+' : notif.count}</Text>
-                </View>
-              )}
+              <LydoBellIcon count={notif.count} />
             </TouchableOpacity>
           </View>
         </View>
@@ -601,7 +596,7 @@ export default function LYDODocumentListScreen({ navigation }) {
           </TouchableOpacity>
           <Text style={styles.mobileTitle}>Documents</Text>
           <TouchableOpacity style={styles.bellBtn} onPress={notif.open} activeOpacity={0.7}>
-            <LydoBellIcon hasNotif={notif.count > 0} />
+            <LydoBellIcon count={notif.count} />
           </TouchableOpacity>
         </View>
       )}
@@ -621,12 +616,7 @@ export default function LYDODocumentListScreen({ navigation }) {
               <Text style={styles.uploadBtnText}>+ Upload</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.bellBtn} activeOpacity={0.7} onPress={notif.open}>
-              <LydoBellIcon hasNotif={notif.count > 0} />
-              {notif.count > 0 && (
-                <View style={styles.notifBadge}>
-                  <Text style={styles.notifBadgeText}>{notif.count > 99 ? '99+' : notif.count}</Text>
-                </View>
-              )}
+              <LydoBellIcon count={notif.count} />
             </TouchableOpacity>
           </View>
         </View>
@@ -880,15 +870,14 @@ const styles = StyleSheet.create({
   datetimeValue: { fontSize: 13, fontWeight: '700', color: '#1A1A1A', letterSpacing: 0.2 },
   datetimeTime: { fontVariant: ['tabular-nums'], color: '#133E75', fontSize: 14, fontWeight: '800' },
 
-  // Bell
+  // Bell — unread-count badge lives in LydoBellIcon (notificationCenter.js);
+  // only the button container is styled here.
   bellBtn: {
     width: 40, height: 40, borderRadius: 20,
     backgroundColor: COLORS.cardBg, alignItems: 'center', justifyContent: 'center',
     shadowColor: COLORS.shadow, shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 1, shadowRadius: 6, elevation: 3,
   },
-  notifBadge: { position: 'absolute', top: -2, right: -2, width: 16, height: 16, borderRadius: 8, backgroundColor: COLORS.gold, alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: COLORS.white },
-  notifBadgeText: { fontSize: 8, fontWeight: '900', color: COLORS.navy },
 
   // ── Cards view ──
   sectionTitle: { fontSize: 22, fontWeight: '800', color: COLORS.darkText, marginBottom: 18, letterSpacing: 0.3 },

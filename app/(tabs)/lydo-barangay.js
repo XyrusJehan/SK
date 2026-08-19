@@ -457,9 +457,9 @@ export default function LYDOBarangayScreen() {
             <MenuIcon />
           </TouchableOpacity>
           <Text style={styles.mobileTitle}>Barangay Management</Text>
-          <TouchableOpacity style={styles.bellBtn} onPress={notif.open}>
-            <LydoBellIcon hasNotif={notif.count > 0} />
-          </TouchableOpacity>
+              <TouchableOpacity style={styles.bellBtn} activeOpacity={0.7} onPress={notif.open}>
+                <LydoBellIcon count={notif.count} />
+              </TouchableOpacity>
         </View>
       )}
 
@@ -487,12 +487,7 @@ export default function LYDOBarangayScreen() {
               </View>
             </View>
             <TouchableOpacity style={styles.bellBtn} activeOpacity={0.7} onPress={notif.open}>
-              <LydoBellIcon hasNotif={notif.count > 0} />
-              {notif.count > 0 && (
-                <View style={styles.notifBadge}>
-                  <Text style={styles.notifBadgeText}>{notif.count > 99 ? '99+' : notif.count}</Text>
-                </View>
-              )}
+            <LydoBellIcon count={notif.count} />
             </TouchableOpacity>
           </View>
         </View>

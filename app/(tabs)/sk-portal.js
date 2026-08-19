@@ -888,14 +888,9 @@ export default function SKPortalScreen() {
             <MenuIcon />
           </TouchableOpacity>
           <Text style={styles.mobileTitle}>Portal</Text>
-          <TouchableOpacity style={styles.bellBtn} onPress={notif.open} activeOpacity={0.7}>
-            <BellIcon hasNotif={notif.hasUnviewed} />
-            {notifCount > 0 && (
-              <View style={styles.notifBadge}>
-                <Text style={styles.notifBadgeText}>{notifCount > 99 ? '99+' : notifCount}</Text>
-              </View>
-            )}
-          </TouchableOpacity>
+<TouchableOpacity style={styles.bellBtn} onPress={notif.open} activeOpacity={0.7}>
+  <BellIcon count={notifCount} />
+</TouchableOpacity>
         </View>
       )}
 
@@ -908,14 +903,9 @@ export default function SKPortalScreen() {
             <Text style={styles.headerDocLabel}>Portal and Post Managemnet</Text>
           </View>
           <View style={styles.headerRight}>
-            <TouchableOpacity style={styles.bellBtn} onPress={notif.open} activeOpacity={0.7}>
-              <BellIcon hasNotif={notif.hasUnviewed} />
-              {notifCount > 0 && (
-                <View style={styles.notifBadge}>
-                  <Text style={styles.notifBadgeText}>{notifCount > 99 ? '99+' : notifCount}</Text>
-                </View>
-              )}
-            </TouchableOpacity>
+<TouchableOpacity style={styles.bellBtn} onPress={notif.open} activeOpacity={0.7}>
+  <BellIcon count={notifCount} />
+</TouchableOpacity>
           </View>
         </View>
       )}

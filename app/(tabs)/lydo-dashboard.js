@@ -1054,12 +1054,7 @@ export default function LYDOHomeScreen() {
               </TouchableOpacity>
               <Text style={styles.mobileTitle}>LYDO Dashboard</Text>
               <TouchableOpacity style={styles.bellBtnMobile} activeOpacity={0.7} onPress={notif.open}>
-                <LydoBellIcon hasNotif={notif.count > 0} />
-                {notif.count > 0 && (
-                  <View style={styles.notifBadgeMobile}>
-                    <Text style={styles.notifBadgeTextMobile}>{notif.count > 99 ? '99+' : notif.count}</Text>
-                  </View>
-                )}
+                <LydoBellIcon count={notif.count} />
               </TouchableOpacity>
             </View>
           )}
@@ -1087,12 +1082,7 @@ export default function LYDOHomeScreen() {
                 </View>
               </View>
               <TouchableOpacity style={styles.bellBtn} activeOpacity={0.7} onPress={notif.open}>
-                <LydoBellIcon hasNotif={notif.count > 0} />
-                {notif.count > 0 && (
-                  <View style={styles.notifBadge}>
-                    <Text style={styles.notifBadgeText}>{notif.count > 99 ? '99+' : notif.count}</Text>
-                  </View>
-                )}
+                <LydoBellIcon count={notif.count} />
               </TouchableOpacity>
             </View>
           </View>
@@ -1410,35 +1400,20 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
 
-  // Bell
+  // Bell — unread-count badge lives in LydoBellIcon (notificationCenter.js);
+  // only the button containers are styled here.
   bellBtn: {
     width: 44, height: 44, borderRadius: 22,
     backgroundColor: COLORS.white, alignItems: 'center', justifyContent: 'center',
     shadowColor: COLORS.navy, shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.15, shadowRadius: 8, elevation: 4,
   },
-  notifBadge: {
-    position: 'absolute', top: 2, right: 2,
-    minWidth: 18, height: 18, borderRadius: 9,
-    backgroundColor: '#EF4444', alignItems: 'center', justifyContent: 'center',
-    borderWidth: 2, borderColor: COLORS.white,
-    paddingHorizontal: 4,
-  },
-  notifBadgeText: { fontSize: 10, fontWeight: '800', color: COLORS.white },
   bellBtnMobile: {
     width: 40, height: 40, borderRadius: 20,
     backgroundColor: COLORS.white, alignItems: 'center', justifyContent: 'center',
     shadowColor: COLORS.navy, shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.15, shadowRadius: 6, elevation: 4,
   },
-  notifBadgeMobile: {
-    position: 'absolute', top: 2, right: 2,
-    minWidth: 16, height: 16, borderRadius: 8,
-    backgroundColor: '#EF4444', alignItems: 'center', justifyContent: 'center',
-    borderWidth: 1.5, borderColor: COLORS.white,
-    paddingHorizontal: 3,
-  },
-  notifBadgeTextMobile: { fontSize: 9, fontWeight: '800', color: COLORS.white },
 
   // Stat Cards
   statsRow: { flexDirection: 'row', gap: 10, marginBottom: 18, flexWrap: 'wrap' },

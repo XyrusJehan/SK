@@ -835,7 +835,6 @@ export default function HomeScreen({ navigation }) {
   const { activeTab, setActiveTab } = useNav();
   const { logout, user } = useAuth();
   const [notifCount, setNotifCount] = useState(0);
-  const [hasUnviewedNotif, setHasUnviewedNotif] = useState(false);
   const [seenApprovedCount, setSeenApprovedCount] = useState(0);
   const [seenTemplatesCount, setSeenTemplatesCount] = useState(0);
   const [seenReturnedCount, setSeenReturnedCount] = useState(0);
@@ -1292,15 +1291,11 @@ const seenReady = seenLoaded ? 1 : 0;
 
   const totalUnviewed = unviewedApproved + unviewedTemplates + unviewedReturned + unviewedDeadlines;
 
-  // Update notification count when unviewed counts change.
+  // Update notification count when unviewed counts change. BellIcon's own
+  // numbered badge (count > 0) now handles showing "there's something new" —
+  // no separate boolean needed.
   useEffect(() => {
     setNotifCount(totalUnviewed);
-  }, [totalUnviewed]);
-
-  // Show red dot whenever there is anything unviewed. Bell badge shows the
-  // total unviewed count.
-  useEffect(() => {
-    setHasUnviewedNotif(totalUnviewed > 0);
   }, [totalUnviewed]);
 
   const handleNavPress = (tab) => {
@@ -1416,14 +1411,7 @@ const seenReady = seenLoaded ? 1 : 0;
                 <TouchableOpacity style={styles.bellBtnMobile} activeOpacity={0.7} onPress={() => {
                   setNotificationModalVisible(true);
                 }}>
-                  <BellIcon hasNotif={hasUnviewedNotif} />
-                  {notifCount > 0 && (
-                    <View style={styles.notifBadgeMobile}>
-                      <Text style={styles.notifBadgeTextMobile}>
-                        {notifCount > 99 ? '99+' : notifCount}
-                      </Text>
-                    </View>
-                  )}
+                  <BellIcon count={notifCount} />
                 </TouchableOpacity>
               </View>
             </View>
@@ -1440,14 +1428,7 @@ const seenReady = seenLoaded ? 1 : 0;
                 <TouchableOpacity style={styles.bellBtn} activeOpacity={0.7} onPress={() => {
                   setNotificationModalVisible(true);
                 }}>
-                  <BellIcon hasNotif={hasUnviewedNotif} />
-                  {notifCount > 0 && (
-                    <View style={styles.notifBadge}>
-                      <Text style={styles.notifBadgeText}>
-                        {notifCount > 99 ? '99+' : notifCount}
-                      </Text>
-                    </View>
-                  )}
+                  <BellIcon count={notifCount} />
                 </TouchableOpacity>
               </View>
             </View>
@@ -1977,38 +1958,13 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.08, shadowRadius: 6, elevation: 3,
   },
 
-  // ── Bell icons ──
-  notifBadge: {
-    position: 'absolute',
-    top: 2, right: 2,
-    minWidth: 18, height: 18,
-    borderRadius: 9,
-    backgroundColor: '#EF4444',
-    alignItems: 'center', justifyContent: 'center',
-    borderWidth: 2,
-    borderColor: COLORS.white,
-    paddingHorizontal: 4,
-  },
-  notifBadgeText: {
-    fontSize: 10, fontWeight: '800',
-    color: COLORS.white,
-  },
+  // ── Bell icon — the unread-count badge itself now lives in BellIcon
+  // (notificationCenter.js), so only the button container is styled here.
   bellBtnMobile: {
     width: 40, height: 40, borderRadius: 20,
     backgroundColor: COLORS.white, alignItems: 'center', justifyContent: 'center',
     shadowColor: COLORS.navy, shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.15, shadowRadius: 6, elevation: 4,
-  },
-  notifBadgeMobile: {
-    position: 'absolute', top: 2, right: 2,
-    minWidth: 16, height: 16, borderRadius: 8,
-    backgroundColor: '#EF4444', alignItems: 'center', justifyContent: 'center',
-    borderWidth: 1.5, borderColor: COLORS.white,
-    paddingHorizontal: 3,
-  },
-  notifBadgeTextMobile: {
-    fontSize: 9, fontWeight: '800',
-    color: COLORS.white,
   },
 
   // ── Stat Cards ──
