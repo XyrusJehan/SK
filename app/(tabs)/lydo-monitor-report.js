@@ -2,14 +2,60 @@ import React, { useState, useEffect } from 'react';
 import {
   View, Text, TextInput, ScrollView, TouchableOpacity,
   StyleSheet, SafeAreaView, StatusBar, Dimensions,
-  Modal, Alert, Image,
+  Modal, Alert, Image, Platform, ActivityIndicator,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useNav } from './navContext';
+import Sidebar, { LYDO_NAV_ITEMS } from './../components/Sidebar';
 import { useAuth } from './authContext';
+import { useLydoNotificationCenter, LydoNotificationModal, LydoBellIcon } from './notificationCenter';
+import {
+  fetchTransparencyReport,
+  fetchSubmissionReport,
+  saveComplianceDocument,
+  DOC_FULL_NAMES as API_DOC_FULL_NAMES,
+} from './reportsApi';
+import {
+  buildTransparencyReportHtml,
+  buildSubmissionReportHtml,
+  uploadReportPdf,
+  renderReportToBase64,
+} from './reportPdf';
+// Renders the generated report HTML inside the preview modal below, on
+// native platforms (iOS/Android). react-native-webview does NOT support
+// web, so the PreviewFrame component further down uses a plain <iframe>
+// on web instead — see PreviewFrame.
+// Requires: npx expo install react-native-webview
+import { WebView } from 'react-native-webview';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const isMobile = SCREEN_WIDTH < 768;
+
+// react-native-web's Alert.alert does NOT show any UI — it only logs a
+// console warning ("Alert.alert not supported on web") and returns. That
+// meant failures (e.g. the PDF export throwing) looked like "nothing
+// happens" in the browser even though an error had actually occurred and
+// was logged. This falls back to window.alert/confirm on web so the
+// person actually sees the message, and keeps native Alert.alert
+// everywhere else.
+function notify(title, message, { confirmButtons } = {}) {
+  if (Platform.OS === 'web') {
+    const text = message ? `${title}\n\n${message}` : title;
+    if (confirmButtons) {
+      const ok = window.confirm(text);
+      const btn = confirmButtons[ok ? 1 : 0];
+      btn?.onPress?.();
+    } else {
+      window.alert(text);
+    }
+    return;
+  }
+  if (confirmButtons) {
+    Alert.alert(title, message, confirmButtons);
+  } else {
+    Alert.alert(title, message);
+  }
+}
 
 // ─── COLORS ───────────────────────────────────────────────────────────────────
 const COLORS = {
@@ -31,90 +77,7 @@ const COLORS = {
   noPubBg:   '#FFEBEE',
 };
 
-const NAV_TABS     = ['Dashboard', 'Documents', 'Monitor', 'Barangay', 'Logs'];
 const MONITOR_TABS = ['Consultation', 'Budget', 'Report','Deadlines'];
-
-// ─── SIDEBAR NAV ICONS (pure React Native Views — no react-native-svg) ────────
-
-// Dashboard: 2×2 grid of rounded squares
-const DashboardIcon = ({ color = '#fff', size = 16 }) => {
-  const s = size * 0.38, gap = size * 0.12, r = size * 0.12;
-  const box = { width: s, height: s, borderRadius: r, backgroundColor: color };
-  return (
-    <View style={{ width: size, height: size, justifyContent: 'center', alignItems: 'center' }}>
-      <View style={{ flexDirection: 'row', gap }}><View style={box} /><View style={box} /></View>
-      <View style={{ height: gap }} />
-      <View style={{ flexDirection: 'row', gap }}><View style={box} /><View style={box} /></View>
-    </View>
-  );
-};
-
-// Documents: file shape with fold + two lines
-const DocumentsIcon = ({ color = '#fff', size = 16 }) => {
-  const w = size * 0.6, h = size * 0.78, fold = size * 0.22;
-  return (
-    <View style={{ width: size, height: size, justifyContent: 'center', alignItems: 'center' }}>
-      <View style={{ width: w, height: h, justifyContent: 'flex-end', paddingBottom: size * 0.08, paddingHorizontal: size * 0.1 }}>
-        <View style={{ position: 'absolute', left: 0, right: 0, top: fold, bottom: 0, borderWidth: 1.5, borderColor: color, borderRadius: size * 0.08 }} />
-        <View style={{ position: 'absolute', top: 0, right: 0, width: fold, height: fold, backgroundColor: color, borderBottomLeftRadius: size * 0.06 }} />
-        <View style={{ position: 'absolute', top: 0, left: 0, width: w - fold, height: fold, borderTopWidth: 1.5, borderLeftWidth: 1.5, borderColor: color, borderTopLeftRadius: size * 0.08 }} />
-        <View style={{ height: 1.5, backgroundColor: color, borderRadius: 1, marginBottom: size * 0.1, width: '80%' }} />
-        <View style={{ height: 1.5, backgroundColor: color, borderRadius: 1, width: '55%' }} />
-      </View>
-    </View>
-  );
-};
-
-// Monitor: simple globe — circle + horizontal line + vertical oval hint
-const MonitorIcon = ({ color = '#fff', size = 16 }) => (
-  <View style={{ width: size, height: size, justifyContent: 'center', alignItems: 'center' }}>
-    <View style={{ width: size * 0.82, height: size * 0.82, borderRadius: size * 0.41, borderWidth: 1.5, borderColor: color, justifyContent: 'center', alignItems: 'center', overflow: 'hidden' }}>
-      <View style={{ position: 'absolute', height: 1.5, width: '100%', backgroundColor: color }} />
-      <View style={{ width: size * 0.38, height: size * 0.78, borderRadius: size * 0.19, borderWidth: 1.5, borderColor: color, backgroundColor: 'transparent' }} />
-    </View>
-  </View>
-);
-
-// Barangay: building/institution icon — base + columns hint
-const BarangayIcon = ({ color = '#fff', size = 16 }) => {
-  const bw = 1.5;
-  return (
-    <View style={{ width: size, height: size, justifyContent: 'center', alignItems: 'center' }}>
-      {/* roof / triangle top */}
-      <View style={{ width: size * 0.82, height: size * 0.22, borderLeftWidth: bw, borderRightWidth: bw, borderTopWidth: bw, borderColor: color, borderTopLeftRadius: size * 0.06, borderTopRightRadius: size * 0.06 }} />
-      {/* body */}
-      <View style={{ width: size * 0.82, height: size * 0.52, borderLeftWidth: bw, borderRightWidth: bw, borderBottomWidth: bw, borderColor: color, flexDirection: 'row', justifyContent: 'space-around', alignItems: 'center', paddingHorizontal: size * 0.08, paddingBottom: size * 0.06 }}>
-        {[0, 1, 2].map(i => (
-          <View key={i} style={{ width: size * 0.1, height: size * 0.36, backgroundColor: color, borderRadius: size * 0.03 }} />
-        ))}
-      </View>
-    </View>
-  );
-};
-
-// Logs: clipboard with lines
-const LogsIcon = ({ color = '#fff', size = 16 }) => (
-  <View style={{ width: size, height: size, justifyContent: 'center', alignItems: 'center' }}>
-    <View style={{ width: size * 0.75, height: size * 0.85, borderWidth: 1.5, borderColor: color, borderRadius: size * 0.1, paddingHorizontal: size * 0.1, paddingVertical: size * 0.1, justifyContent: 'space-around' }}>
-      <View style={{ position: 'absolute', top: -size * 0.08, alignSelf: 'center', width: size * 0.3, height: size * 0.14, backgroundColor: color, borderRadius: size * 0.04 }} />
-      {[0, 1, 2].map(i => (
-        <View key={i} style={{ flexDirection: 'row', alignItems: 'center', gap: size * 0.08, marginTop: i === 0 ? size * 0.1 : 0 }}>
-          <View style={{ width: size * 0.1, height: size * 0.1, borderRadius: size * 0.05, backgroundColor: color }} />
-          <View style={{ flex: 1, height: 1.5, backgroundColor: color, borderRadius: 1 }} />
-        </View>
-      ))}
-    </View>
-  </View>
-);
-
-// Logout: door with arrow
-const LogoutNavIcon = ({ color = '#fff', size = 16 }) => (
-  <View style={{ width: size, height: size, justifyContent: 'center', alignItems: 'center' }}>
-    <View style={{ position: 'absolute', left: 0, top: 0, width: size * 0.55, height: size, borderWidth: 1.5, borderColor: color, borderRadius: size * 0.08 }} />
-    <View style={{ position: 'absolute', right: size * 0.02, width: size * 0.52, height: 1.8, backgroundColor: color, borderRadius: 1 }} />
-    <View style={{ position: 'absolute', right: size * 0.02, width: size * 0.2, height: size * 0.2, borderTopWidth: 1.8, borderRightWidth: 1.8, borderColor: color, transform: [{ rotate: '45deg' }], marginTop: -size * 0.01 }} />
-  </View>
-);
 
 // ─── DROPDOWN OPTIONS ─────────────────────────────────────────────────────────
 const DOCUMENT_OPTIONS = ['ABYIP', 'CBYDP', 'SK Budget', 'Accomplishment'];
@@ -128,98 +91,19 @@ const STATUS_META = {
 };
 
 // ─── DOCUMENT TYPE MAP ────────────────────────────────────────────────────────
-const DOC_FULL_NAMES = {
-  CBYDP:          'CBYDP',
-  ABYIP:          'Annual Budget Youth Investment Program',
-  'SK Budget':    'Annual Budget 2026',
-  Accomplishment: 'Monthly Itemized List',
-};
+// (Sourced from reportsApi.js so the label mapping stays in one place.)
+const DOC_FULL_NAMES = API_DOC_FULL_NAMES;
 
-// ─── CONSOLIDATED DATA (for "All" view) ───────────────────────────────────────
-// Each barangay has rows per document type
-const CONSOLIDATED_DATA = [
-  {
-    barangay: 'Barangay San Jose',
-    docs: [
-      { docType: 'CBYDP',       document: 'CBYDP',                                    deadline: 'January 6, 2026', time: '3:00 PM', date: '1/02/2026', status: 'on_time' },
-      { docType: 'SK Budget',   document: 'Annual Budget 2026',                        deadline: 'January 6, 2026', time: '3:00 PM', date: '1/02/2026', status: 'late'    },
-      { docType: 'ABYIP',       document: 'Annual Budget Youth Investment Program',    deadline: 'January 6, 2026', time: null,      date: null,         status: 'no_pub'  },
-      { docType: 'Cash',        document: 'Register of Cash in Bank',                 deadline: 'January 6, 2026', time: '3:00 PM', date: '1/02/2026', status: 'on_time' },
-      { docType: 'Accomp',      document: 'Monthly Itemized List',                    deadline: 'January 6, 2026', time: '3:00 PM', date: '1/02/2026', status: 'on_time' },
-    ],
-  },
-  {
-    barangay: 'Barangay San Roque',
-    docs: [
-      { docType: 'CBYDP',       document: 'CBYDP',                                    deadline: 'January 6, 2026', time: '3:00 PM', date: '1/02/2026', status: 'on_time' },
-      { docType: 'SK Budget',   document: 'Annual Budget 2026',                        deadline: 'January 6, 2026', time: '3:00 PM', date: '1/02/2026', status: 'late'    },
-      { docType: 'ABYIP',       document: 'Annual Budget Youth Investment Program',    deadline: 'January 6, 2026', time: null,      date: null,         status: 'no_pub'  },
-      { docType: 'Cash',        document: 'Register of Cash in Bank',                 deadline: 'January 6, 2026', time: '3:00 PM', date: '1/02/2026', status: 'on_time' },
-      { docType: 'Accomp',      document: 'Monthly Itemized List',                    deadline: 'January 6, 2026', time: '3:00 PM', date: '1/02/2026', status: 'on_time' },
-    ],
-  },
-  {
-    barangay: 'Barangay Santo Cristo',
-    docs: [
-      { docType: 'CBYDP',       document: 'CBYDP',                                    deadline: 'January 6, 2026', time: '3:00 PM', date: '1/02/2026', status: 'on_time' },
-      { docType: 'SK Budget',   document: 'Annual Budget 2026',                        deadline: 'January 6, 2026', time: '3:00 PM', date: '1/02/2026', status: 'late'    },
-      { docType: 'ABYIP',       document: 'Annual Budget Youth Investment Program',    deadline: 'January 6, 2026', time: null,      date: null,         status: 'no_pub'  },
-      { docType: 'Cash',        document: 'Register of Cash in Bank',                 deadline: 'January 6, 2026', time: '3:00 PM', date: '1/02/2026', status: 'on_time' },
-      { docType: 'Accomp',      document: 'Monthly Itemized List',                    deadline: 'January 6, 2026', time: '3:00 PM', date: '1/02/2026', status: 'on_time' },
-    ],
-  },
-  {
-    barangay: 'Barangay Antipolo',
-    docs: [
-      { docType: 'CBYDP',       document: 'CBYDP',                                    deadline: 'January 6, 2026', time: '9:00 AM', date: '1/05/2026', status: 'on_time' },
-      { docType: 'SK Budget',   document: 'Annual Budget 2026',                        deadline: 'January 6, 2026', time: '9:00 AM', date: '1/05/2026', status: 'on_time' },
-      { docType: 'ABYIP',       document: 'Annual Budget Youth Investment Program',    deadline: 'January 6, 2026', time: null,      date: null,         status: 'no_pub'  },
-      { docType: 'Cash',        document: 'Register of Cash in Bank',                 deadline: 'January 6, 2026', time: '9:00 AM', date: '1/05/2026', status: 'on_time' },
-      { docType: 'Accomp',      document: 'Monthly Itemized List',                    deadline: 'January 6, 2026', time: '9:00 AM', date: '1/05/2026', status: 'late'    },
-    ],
-  },
-];
-
-// ─── SINGLE-DOC REPORT DATA (for specific document type views) ────────────────
-const REPORT_ROWS = [
-  { id: '1', barangay: 'Barangay San Jose',    document: 'Annual Budget Youth Investment Program 2026', time: '3:00 PM',  date: '1/02/2026', status: 'on_time', docType: 'ABYIP' },
-  { id: '2', barangay: 'Barangay San Roque',   document: 'Annual Budget Youth Investment Program 2026', time: '3:00 PM',  date: '1/02/2026', status: 'late',    docType: 'ABYIP' },
-  { id: '3', barangay: 'Barangay Santo Cristo', document: 'Annual Budget Youth Investment Program 2026', time: '3:00 PM', date: '1/02/2026', status: 'no_pub',  docType: 'ABYIP' },
-  { id: '4', barangay: 'Barangay Antipolo',    document: 'Annual Budget Youth Investment Program 2026', time: '9:00 AM',  date: '1/05/2026', status: 'on_time', docType: 'ABYIP' },
-  { id: '5', barangay: 'Barangay Banot',       document: 'Annual Budget Youth Investment Program 2026', time: '10:00 AM', date: '1/06/2026', status: 'late',    docType: 'ABYIP' },
-  { id: '6', barangay: 'Barangay Mamala',      document: 'Annual Budget Youth Investment Program 2026', time: '2:00 PM',  date: '1/08/2026', status: 'no_pub',  docType: 'ABYIP' },
-
-  { id: '7',  barangay: 'Barangay San Jose',    document: 'CBYDP 2026',          time: '3:00 PM',  date: '1/02/2026', status: 'on_time', docType: 'CBYDP' },
-  { id: '8',  barangay: 'Barangay San Roque',   document: 'CBYDP 2026',          time: '3:00 PM',  date: '1/02/2026', status: 'on_time', docType: 'CBYDP' },
-  { id: '9',  barangay: 'Barangay Santo Cristo', document: 'CBYDP 2026',         time: '3:00 PM',  date: '1/02/2026', status: 'late',    docType: 'CBYDP' },
-  { id: '10', barangay: 'Barangay Antipolo',    document: 'CBYDP 2026',          time: '9:00 AM',  date: '1/05/2026', status: 'on_time', docType: 'CBYDP' },
-
-  { id: '11', barangay: 'Barangay San Jose',    document: 'SK Annual Budget 2026', time: '3:00 PM',  date: '1/02/2026', status: 'late',    docType: 'SK Budget' },
-  { id: '12', barangay: 'Barangay San Roque',   document: 'SK Annual Budget 2026', time: '3:00 PM',  date: '1/02/2026', status: 'on_time', docType: 'SK Budget' },
-  { id: '13', barangay: 'Barangay Santo Cristo', document: 'SK Annual Budget 2026', time: null,      date: null,         status: 'no_pub',  docType: 'SK Budget' },
-
-  { id: '14', barangay: 'Barangay San Jose',    document: 'Accomplishment Report 2026', time: '3:00 PM', date: '1/02/2026', status: 'on_time', docType: 'Accomplishment' },
-  { id: '15', barangay: 'Barangay San Roque',   document: 'Accomplishment Report 2026', time: null,      date: null,        status: 'no_pub',  docType: 'Accomplishment' },
-  { id: '16', barangay: 'Barangay Antipolo',    document: 'Accomplishment Report 2026', time: '9:00 AM', date: '1/05/2026', status: 'late',    docType: 'Accomplishment' },
-];
-
-// Deadline per doc type
-const DOC_DEADLINES = {
-  ABYIP:          'January 14, 2026',
-  CBYDP:          'January 10, 2026',
-  'SK Budget':    'January 12, 2026',
-  Accomplishment: 'January 20, 2026',
-};
+// NOTE: CONSOLIDATED_DATA / REPORT_ROWS / DOC_DEADLINES used to be hardcoded
+// mock arrays. They are now fetched live from Supabase (see reportsApi.js)
+// and built into the same shapes inside the component below:
+//   - `consolidatedGroups` mirrors the old CONSOLIDATED_DATA (barangay -> docs[])
+//   - `singleDocRows`     mirrors the old REPORT_ROWS (flat, filtered by docType)
+// Both are derived from whichever sub-tab is active:
+//   Transparency -> fetchTransparencyReport()  (documents.status = 'published')
+//   Submission   -> fetchSubmissionReport()    (submission_deadlines.is_met)
 
 // ─── ICONS ────────────────────────────────────────────────────────────────────
-const BellIcon = ({ hasNotif }) => (
-  <View style={styles.bellWrapper}>
-    <View style={styles.bellBody} />
-    <View style={styles.bellBottom} />
-    {hasNotif && <View style={styles.bellDot} />}
-  </View>
-);
-
 const MenuIcon = () => (
   <View style={styles.menuIconContainer}>
     {[0, 1, 2].map(i => <View key={i} style={styles.menuLine} />)}
@@ -367,21 +251,98 @@ const BarangayGroup = ({ group, index }) => {
   );
 };
 
-// ─── PDF DOWNLOAD MODAL ───────────────────────────────────────────────────────
-const PdfDownloadModal = ({ visible, onClose, onDownload, docLabel, year }) => {
+// ─── PDF FILENAME HELPER ────────────────────────────────────────────────────
+// Two reports, two files — kept separate (rather than one combined report)
+// so each can be routed, filed, or shared independently. `kind` controls
+// which report the filename describes; `docLabel` is the selected document
+// type filter ('All' -> "AllDocuments" for a clean, professional filename).
+function buildReportFilename(kind, docLabel, year) {
+  const docPart = docLabel === 'All' ? 'AllDocuments' : docLabel.replace(/\s+/g, '');
+  const kindPart = kind === 'transparency' ? 'FDP_Transparency_Report' : 'Submission_Compliance_Report';
+  return `SK_Rizal_${kindPart}_${docPart}_${year}.pdf`;
+}
+
+// Renders the report HTML for preview. react-native-webview only supports
+// native platforms (iOS/Android/macOS/Windows) — rendering its <WebView> on
+// web throws "does not support this platform" — so on web we fall back to
+// a plain <iframe srcDoc="..."> instead, which every browser supports natively.
+// Renders the report HTML for preview. react-native-webview only supports
+// native platforms (iOS/Android/macOS/Windows) — rendering its <WebView> on
+// web throws "does not support this platform" — so on web we fall back to
+// a plain <iframe srcDoc="..."> instead, which every browser supports
+// natively. We don't rely on Platform.OS alone (some web bundler/runtime
+// combinations still report something other than 'web'); checking for the
+// DOM directly is the reliable signal that we're actually in a browser.
+const isWebRuntime = typeof document !== 'undefined' && typeof window !== 'undefined';
+
+// Safety net: if the platform check above is ever wrong in some runtime and
+// react-native-webview's <WebView> still gets mounted somewhere it isn't
+// supported, this catches that render error instead of surfacing the raw
+// "does not support this platform" string in the UI.
+class WebViewErrorBoundary extends React.Component {
+  constructor(props) { super(props); this.state = { failed: false }; }
+  static getDerivedStateFromError() { return { failed: true }; }
+  componentDidCatch(err) { console.warn('WebView failed to render preview:', err); }
+  render() {
+    if (this.state.failed) {
+      return (
+        <View style={PDF.previewLoadingWrap}>
+          <Text style={PDF.previewLoadingText}>Preview isn't available on this device — you can still download the PDF below.</Text>
+        </View>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+const PreviewFrame = ({ html }) => {
+  if (Platform.OS === 'web' || isWebRuntime) {
+    return (
+      <iframe
+        title="report-preview"
+        srcDoc={html}
+        style={{ flex: 1, width: '100%', height: '100%', border: 'none', backgroundColor: '#FFFFFF' }}
+      />
+    );
+  }
+  return (
+    <WebViewErrorBoundary>
+      <WebView
+        originWhitelist={['*']}
+        source={{ html }}
+        style={PDF.webview}
+      />
+    </WebViewErrorBoundary>
+  );
+};
+
+// ─── REPORT PREVIEW MODAL ──────────────────────────────────────────────────
+// Shows the actual generated report (same HTML that becomes the PDF) inside
+// a WebView (native) or iframe (web) so the user can review it before
+// committing to save it.
+// `reportKind` ties this modal to whichever sub-tab is active —
+// 'transparency' or 'submission' — so it only ever previews/saves ONE report,
+// matching the Save Report button that opened it.
+//
+// Primary action is "Save" (not "Download"): the rendered PDF is uploaded to
+// the 'documents' bucket and a row is written to `compliance_documents`.
+// The user re-opens it later from Documents > Reports.
+const ReportPreviewModal = ({
+  visible, onClose, onSave,
+  docLabel, year, reportKind,
+  loading, html, saving,
+}) => {
   if (!visible) return null;
   const isAll = docLabel === 'All';
-  const filename = isAll
-    ? `SK_Rizal_Full_Compliance_Report_${year}.pdf`
-    : `SK_Rizal_${docLabel}_Report_${year}.pdf`;
-  const docName = isAll
-    ? 'Full Compliance Report'
-    : `${docLabel} Report`;
+  const filename = buildReportFilename(reportKind, docLabel, year);
+  const reportLabel = reportKind === 'transparency' ? 'FDP Transparency Report' : 'Submission Compliance Report';
+  const docName = isAll ? reportLabel : `${docLabel} ${reportLabel}`;
+  const busy = loading || saving;
 
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={busy ? undefined : onClose}>
       <View style={PDF.overlay}>
-        <View style={PDF.sheet}>
+        <View style={PDF.previewSheet}>
           {/* ── Header ── */}
           <View style={PDF.header}>
             <View style={PDF.pdfIconWrap}>
@@ -394,43 +355,60 @@ const PdfDownloadModal = ({ visible, onClose, onDownload, docLabel, year }) => {
                 </View>
               </View>
             </View>
-            <Text style={PDF.title}>PDF Download Ready</Text>
-            <TouchableOpacity style={PDF.closeBtn} onPress={onClose} activeOpacity={0.8}>
-              <Text style={PDF.closeX}>✕</Text>
-            </TouchableOpacity>
+            <View style={{ flex: 1 }}>
+              <Text style={PDF.title}>
+                {loading ? 'Loading Preview…' : saving ? 'Saving Report…' : 'Preview Report'}
+              </Text>
+              <Text style={PDF.previewSubtitle} numberOfLines={1}>{docName} {year}</Text>
+            </View>
+            {!busy && (
+              <TouchableOpacity style={PDF.closeBtn} onPress={onClose} activeOpacity={0.8}>
+                <Text style={PDF.closeX}>✕</Text>
+              </TouchableOpacity>
+            )}
           </View>
 
           <View style={PDF.divider} />
 
-          {/* ── Body ── */}
-          <View style={PDF.body}>
-            <Text style={PDF.bodyText}>
-              Your summary Report for{' '}
-              <Text style={PDF.bold}>Rizal, Laguna</Text>
-            </Text>
-            <Text style={[PDF.bodyText, { marginTop: 6 }]}>
-              <Text style={PDF.bold}>{docName} {year}</Text>{' '}
-              is now ready to download
-            </Text>
-            <Text style={PDF.filename}>{filename}</Text>
+          {/* ── Preview ── */}
+          <View style={PDF.previewBody}>
+            {loading || !html ? (
+              <View style={PDF.previewLoadingWrap}>
+                <ActivityIndicator size="large" color={COLORS.navy} />
+                <Text style={PDF.previewLoadingText}>Building your report preview…</Text>
+              </View>
+            ) : (
+              <PreviewFrame html={html} />
+            )}
           </View>
+
+          <Text style={PDF.filename}>{filename}</Text>
 
           {/* ── Actions ── */}
           <View style={PDF.btnRow}>
             <TouchableOpacity
-              style={PDF.downloadBtn}
-              onPress={() => { onDownload(); onClose(); }}
+              style={[PDF.saveBtn, (busy || !html) && { opacity: 0.6 }]}
+              onPress={() => { if (!busy && html) onSave(); }}
               activeOpacity={0.85}
+              disabled={busy || !html}
             >
-              <View style={PDF.dlIconWrap}>
-                <View style={PDF.dlIconArrow} />
-                <View style={PDF.dlIconLine} />
-              </View>
-              <Text style={PDF.downloadText}>Download PDF [892 KB]</Text>
+              {saving ? (
+                <ActivityIndicator size="small" color={COLORS.white} />
+              ) : (
+                <View style={PDF.saveIconWrap}>
+                  <View style={PDF.saveIconFloppy} />
+                  <View style={PDF.saveIconSlit} />
+                </View>
+              )}
+              <Text style={PDF.saveText}>
+                {saving ? 'Saving…' : 'Save Report'}
+              </Text>
             </TouchableOpacity>
-            <TouchableOpacity style={PDF.cancelBtn} onPress={onClose} activeOpacity={0.8}>
-              <Text style={PDF.cancelText}>Cancel</Text>
-            </TouchableOpacity>
+            {!busy && (
+              <TouchableOpacity style={PDF.cancelBtn} onPress={onClose} activeOpacity={0.8}>
+                <Text style={PDF.cancelText}>Cancel</Text>
+              </TouchableOpacity>
+            )}
           </View>
         </View>
       </View>
@@ -441,6 +419,7 @@ const PdfDownloadModal = ({ visible, onClose, onDownload, docLabel, year }) => {
 const PDF = StyleSheet.create({
   overlay:         { flex: 1, backgroundColor: 'rgba(0,0,0,0.50)', justifyContent: 'center', alignItems: 'center', padding: 24 },
   sheet:           { backgroundColor: COLORS.white, borderRadius: 14, width: '100%', maxWidth: 380, overflow: 'hidden', elevation: 20, shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.25, shadowRadius: 20 },
+  previewSheet:    { backgroundColor: COLORS.white, borderRadius: 14, width: '100%', maxWidth: 640, height: '85%', maxHeight: 780, overflow: 'hidden', elevation: 20, shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.25, shadowRadius: 20 },
   header:          { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 16, paddingTop: 16, paddingBottom: 12 },
   pdfIconWrap:     { width: 36, height: 36, borderRadius: 6, backgroundColor: '#F5F5F5', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
   pdfIconPage:     { width: 28, height: 32, backgroundColor: COLORS.white, borderRadius: 3, borderWidth: 1, borderColor: '#E0E0E0', overflow: 'hidden' },
@@ -448,29 +427,180 @@ const PDF = StyleSheet.create({
   pdfIconRedText:  { fontSize: 6, fontWeight: '900', color: COLORS.white, letterSpacing: 0.5 },
   pdfIconLines:    { paddingHorizontal: 3, paddingTop: 3, gap: 2 },
   pdfIconLine:     { height: 2, backgroundColor: '#D0D0D0', borderRadius: 1 },
-  title:           { flex: 1, fontSize: 15, fontWeight: '800', color: COLORS.darkText },
+  title:           { fontSize: 15, fontWeight: '800', color: COLORS.darkText },
+  previewSubtitle: { fontSize: 11, color: COLORS.subText, marginTop: 1 },
   closeBtn:        { width: 28, height: 28, borderRadius: 14, backgroundColor: COLORS.lightGray, alignItems: 'center', justifyContent: 'center' },
   closeX:          { fontSize: 11, color: COLORS.subText, fontWeight: '700' },
   divider:         { height: 1, backgroundColor: COLORS.lightGray },
   body:            { paddingHorizontal: 16, paddingTop: 14, paddingBottom: 10 },
+  previewBody:     { flex: 1, backgroundColor: '#F2F2F2' },
+  webview:         { flex: 1, backgroundColor: '#FFFFFF' },
+  previewLoadingWrap: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 10 },
+  previewLoadingText: { fontSize: 12, color: COLORS.subText },
   bodyText:        { fontSize: 13, color: COLORS.darkText, lineHeight: 20 },
   bold:            { fontWeight: '700' },
-  filename:        { marginTop: 10, fontSize: 11, color: COLORS.subText },
+  filename:        { marginTop: 10, marginHorizontal: 16, fontSize: 11, color: COLORS.subText },
   btnRow:          { flexDirection: 'row', gap: 8, paddingHorizontal: 16, paddingBottom: 16, paddingTop: 12 },
-  downloadBtn:     { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: COLORS.navy, borderRadius: 8, paddingVertical: 11 },
+  saveBtn:         { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: COLORS.navy, borderRadius: 8, paddingVertical: 11 },
   cancelBtn:       { paddingHorizontal: 16, paddingVertical: 11, borderRadius: 8, borderWidth: 1.5, borderColor: COLORS.midGray, alignItems: 'center', justifyContent: 'center' },
-  downloadText:    { fontSize: 12, fontWeight: '700', color: COLORS.white },
+  saveText:        { fontSize: 12, fontWeight: '700', color: COLORS.white },
   cancelText:      { fontSize: 12, fontWeight: '600', color: COLORS.subText },
-  dlIconWrap:      { alignItems: 'center', justifyContent: 'center', width: 16, height: 16 },
-  dlIconArrow:     { width: 0, height: 0, borderLeftWidth: 5, borderRightWidth: 5, borderTopWidth: 7, borderLeftColor: 'transparent', borderRightColor: 'transparent', borderTopColor: COLORS.white },
-  dlIconLine:      { width: 8, height: 2, backgroundColor: COLORS.white, marginTop: 1 },
+  saveIconWrap:    { alignItems: 'center', justifyContent: 'center', width: 14, height: 14 },
+  saveIconFloppy:  { width: 11, height: 12, backgroundColor: COLORS.white, borderRadius: 1 },
+  saveIconSlit:    { position: 'absolute', top: 1, width: 5, height: 4, backgroundColor: COLORS.navy },
 });
+
+// ─── SAVE-SUCCESS MODAL ───────────────────────────────────────────────────────
+// Shown after a report finishes saving to compliance_documents + the documents
+// bucket. Primary CTA navigates the user to Documents > Reports so they can
+// view/download the file they just generated. The secondary CTA dismisses the
+// modal so the user can stay on the Monitor screen and keep working.
+
+const SUCC = StyleSheet.create({
+  backdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(19, 62, 117, 0.55)', // matches COLORS.navy @ 55%
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 24,
+  },
+  card: {
+    width: '100%',
+    maxWidth: 420,
+    backgroundColor: COLORS.white,
+    borderRadius: 16,
+    paddingHorizontal: 24,
+    paddingTop: 28,
+    paddingBottom: 20,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.18,
+    shadowRadius: 18,
+    elevation: 10,
+  },
+  // Checkmark drawn from two rotated bars inside a green circle. No SVG dep.
+  checkCircle: {
+    width: 72, height: 72, borderRadius: 36,
+    backgroundColor: '#1B5E20', // success green, matches the FDP submission tag color
+    alignItems: 'center', justifyContent: 'center',
+    marginBottom: 18,
+  },
+  checkStem: {
+    position: 'absolute',
+    width: 12, height: 4, borderRadius: 2,
+    backgroundColor: COLORS.white,
+    transform: [{ rotate: '45deg' }, { translateX: -2 }, { translateY: 6 }],
+  },
+  checkKick: {
+    position: 'absolute',
+    width: 24, height: 4, borderRadius: 2,
+    backgroundColor: COLORS.white,
+    transform: [{ rotate: '-45deg' }, { translateX: -4 }, { translateY: -2 }],
+  },
+  title: {
+    fontSize: 20, fontWeight: '900', color: COLORS.navy,
+    marginBottom: 8, letterSpacing: 0.3,
+  },
+  subtitle: {
+    fontSize: 13, color: COLORS.subText, textAlign: 'center',
+    lineHeight: 18, marginBottom: 18, paddingHorizontal: 4,
+  },
+  fileChip: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    backgroundColor: '#F4F6FA', borderWidth: 1, borderColor: '#DDE3EE',
+    borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8,
+    marginBottom: 22, maxWidth: '100%', alignSelf: 'stretch',
+  },
+  fileChipDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: COLORS.navy },
+  fileChipText: {
+    fontSize: 12, fontWeight: '600', color: COLORS.darkText, flex: 1,
+  },
+  btnRow: { flexDirection: 'row', gap: 10, alignSelf: 'stretch' },
+  secondaryBtn: {
+    flex: 1, paddingVertical: 12, borderRadius: 8, alignItems: 'center',
+    borderWidth: 1.5, borderColor: COLORS.midGray, backgroundColor: COLORS.white,
+  },
+  secondaryText: { fontSize: 13, fontWeight: '700', color: COLORS.subText },
+  primaryBtn: {
+    flex: 1.4, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: 8, paddingVertical: 12, borderRadius: 8, backgroundColor: COLORS.navy,
+    shadowColor: COLORS.navy, shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.25, shadowRadius: 6, elevation: 4,
+  },
+  primaryText: { fontSize: 13, fontWeight: '800', color: COLORS.white },
+  arrowWrap: { width: 14, height: 12, alignItems: 'center', justifyContent: 'center' },
+  arrowLine: { width: 12, height: 2, backgroundColor: COLORS.white, borderRadius: 1 },
+  arrowHead: {
+    position: 'absolute', right: 0, width: 6, height: 6,
+    borderRightWidth: 2, borderTopWidth: 2,
+    borderColor: COLORS.white, transform: [{ rotate: '45deg' }],
+  },
+});
+
+const SuccessModal = ({ visible, filename, onGoToReports, onClose }) => {
+  if (!visible) return null;
+
+  return (
+    <Modal
+      visible={visible}
+      transparent
+      animationType="fade"
+      onRequestClose={onClose}
+    >
+      <View style={SUCC.backdrop}>
+        <View style={SUCC.card}>
+          {/* Green check circle */}
+          <View style={SUCC.checkCircle}>
+            <View style={SUCC.checkStem} />
+            <View style={SUCC.checkKick} />
+          </View>
+
+          <Text style={SUCC.title}>Report Saved!</Text>
+          <Text style={SUCC.subtitle}>
+            Your report has been saved successfully and is now available in the
+            Reports section.
+          </Text>
+
+          {/* Filename chip — gives the user a quick confirmation of what was
+              actually written, so they can sanity-check it before navigating. */}
+          <View style={SUCC.fileChip}>
+            <View style={SUCC.fileChipDot} />
+            <Text style={SUCC.fileChipText} numberOfLines={1}>{filename}</Text>
+          </View>
+
+          <View style={SUCC.btnRow}>
+            <TouchableOpacity
+              style={SUCC.secondaryBtn}
+              onPress={onClose}
+              activeOpacity={0.85}
+            >
+              <Text style={SUCC.secondaryText}>Stay Here</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={SUCC.primaryBtn}
+              onPress={onGoToReports}
+              activeOpacity={0.85}
+            >
+              <Text style={SUCC.primaryText}>Go to Reports</Text>
+              <View style={SUCC.arrowWrap}>
+                <View style={SUCC.arrowLine} />
+                <View style={SUCC.arrowHead} />
+              </View>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+};
 
 // ─── MAIN SCREEN ──────────────────────────────────────────────────────────────
 export default function LYDOMonitorReportScreen() {
+  const [successModal, setSuccessModal] = useState({ visible: false, filename: '' });
   const router = useRouter();
   const { activeTab, setActiveTab } = useNav();
-  const { logout } = useAuth();
+  const { user, logout } = useAuth();
 
   const [activeMonitorTab, setActiveMonitorTab] = useState('Report');
   // Sub-tabs under Report: 'Transparency' | 'Submission'
@@ -479,9 +609,47 @@ export default function LYDOMonitorReportScreen() {
   const [selectedDoc,  setSelectedDoc]  = useState('All');
   const [selectedYear, setSelectedYear] = useState('2026');
   const [searchText,   setSearchText]   = useState('');
-  const [notifCount]                    = useState(2);
+  const notif = useLydoNotificationCenter();
   const [sidebarVisible, setSidebarVisible] = useState(false);
   const [currentTime, setCurrentTime]   = useState('');
+
+  // ── Live report rows (from documents / submission_deadlines via Supabase) ──
+  const [reportRows, setReportRows]     = useState([]); // flat rows, all doc types
+  const [loading, setLoading]           = useState(false);
+  const [loadError, setLoadError]       = useState(null);
+  const [savingReport, setSavingReport] = useState(false);
+
+  // Re-fetch whenever the sub-tab (Transparency/Submission) or the year
+  // changes. We always fetch documentType='All' so the consolidated ("All")
+  // view has every doc type to group by barangay, and filter client-side
+  // for the single-doc view — avoids a round trip every time someone
+  // toggles the document dropdown.
+  useEffect(() => {
+    let cancelled = false;
+
+    async function load() {
+      setLoading(true);
+      setLoadError(null);
+      try {
+        const fetcher = reportSubTab === 'Transparency'
+          ? fetchTransparencyReport
+          : fetchSubmissionReport;
+        const rows = await fetcher({ year: selectedYear, documentType: 'All' });
+        if (!cancelled) setReportRows(rows);
+      } catch (err) {
+        if (!cancelled) {
+          console.error('Failed to load report data:', err);
+          setLoadError(err.message || 'Failed to load report data.');
+          setReportRows([]);
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+
+    load();
+    return () => { cancelled = true; };
+  }, [reportSubTab, selectedYear]);
 
   const today = new Date().toLocaleDateString('en-PH', {
     timeZone: 'Asia/Manila', month: 'long', day: 'numeric', year: 'numeric',
@@ -504,18 +672,49 @@ export default function LYDOMonitorReportScreen() {
     return () => clearInterval(interval);
   }, []);
   const [pdfModalVisible, setPdfModalVisible] = useState(false);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewHtml, setPreviewHtml] = useState(null);
 
   const isAllView = selectedDoc === 'All';
 
+  // ── Open the preview modal and build the report HTML for whichever
+  // sub-tab is active. Transparency's Save Report never touches Submission
+  // data, and vice versa — each button previews/downloads exactly one report.
+  const openReportPreview = async () => {
+    setPreviewHtml(null);
+    setPreviewLoading(true);
+    setPdfModalVisible(true);
+    try {
+      const isTransparency = reportSubTab === 'Transparency';
+      if (isTransparency) {
+        const rows = await fetchTransparencyReport({ year: selectedYear, documentType: selectedDoc });
+        setPreviewHtml(buildTransparencyReportHtml({
+          selectedDoc, selectedYear, rows, generatedBy: user?.name,
+        }));
+      } else {
+        const rows = await fetchSubmissionReport({ year: selectedYear, documentType: selectedDoc });
+        setPreviewHtml(buildSubmissionReportHtml({
+          selectedDoc, selectedYear, rows, generatedBy: user?.name,
+        }));
+      }
+    } catch (err) {
+      console.error('Failed to build report preview:', err);
+      notify('Preview Failed', err.message || 'Could not load the report preview.');
+      setPdfModalVisible(false);
+    } finally {
+      setPreviewLoading(false);
+    }
+  };
+
   // ── Navigation ──────────────────────────────────────────────────────────────
-  const handleNavPress = (tab) => {
+  const handleNav = (tab) => {
     setActiveTab(tab);
     setSidebarVisible(false);
-    if (tab === 'Dashboard')      router.push('/(tabs)/lydo-dashboard');
-    if (tab === 'Documents') router.push('/(tabs)/lydo-document');
-    if (tab === 'Monitor')   router.push('/(tabs)/lydo-monitor');
-    if (tab === 'Logs')       router.push('/(tabs)/lydo-logs');
-        if (tab === 'Barangay') router.push('/(tabs)/lydo-accounts');
+    if (tab === 'Dashboard') router.push('/(tabs)/lydo-dashboard');
+    else if (tab === 'Documents') router.push('/(tabs)/lydo-document');
+    else if (tab === 'Monitor') router.push('/(tabs)/lydo-monitor');
+    else if (tab === 'Logs') router.push('/(tabs)/lydo-logs');
+    else if (tab === 'Barangay') router.push('/(tabs)/lydo-accounts');
   };
 
   const handleLogout = () => {
@@ -531,65 +730,42 @@ export default function LYDOMonitorReportScreen() {
     setActiveMonitorTab(tab);
   };
 
-  // ── Filtered data ────────────────────────────────────────────────────────────
-  // Single-doc view rows
-  const singleDocRows = REPORT_ROWS.filter(r =>
-    r.docType === selectedDoc &&
-    (r.barangay.toLowerCase().includes(searchText.toLowerCase()) ||
-     r.document.toLowerCase().includes(searchText.toLowerCase()))
-  );
+  // ── Filtered / derived data ──────────────────────────────────────────────────
+  // Single-doc view rows: flat list for the currently selected document type.
+  const singleDocRows = reportRows
+    .filter(r => r.docType === selectedDoc)
+    .filter(r =>
+      r.barangayName.toLowerCase().includes(searchText.toLowerCase()) ||
+      r.document.toLowerCase().includes(searchText.toLowerCase())
+    )
+    .map(r => ({ ...r, id: `${r.barangayId}-${r.docType}`, barangay: r.barangayName }));
 
-  // Consolidated view groups (filter barangays by search)
-  const consolidatedGroups = CONSOLIDATED_DATA.filter(g =>
+  // Consolidated view groups: group the flat rows by barangay, mirroring the
+  // old CONSOLIDATED_DATA shape ({ barangay, docs: [...] }).
+  const consolidatedGroups = Object.values(
+    reportRows.reduce((acc, r) => {
+      if (!acc[r.barangayName]) acc[r.barangayName] = { barangay: r.barangayName, docs: [] };
+      acc[r.barangayName].docs.push({
+        docType: r.docType,
+        document: r.document,
+        deadline: r.deadline,
+        time: r.time,
+        date: r.date,
+        status: r.status,
+      });
+      return acc;
+    }, {})
+  ).filter(g =>
     g.barangay.toLowerCase().includes(searchText.toLowerCase()) ||
     g.docs.some(d => d.document.toLowerCase().includes(searchText.toLowerCase()))
   );
 
-  // ── Sidebar ─────────────────────────────────────────────────────────────────
-  const NAV_ITEMS = [
-    { tab: 'Dashboard', IconComponent: DashboardIcon },
-    { tab: 'Documents', IconComponent: DocumentsIcon },
-    { tab: 'Monitor',   IconComponent: MonitorIcon   },
-    { tab: 'Barangay',  IconComponent: BarangayIcon  },
-    { tab: 'Logs',      IconComponent: LogsIcon      },
-  ];
-
-  const renderSidebar = () => (
-    <View style={styles.sidebar}>
-      <View style={styles.logoPill}>
-        <Image
-          source={require('./../../assets/images/lydo-logo.png')}
-          style={styles.logoImage}
-          resizeMode="contain"
-        />
-      </View>
-      <View style={styles.sidebarSpacer} />
-      {NAV_ITEMS.map(({ tab, IconComponent }) => {
-        const active = activeTab === tab;
-        const iconColor = active ? '#133E75' : 'rgba(255,255,255,0.85)';
-        return (
-          <TouchableOpacity
-            key={tab}
-            style={[styles.navItem, active && styles.navItemActive]}
-            onPress={() => handleNavPress(tab)}
-            activeOpacity={0.8}
-          >
-            <View style={styles.navItemInner}>
-              <IconComponent color={iconColor} size={16} />
-              <Text style={[styles.navLabel, active && styles.navLabelActive]}>{tab}</Text>
-            </View>
-          </TouchableOpacity>
-        );
-      })}
-      <View style={{ flex: 1 }} />
-      <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout} activeOpacity={0.8}>
-        <View style={styles.navItemInner}>
-          <LogoutNavIcon color="rgba(255,255,255,0.85)" size={16} />
-          <Text style={styles.logoutText}>Logout</Text>
-        </View>
-      </TouchableOpacity>
-    </View>
-  );
+  // Deadline shown in the title row for the currently selected document type
+  // (falls back to the first matching row's deadline since deadlines are
+  // per-barangay in submission_deadlines but usually shared across a batch).
+  const selectedDocDeadline = selectedDoc === 'All'
+    ? (reportRows[0]?.deadline ?? '—')
+    : (reportRows.find(r => r.docType === selectedDoc)?.deadline ?? '—');
 
   // ── Main Content ─────────────────────────────────────────────────────────────
   const renderContent = () => (
@@ -605,9 +781,9 @@ export default function LYDOMonitorReportScreen() {
             <MenuIcon />
           </TouchableOpacity>
           <Text style={styles.mobileTitle}>Report Monitor</Text>
-          <TouchableOpacity style={styles.bellBtn}>
-            <BellIcon hasNotif={notifCount > 0} />
-          </TouchableOpacity>
+              <TouchableOpacity style={styles.bellBtn} activeOpacity={0.7} onPress={notif.open}>
+                <LydoBellIcon count={notif.count} />
+              </TouchableOpacity>
         </View>
       )}
 
@@ -637,14 +813,9 @@ export default function LYDOMonitorReportScreen() {
                 </View>
               </View>
             </View>
-            <TouchableOpacity style={styles.bellBtn} activeOpacity={0.7}>
-              <BellIcon hasNotif={notifCount > 0} />
-              {notifCount > 0 && (
-                <View style={styles.notifBadge}>
-                  <Text style={styles.notifBadgeText}>{notifCount}</Text>
-                </View>
-              )}
-            </TouchableOpacity>
+              <TouchableOpacity style={styles.bellBtn} activeOpacity={0.7} onPress={notif.open}>
+                <LydoBellIcon count={notif.count} />
+              </TouchableOpacity>
           </View>
         </View>
       )}
@@ -742,7 +913,7 @@ export default function LYDOMonitorReportScreen() {
         {/* Save Report button */}
         <TouchableOpacity
           style={styles.saveReportBtn}
-          onPress={() => setPdfModalVisible(true)}
+          onPress={openReportPreview}
           activeOpacity={0.85}
         >
           <View style={styles.saveReportIconWrap}>
@@ -762,11 +933,27 @@ export default function LYDOMonitorReportScreen() {
           }
         </Text>
         <Text style={styles.deadline}>
-          Deadline : {isAllView ? 'January 14, 2026' : (DOC_DEADLINES[selectedDoc] ?? 'January 14, 2026')}
+          Deadline : {selectedDocDeadline}
         </Text>
       </View>
 
+      {/* ── Loading / error states ── */}
+      {loading && (
+        <View style={styles.emptyState}>
+          <Text style={styles.emptyText}>Loading report data…</Text>
+        </View>
+      )}
+
+      {!loading && loadError && (
+        <View style={styles.emptyState}>
+          <Text style={[styles.emptyText, { color: COLORS.noPub }]}>
+            Couldn't load the report: {loadError}
+          </Text>
+        </View>
+      )}
+
       {/* ── Table ── */}
+      {!loading && !loadError && (
       <View style={styles.tableContainer}>
 
         {/* ── ALL VIEW: Consolidated table with barangay groups ── */}
@@ -783,7 +970,9 @@ export default function LYDOMonitorReportScreen() {
                 <Text style={styles.tableHeaderText}>Submission Deadline</Text>
               </View>
               <View style={styles.colDateTime}>
-                <Text style={[styles.tableHeaderText, { textAlign: 'right' }]}>Date Published</Text>
+                <Text style={[styles.tableHeaderText, { textAlign: 'right' }]}>
+                  {reportSubTab === 'Transparency' ? 'Date Published' : 'Date Submitted'}
+                </Text>
               </View>
               <View style={styles.colStatus}>
                 <Text style={[styles.tableHeaderText, { textAlign: 'center' }]}>Status</Text>
@@ -813,7 +1002,9 @@ export default function LYDOMonitorReportScreen() {
                 <Text style={styles.tableHeaderText}>Document</Text>
               </View>
               <View style={styles.colDateTime}>
-                <Text style={[styles.tableHeaderText, { textAlign: 'right' }]}>Date Published</Text>
+                <Text style={[styles.tableHeaderText, { textAlign: 'right' }]}>
+                  {reportSubTab === 'Transparency' ? 'Date Published' : 'Date Submitted'}
+                </Text>
               </View>
               <View style={styles.colStatus}>
                 <Text style={[styles.tableHeaderText, { textAlign: 'center' }]}>Status</Text>
@@ -831,9 +1022,9 @@ export default function LYDOMonitorReportScreen() {
             )}
           </>
         )}
+
       </View>
-
-
+      )}
 
     </ScrollView>
   );
@@ -842,6 +1033,12 @@ export default function LYDOMonitorReportScreen() {
   return (
     <SafeAreaView style={styles.safe}>
       <StatusBar barStyle="light-content" backgroundColor={COLORS.navy} />
+
+      {/* Notification Modal — lists documents sent by SK officials */}
+      <LydoNotificationModal
+        {...notif.modalProps}
+        onReview={() => { notif.close(); }}
+      />
 
       <View style={styles.layout}>
         {/* Mobile: Sidebar as overlay */}
@@ -853,59 +1050,103 @@ export default function LYDOMonitorReportScreen() {
           />
         )}
 
-        {isMobile ? (
-          sidebarVisible && renderSidebar()
-        ) : (
-          renderSidebar()
-        )}
+        <Sidebar
+          activeTab={activeTab}
+          onNavPress={handleNav}
+          onLogout={handleLogout}
+          isMobile={isMobile}
+          sidebarVisible={sidebarVisible}
+          navItems={LYDO_NAV_ITEMS}
+          logoSource={require('./../../assets/images/lydo-logo.png')}
+        />
 
         {renderContent()}
       </View>
 
-      {/* PDF Download Modal */}
-      <PdfDownloadModal
+      {/* Report Preview Modal */}
+      <ReportPreviewModal
         visible={pdfModalVisible}
-        onClose={() => setPdfModalVisible(false)}
-        onDownload={() =>
-          Alert.alert('Download Started', `Report for ${selectedDoc} ${selectedYear} is downloading.`)
-        }
+        onClose={() => { setPdfModalVisible(false); setPreviewHtml(null); }}
+        loading={previewLoading}
+        html={previewHtml}
+        saving={savingReport}
+        onSave={async () => {
+          setSavingReport(true);
+          try {
+            const isTransparency = reportSubTab === 'Transparency';
+            const reportType = isTransparency ? 'transparency' : 'submission';
+            const filename = buildReportFilename(
+              reportType,
+              selectedDoc,
+              selectedYear
+            );
+
+            // The preview HTML was already built by openReportPreview() when
+            // the modal opened — reuse it rather than refetching, so what
+            // the user reviewed is exactly what gets turned into the PDF.
+
+            // Render the report HTML to a base64 PDF (no share sheet / no
+            // browser print dialog) so we can hand it straight to Storage.
+            const { base64 } = await renderReportToBase64({ html: previewHtml, filename });
+
+            // Upload to the 'documents' bucket. compliance_documents.scanned_file_url
+            // will point at this URL.
+            const publicUrl = await uploadReportPdf({ base64, filename });
+
+            // Persist the row so the report shows up in Documents > Reports.
+            // barangayId comes from the logged-in LYDO user (the report
+            // represents the LYDO office's own compliance snapshot, not
+            // a specific barangay's submission — but the schema requires
+            // barangay_id, so we pin it to the user's own barangay).
+            await saveComplianceDocument({
+              reportType,
+              year: selectedYear,
+              documentType: selectedDoc,
+              barangayId: user?.barangayId,
+              userId: user?.userId,
+              fileUrl: publicUrl,
+              remarks: `Generated on ${new Date().toLocaleString('en-PH', { timeZone: 'Asia/Manila' })}`,
+            });
+
+            setPdfModalVisible(false);
+            setPreviewHtml(null);
+            setSuccessModal({ visible: true, filename });
+          } catch (err) {
+            console.error('Failed to save report:', err);
+            notify('Save Failed', err.message || 'Could not save the report. Please try again.');
+          } finally {
+            setSavingReport(false);
+          }
+        }}
         docLabel={selectedDoc}
         year={selectedYear}
+        reportKind={reportSubTab === 'Transparency' ? 'transparency' : 'submission'}
+      />
+
+      {/* Save-success modal — pops up after the PDF finishes uploading and
+          the compliance_documents row is written. "Go to Reports" routes to
+          the Documents > Reports tab; "Stay Here" just dismisses. */}
+      <SuccessModal
+        visible={successModal.visible}
+        filename={successModal.filename}
+        onClose={() => setSuccessModal({ visible: false, filename: '' })}
+        onGoToReports={() => {
+          setSuccessModal({ visible: false, filename: '' });
+          router.push('/(tabs)/lydo-document-reports');
+        }}
       />
     </SafeAreaView>
   );
 }
+
 
 // ─── STYLES ───────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
   safe:   { flex: 1, backgroundColor: COLORS.navy },
   layout: { flex: 1, flexDirection: 'row' },
 
-  // ── Sidebar ──────────────────────────────────────────────────────────────────
-  sidebar:                { width: 250, backgroundColor: COLORS.navy, alignItems: 'center', paddingTop: 20, paddingBottom: 24, paddingHorizontal: 10, zIndex: 10 },
   sidebarOverlay:         { position: 'absolute', left: 0, top: 0, bottom: 0, right: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 5 },
 
-   logoPill: {
-    marginTop: 20,
-    width: 70, height: 70, borderRadius: 35,
-    backgroundColor: 'rgba(255,255,255,0.15)',
-    alignItems: 'center', justifyContent: 'center',
-    marginBottom: 8, borderWidth: 2, borderColor: 'rgba(255,255,255,0.3)',
-  },
-    logoImage: {
-    width: 110,
-    height: 110,
-  },
-  sidebarSpacer: { height: 28 },
-  navItemInner: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-
-  navItem:        { width: '100%', paddingVertical: 12, paddingHorizontal: 12, borderRadius: 24, marginBottom: 8, alignItems: 'center', borderWidth: 1.5, borderColor: COLORS.white, backgroundColor: COLORS.navy },
-  navItemActive:  { backgroundColor: COLORS.white, borderColor: COLORS.white },
-  navLabel:       { fontSize: 13, fontWeight: '600', color: 'rgba(255,255,255,0.8)', letterSpacing: 0.3 },
-  navLabelActive: { color: '#000', fontWeight: '800' },
-
-  logoutBtn:  { width: '100%', paddingVertical: 12, paddingHorizontal: 12, borderRadius: 24, marginTop: 8, alignItems: 'center', borderWidth: 1.5, borderColor: COLORS.white, backgroundColor: 'rgba(255,255,255,0.1)' },
-  logoutText: { fontSize: 13, fontWeight: '600', color: '#ffffff', letterSpacing: 0.3 },
 
   // ── Main ─────────────────────────────────────────────────────────────────────
   main:        { flex: 1, backgroundColor: COLORS.offWhite, borderTopLeftRadius: 20 },

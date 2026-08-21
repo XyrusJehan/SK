@@ -1,22 +1,23 @@
-import React, { useState, useEffect } from 'react';
-import {
-  View,
-  Text,
-  ScrollView,
-  TouchableOpacity,
-  StyleSheet,
-  SafeAreaView,
-  StatusBar,
-  Alert,
-  Dimensions,
-  Image,
-  Modal,
-  ActivityIndicator,
-} from 'react-native';
-import { useRouter } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
+import React, { useEffect, useState } from 'react';
 import { useNav } from './navContext';
 import { useAuth } from './authContext';
+import {
+  ActivityIndicator,
+  Alert,
+  Dimensions,
+  Modal,
+  SafeAreaView,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
+} from 'react-native';
 import { supabase } from '../../utils/supabase';
+import { useLydoNotificationCenter, LydoNotificationModal, LydoBellIcon } from './notificationCenter';
+import Sidebar, { LYDO_NAV_ITEMS } from './../components/Sidebar';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const isMobile = SCREEN_WIDTH < 768;
@@ -44,93 +45,33 @@ const toPhilippineTime = (dateStr, options) => {
   return d.toLocaleTimeString('en-PH', { timeZone: 'Asia/Manila', ...options });
 };
 
+// Helper to get activity type based on action
+const getActivityType = (action) => {
+  if (!action) return 'create';
+  const lower = action.toLowerCase();
+  if (lower.includes('approve') || lower.includes('forward')) return 'approved';
+  if (lower.includes('return')) return 'returned';
+  if (lower.includes('add') || lower.includes('create')) return 'create';
+  return 'create';
+};
+
+// Helper to get activity icon based on action
+const getActivityIcon = (action) => {
+  if (!action) return '✎';
+  const lower = action.toLowerCase();
+  if (lower.includes('approve')) return '✔';
+  if (lower.includes('forward')) return '▷';
+  if (lower.includes('return')) return '↩';
+  if (lower.includes('add template') || lower.includes('replace template')) return '➕';
+  if (lower.includes('add account') || lower.includes('add barangay')) return '👤';
+  return '✎';
+};
+
 // ─── NAV TABS ─────────────────────────────────────────────────────────────────
 const NAV_TABS = ['Dashboard', 'Documents', 'Monitor', 'Barangay', 'Logs'];
 
 const CAL_MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 const CAL_DOWS = ['SUN','MON','TUE','WED','THU','FRI','SAT'];
-
-// ─── SIDEBAR NAV ICONS (pure React Native Views — no react-native-svg) ────────
-
-// Dashboard: 2×2 grid of rounded squares
-const DashboardIcon = ({ color = '#fff', size = 16 }) => {
-  const s = size * 0.38, gap = size * 0.12, r = size * 0.12;
-  const box = { width: s, height: s, borderRadius: r, backgroundColor: color };
-  return (
-    <View style={{ width: size, height: size, justifyContent: 'center', alignItems: 'center' }}>
-      <View style={{ flexDirection: 'row', gap }}><View style={box} /><View style={box} /></View>
-      <View style={{ height: gap }} />
-      <View style={{ flexDirection: 'row', gap }}><View style={box} /><View style={box} /></View>
-    </View>
-  );
-};
-
-// Documents: file shape with fold + two lines
-const DocumentsIcon = ({ color = '#fff', size = 16 }) => {
-  const w = size * 0.6, h = size * 0.78, fold = size * 0.22;
-  return (
-    <View style={{ width: size, height: size, justifyContent: 'center', alignItems: 'center' }}>
-      <View style={{ width: w, height: h, justifyContent: 'flex-end', paddingBottom: size * 0.08, paddingHorizontal: size * 0.1 }}>
-        <View style={{ position: 'absolute', left: 0, right: 0, top: fold, bottom: 0, borderWidth: 1.5, borderColor: color, borderRadius: size * 0.08 }} />
-        <View style={{ position: 'absolute', top: 0, right: 0, width: fold, height: fold, backgroundColor: color, borderBottomLeftRadius: size * 0.06 }} />
-        <View style={{ position: 'absolute', top: 0, left: 0, width: w - fold, height: fold, borderTopWidth: 1.5, borderLeftWidth: 1.5, borderColor: color, borderTopLeftRadius: size * 0.08 }} />
-        <View style={{ height: 1.5, backgroundColor: color, borderRadius: 1, marginBottom: size * 0.1, width: '80%' }} />
-        <View style={{ height: 1.5, backgroundColor: color, borderRadius: 1, width: '55%' }} />
-      </View>
-    </View>
-  );
-};
-
-// Monitor: simple globe — circle + horizontal line + vertical oval hint
-const MonitorIcon = ({ color = '#fff', size = 16 }) => (
-  <View style={{ width: size, height: size, justifyContent: 'center', alignItems: 'center' }}>
-    <View style={{ width: size * 0.82, height: size * 0.82, borderRadius: size * 0.41, borderWidth: 1.5, borderColor: color, justifyContent: 'center', alignItems: 'center', overflow: 'hidden' }}>
-      <View style={{ position: 'absolute', height: 1.5, width: '100%', backgroundColor: color }} />
-      <View style={{ width: size * 0.38, height: size * 0.78, borderRadius: size * 0.19, borderWidth: 1.5, borderColor: color, backgroundColor: 'transparent' }} />
-    </View>
-  </View>
-);
-
-// Barangay: building/institution icon — base + columns hint
-const BarangayIcon = ({ color = '#fff', size = 16 }) => {
-  const bw = 1.5;
-  return (
-    <View style={{ width: size, height: size, justifyContent: 'center', alignItems: 'center' }}>
-      {/* roof / triangle top */}
-      <View style={{ width: size * 0.82, height: size * 0.22, borderLeftWidth: bw, borderRightWidth: bw, borderTopWidth: bw, borderColor: color, borderTopLeftRadius: size * 0.06, borderTopRightRadius: size * 0.06 }} />
-      {/* body */}
-      <View style={{ width: size * 0.82, height: size * 0.52, borderLeftWidth: bw, borderRightWidth: bw, borderBottomWidth: bw, borderColor: color, flexDirection: 'row', justifyContent: 'space-around', alignItems: 'center', paddingHorizontal: size * 0.08, paddingBottom: size * 0.06 }}>
-        {[0, 1, 2].map(i => (
-          <View key={i} style={{ width: size * 0.1, height: size * 0.36, backgroundColor: color, borderRadius: size * 0.03 }} />
-        ))}
-      </View>
-    </View>
-  );
-};
-
-// Logs: clipboard with lines
-const LogsIcon = ({ color = '#fff', size = 16 }) => (
-  <View style={{ width: size, height: size, justifyContent: 'center', alignItems: 'center' }}>
-    <View style={{ width: size * 0.75, height: size * 0.85, borderWidth: 1.5, borderColor: color, borderRadius: size * 0.1, paddingHorizontal: size * 0.1, paddingVertical: size * 0.1, justifyContent: 'space-around' }}>
-      <View style={{ position: 'absolute', top: -size * 0.08, alignSelf: 'center', width: size * 0.3, height: size * 0.14, backgroundColor: color, borderRadius: size * 0.04 }} />
-      {[0, 1, 2].map(i => (
-        <View key={i} style={{ flexDirection: 'row', alignItems: 'center', gap: size * 0.08, marginTop: i === 0 ? size * 0.1 : 0 }}>
-          <View style={{ width: size * 0.1, height: size * 0.1, borderRadius: size * 0.05, backgroundColor: color }} />
-          <View style={{ flex: 1, height: 1.5, backgroundColor: color, borderRadius: 1 }} />
-        </View>
-      ))}
-    </View>
-  </View>
-);
-
-// Logout: door with arrow
-const LogoutNavIcon = ({ color = '#fff', size = 16 }) => (
-  <View style={{ width: size, height: size, justifyContent: 'center', alignItems: 'center' }}>
-    <View style={{ position: 'absolute', left: 0, top: 0, width: size * 0.55, height: size, borderWidth: 1.5, borderColor: color, borderRadius: size * 0.08 }} />
-    <View style={{ position: 'absolute', right: size * 0.02, width: size * 0.52, height: 1.8, backgroundColor: color, borderRadius: 1 }} />
-    <View style={{ position: 'absolute', right: size * 0.02, width: size * 0.2, height: size * 0.2, borderTopWidth: 1.8, borderRightWidth: 1.8, borderColor: color, transform: [{ rotate: '45deg' }], marginTop: -size * 0.01 }} />
-  </View>
-);
 
 // ─── COLORS ───────────────────────────────────────────────────────────────────
 const COLORS = {
@@ -157,32 +98,26 @@ const COLORS = {
 };
 
 // ─── MOCK / STATIC DATA ───────────────────────────────────────────────────────
-const MONITORING_TASKS = [
-  { id: '1', description: 'Remind barangays with missing documents', action: 'Send Reminder', actionType: 'reminder' },
-  { id: '2', description: 'Review submitted proposals of SK', action: 'Review Now', actionType: 'review', badge: 3 },
-  { id: '3', description: 'Follow up near deadline submission', action: 'Send Reminder', actionType: 'reminder' },
-  { id: '4', description: 'Review returned proposals of SK', action: 'Review Now', actionType: 'review' },
+// Badge values will be dynamically updated in the render
+const MONITORING_TASKS_BASE = [
+  { id: '1', description: 'Remind barangays with missing documents', action: 'Send Reminder', actionType: 'reminder', badgeProp: 'missingDocs' },
+  { id: '2', description: 'Review submitted proposals of SK', action: 'Review Now', actionType: 'review', badgeProp: 'proposalsForReview', viewFilter: 'submitted' },
+  { id: '3', description: 'Follow up near deadline submission', action: 'Send Reminder', actionType: 'reminder', badgeProp: 'approachingDeadlines' },
+  { id: '4', description: 'Review returned proposals of SK', action: 'Review Now', actionType: 'review', badgeProp: 'forRevision', viewFilter: 'revision' },
 ];
 
 const QUICK_ACTIONS = [
-  { id: 'consultation', label: 'Consultation', badge: 5, color: COLORS.navy, icon: '💬', route: '/(tabs)/lydo-monitor' },
+  { id: 'consultation', label: 'Consultation', badgeProp: 'proposalsForReview', color: COLORS.navy, icon: '💬', route: '/(tabs)/lydo-monitor', viewFilter: 'submitted' },
   { id: 'budget', label: 'View Budget', color: '#1A2332', icon: '📊', route: '/(tabs)/lydo-monitor-budget' },
   { id: 'export', label: 'Export  Reports', color: COLORS.navy, icon: '⬇', route: '/(tabs)/lydo-monitor-report' },
   { id: 'calendar', label: 'View Deadline Calendar', color: '#F97316', icon: '📅', route: null },
-  { id: 'missing', label: 'View Missing Documents', color: '#EF4444', icon: '📄', route: null },
+  { id: 'missing', label: 'View Missing Documents', color: '#EF4444', icon: '📄', action: 'showMissingDocs' },
   { id: 'archive', label: 'View Archive', color: '#6B7A8F', icon: '🗃', route: null },
   { id: 'task', label: 'Create Task', color: COLORS.navy, icon: null, route: null, fullWidth: true },
 ];
 
 // ─── ICON COMPONENTS ──────────────────────────────────────────────────────────
-const BellIcon = ({ hasNotif }) => (
-  <View style={ic.bellWrapper}>
-    <View style={ic.bellBody} />
-    <View style={ic.bellBottom} />
-    {hasNotif && <View style={ic.bellDot} />}
-  </View>
-);
-
+// Bell glyph now lives in notificationCenter.js as LydoBellIcon (shared).
 const MenuIcon = () => (
   <View style={ic.menuIconContainer}>
     <View style={ic.menuLine} />
@@ -194,10 +129,6 @@ const MenuIcon = () => (
 const ic = StyleSheet.create({
   menuIconContainer: { width: 20, height: 16, justifyContent: 'space-between' },
   menuLine: { width: 20, height: 2, backgroundColor: COLORS.navy, borderRadius: 1 },
-  bellWrapper: { width: 20, height: 22, alignItems: 'center' },
-  bellBody: { width: 14, height: 12, borderRadius: 7, borderWidth: 2, borderColor: '#8B0000', marginTop: 4 },
-  bellBottom: { width: 8, height: 4, borderBottomLeftRadius: 4, borderBottomRightRadius: 4, backgroundColor: '#8B0000', marginTop: -1 },
-  bellDot: { position: 'absolute', top: 0, right: 1, width: 7, height: 7, borderRadius: 4, backgroundColor: '#E8C547', borderWidth: 1.5, borderColor: COLORS.white },
 });
 
 // ─── SEGMENTED DONUT CHART (SVG-free, stacked arc rings) ─────────────────────
@@ -575,6 +506,8 @@ function CalendarModal({ visible, onClose }) {
   );
 }
 
+// Notification modal now lives in notificationCenter.js as LydoNotificationModal (shared).
+
 // ─── STAT CARD ────────────────────────────────────────────────────────────────
 const StatCard = ({ icon, value, label, sub, iconBg, iconColor, borderColor }) => (
   <View style={[styles.statCard, borderColor ? { borderTopWidth: 3, borderTopColor: borderColor } : {}]}>
@@ -605,9 +538,17 @@ export default function LYDOHomeScreen() {
   const [approved, setApproved] = useState(0);
   const [missingDocs, setMissingDocs] = useState(0);
   const [currentTime, setCurrentTime] = useState('');
-  const [notifCount] = useState(2);
   const [progressData, setProgressData] = useState({ submitted: 0, awaiting: 0, incomplete: 0, total: 0 });
   const [approachingDeadlines, setApproachingDeadlines] = useState([]);
+  const [proposalsForReview, setProposalsForReview] = useState(0);
+  const [consultationsCount, setConsultationsCount] = useState(0);
+  const [lydoActivities, setLydoActivities] = useState([]);
+  const [missingDocsModalVisible, setMissingDocsModalVisible] = useState(false);
+  const [missingDocsList, setMissingDocsList] = useState([]);
+
+  // Shared LYDO bell badge + dropdown (documents SK officials submitted for
+  // review). See notificationCenter.js — reused by every LYDO screen.
+  const notif = useLydoNotificationCenter();
 
   useEffect(() => {
     if (user && user.role !== 'lydo') router.replace('/');
@@ -634,92 +575,283 @@ export default function LYDOHomeScreen() {
     return () => clearInterval(interval);
   }, []);
 
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const { data: brgyData } = await supabase
-          .from('barangays')
-          .select('barangay_id', { count: 'exact' });
-        if (brgyData) setTotalBarangays(brgyData.length || 0);
+  // Fetch data when screen is focused - always load latest
+  useFocusEffect(
+    React.useCallback(() => {
+      const fetchData = async () => {
+        try {
+          // Get all barangays with their IDs
+          const { data: brgyData, count: brgyCount } = await supabase
+            .from('barangays')
+            .select('barangay_id', { count: 'exact' });
+          if (brgyCount) setTotalBarangays(brgyCount);
 
-        // Fetch compliance data from documents table
-        const { data: docsData } = await supabase
-          .from('documents')
-          .select('status');
+          // Get full barangay data for compliance calculation
+          const { data: allBarangays } = await supabase
+            .from('barangays')
+            .select('barangay_id');
 
-        if (docsData) {
-          const total = docsData.length;
-          setTotalDocuments(total);
+          const barangayList = allBarangays || [];
 
-          const submitted = docsData.filter(d => d.status === 'submitted').length;
-          const approvedCount = docsData.filter(d => d.status === 'approved').length;
-          const returned = docsData.filter(d => d.status === 'returned').length;
-          const drafts = docsData.filter(d => d.status === 'draft' || d.status === 'saved').length;
+          // Fetch compliance data from documents table
+          const { data: docsData } = await supabase
+            .from('documents')
+            .select('status');
 
-          setApproved(approvedCount);
-          setForRevision(returned);
-          setMissingDocs(total - submitted - approvedCount - returned);
+          if (docsData) {
+            const total = docsData.length;
+            setTotalDocuments(total);
 
-          // Submission Progress: submitted+approved = submitted, returned = incomplete, rest = awaiting
-          const submittedTotal = submitted + approvedCount;
-          const incompleteTotal = returned;
-          const awaitingTotal = Math.max(0, total - submittedTotal - incompleteTotal);
-          setProgressData({
-            submitted: submittedTotal,
-            awaiting: awaitingTotal,
-            incomplete: incompleteTotal,
-            total: total || 1, // avoid division by zero
-          });
-        }
+            const submitted = docsData.filter(d => d.status === 'submitted').length;
+            const approvedCount = docsData.filter(d => d.status === 'approved').length;
+            const returned = docsData.filter(d => d.status === 'returned').length;
+            const drafts = docsData.filter(d => d.status === 'draft' || d.status === 'saved').length;
 
-        // Set compliance data based on actual barangays
-        const totalBrgy = brgyData?.length || 0;
-        setComplianceData([
-          { label: 'Fully Compliant', count: 0, color: COLORS.green },
-          { label: 'With Missing Documents', count: 0, color: COLORS.orange },
-          { label: 'Near Deadline', count: 0, color: COLORS.yellow },
-          { label: 'Overdue', count: 0, color: COLORS.red },
-        ]);
+            setApproved(approvedCount);
+            setForRevision(returned);
+            setMissingDocs(total - submitted - approvedCount - returned);
 
-        const { data: docsData2 } = await supabase
-          .from('documents')
-          .select(`document_id, title, status, created_at, saved_at, submitted_at, barangay:barangays(barangay_name)`)
-          .order('created_at', { ascending: false })
-          .limit(10);
+            // Submission Progress: submitted+approved = submitted, returned = incomplete, rest = awaiting
+            const submittedTotal = submitted + approvedCount;
+            const incompleteTotal = returned;
+            const awaitingTotal = Math.max(0, total - submittedTotal - incompleteTotal);
+            setProgressData({
+              submitted: submittedTotal,
+              awaiting: awaitingTotal,
+              incomplete: incompleteTotal,
+              total: total || 1, // avoid division by zero
+            });
+          }
 
-        if (docsData) {
-          const formatted = docsData.map(doc => {
-            let actionLabel = 'Created document';
-            let actionType = 'create';
-            let icon = '✎';
-            if (doc.status === 'submitted' || doc.status === 'approved') {
-              actionLabel = doc.status === 'approved' ? 'Approved Annual Budget' : 'Sent the ABYIP Template';
-              actionType = 'approved';
-              icon = doc.status === 'approved' ? '✔' : '▷';
-            } else if (doc.status === 'returned') {
-              actionLabel = 'Returned ABYIP Proposal';
-              actionType = 'returned';
-              icon = '↩';
+          // Calculate compliance data based on actual barangay document status
+          // Fetch all documents with barangay info
+          const { data: allDocs } = await supabase
+            .from('documents')
+            .select('document_id, status, title, document_type, barangay_id, barangays(barangay_name)');
+
+          // Fetch all deadlines to determine required documents
+          const { data: allDeadlines } = await supabase
+            .from('submission_deadlines')
+            .select('deadline_id, document_type, description, deadline_date, barangay_id, is_met, barangays(barangay_name)');
+
+          // Get missing documents: barangays that haven't submitted based on deadlines
+          const missingDocsWithBrgy = [];
+
+          // Group deadlines by document type and barangay
+          const deadlineMap = {};
+          (allDeadlines || []).forEach(d => {
+            const key = `${d.barangay_id}-${d.document_type}`;
+            if (!deadlineMap[key]) {
+              deadlineMap[key] = {
+                barangay_id: d.barangay_id,
+                barangay: d.barangays?.barangay_name || 'Unknown',
+                document_type: d.document_type,
+                description: d.description,
+                is_met: d.is_met,
+              };
             }
-            const date = doc.submitted_at || doc.saved_at || doc.created_at;
-            return {
-              id: doc.document_id,
-              label: actionLabel,
-              barangay: doc.barangay?.barangay_name || 'Unknown Barangay',
-              time: toPhilippineTime(date, { hour: '2-digit', minute: '2-digit' }),
-              date: toPhilippineDate(date, { month: 'long', day: 'numeric', year: 'numeric' }),
-              type: actionType,
-              icon,
+          });
+
+          // For each deadline, check if the document was submitted
+          Object.values(deadlineMap).forEach(deadline => {
+            if (!deadline.is_met) {
+              // Check if there's a submitted/approved document for this barangay and document type
+              const submittedDoc = (allDocs || []).find(doc =>
+                doc.barangay_id === deadline.barangay_id &&
+                doc.document_type === deadline.document_type &&
+                (doc.status === 'submitted' || doc.status === 'approved')
+              );
+
+              if (!submittedDoc) {
+                missingDocsWithBrgy.push({
+                  id: `${deadline.barangay_id}-${deadline.document_type}`,
+                  title: deadline.description || deadline.document_type,
+                  barangay: deadline.barangay,
+                  status: 'Not Submitted',
+                });
+              }
+            }
+          });
+
+          setMissingDocsList(missingDocsWithBrgy);
+
+          const barangayStats = {};
+
+          // Initialize stats for each barangay
+          barangayList.forEach(brgy => {
+            barangayStats[brgy.barangay_id] = {
+              hasSubmitted: false,
+              hasApproved: false,
+              hasMissing: false,
+              hasOverdue: false,
+              hasNearDeadline: false,
             };
           });
-          setActivities(formatted);
+
+          // Check document statuses per barangay
+          allDocs?.forEach(doc => {
+            if (doc.barangay_id && barangayStats[doc.barangay_id]) {
+              if (doc.status === 'submitted' || doc.status === 'approved') {
+                barangayStats[doc.barangay_id].hasSubmitted = true;
+              }
+              if (doc.status === 'approved') {
+                barangayStats[doc.barangay_id].hasApproved = true;
+              }
+            }
+          });
+
+          // Check deadline status per barangay - use deadlines to determine missing documents
+          const today = new Date();
+          const threeDaysFromNow = new Date(today.getTime() + (3 * 24 * 60 * 60 * 1000));
+
+          // Track which barangays have unfulfilled deadlines (missing documents)
+          const barangaysWithMissing = new Set();
+
+          allDeadlines?.forEach(deadline => {
+            if (deadline.barangay_id && barangayStats[deadline.barangay_id]) {
+              const deadlineDate = new Date(deadline.deadline_date);
+
+              // Check if this deadline is not met (missing document)
+              if (!deadline.is_met) {
+                // Check if there's a submitted/approved document for this deadline
+                const hasDocument = (allDocs || []).some(doc =>
+                  doc.barangay_id === deadline.barangay_id &&
+                  doc.document_type === deadline.document_type &&
+                  (doc.status === 'submitted' || doc.status === 'approved')
+                );
+
+                if (!hasDocument) {
+                  barangayStats[deadline.barangay_id].hasMissing = true;
+                  barangaysWithMissing.add(deadline.barangay_id);
+                }
+
+                if (deadlineDate < today) {
+                  barangayStats[deadline.barangay_id].hasOverdue = true;
+                } else if (deadlineDate <= threeDaysFromNow) {
+                  barangayStats[deadline.barangay_id].hasNearDeadline = true;
+                }
+              }
+            }
+          });
+
+          // Count barangays in each category
+          let fullyCompliant = 0;
+          let withMissingDocs = 0;
+          let nearDeadline = 0;
+          let overdue = 0;
+
+          Object.values(barangayStats).forEach(stats => {
+            if (stats.hasSubmitted || stats.hasApproved) {
+              if (!stats.hasMissing && !stats.hasOverdue && !stats.hasNearDeadline) {
+                fullyCompliant++;
+              }
+            }
+            if (stats.hasMissing) {
+              withMissingDocs++;
+            }
+            if (stats.hasNearDeadline && !stats.hasOverdue) {
+              nearDeadline++;
+            }
+            if (stats.hasOverdue) {
+              overdue++;
+            }
+          });
+
+          setComplianceData([
+            { label: 'Fully Compliant', count: fullyCompliant, color: COLORS.green },
+            { label: 'With Missing Documents', count: withMissingDocs, color: COLORS.orange },
+            { label: 'Near Deadline', count: nearDeadline, color: COLORS.yellow },
+            { label: 'Overdue', count: overdue, color: COLORS.red },
+          ]);
+
+          // Fetch proposals awaiting review (submitted status) - these need LYDO review
+          const { count: submittedCount } = await supabase
+            .from('documents')
+            .select('*', { count: 'exact', head: true })
+            .eq('status', 'submitted');
+          setProposalsForReview(submittedCount || 0);
+
+          // Fetch consultations/meetings that need attention
+          const { count: consultCount } = await supabase
+            .from('consultations')
+            .select('*', { count: 'exact', head: true })
+            .eq('status', 'pending');
+          setConsultationsCount(consultCount || 0);
+
+          const { data: docsData2 } = await supabase
+            .from('documents')
+            .select(`document_id, title, status, created_at, saved_at, submitted_at, barangay:barangays(barangay_name)`)
+            .order('created_at', { ascending: false })
+            .limit(10);
+
+          if (docsData) {
+            const formatted = docsData.map(doc => {
+              let actionLabel = 'Created document';
+              let actionType = 'create';
+              let icon = '✎';
+              if (doc.status === 'submitted' || doc.status === 'approved') {
+                actionLabel = doc.status === 'approved' ? 'Approved Annual Budget' : 'Sent the ABYIP Template';
+                actionType = 'approved';
+                icon = doc.status === 'approved' ? '✔' : '▷';
+              } else if (doc.status === 'returned') {
+                actionLabel = 'Returned ABYIP Proposal';
+                actionType = 'returned';
+                icon = '↩';
+              }
+              const date = doc.submitted_at || doc.saved_at || doc.created_at;
+              return {
+                id: doc.document_id,
+                label: actionLabel,
+                barangay: doc.barangay?.barangay_name || 'Unknown Barangay',
+                time: toPhilippineTime(date, { hour: '2-digit', minute: '2-digit' }),
+                date: toPhilippineDate(date, { month: 'long', day: 'numeric', year: 'numeric' }),
+                type: actionType,
+                icon,
+              };
+            });
+            setActivities(formatted);
+          }
+
+          // Fetch LYDO activity logs for Recent Activity section
+          const { data: lydoLogs, error: lydoLogsError } = await supabase
+            .from('lydo_activity_logs')
+            .select(`
+              id,
+              action,
+              description,
+              created_at,
+              performed_by:users!lydo_activity_logs_user_id_fkey (
+                first_name,
+                last_name
+              )
+            `)
+            .order('created_at', { ascending: false })
+            .limit(10);
+
+          if (lydoLogsError) {
+            console.error('Error fetching LYDO activity logs:', lydoLogsError);
+          } else if (lydoLogs) {
+            const formattedLogs = lydoLogs.map(log => ({
+              id: log.id,
+              label: log.action || 'Action',
+              description: log.description || '',
+              performedBy: log.performed_by
+                ? `${log.performed_by.first_name} ${log.performed_by.last_name}`
+                : 'LYDO Officer',
+              time: toPhilippineTime(log.created_at, { hour: '2-digit', minute: '2-digit' }),
+              date: toPhilippineDate(log.created_at, { month: 'long', day: 'numeric', year: 'numeric' }),
+              type: getActivityType(log.action),
+              icon: getActivityIcon(log.action),
+            }));
+            setLydoActivities(formattedLogs);
+          }
+        } catch (e) {
+          console.error(e);
         }
-      } catch (e) {
-        console.error(e);
-      }
-    };
-    fetchData();
-  }, []);
+      };
+      fetchData();
+    }, [])
+  );
 
   // ── Approaching Deadline card — org-wide, grouped across all barangays ──
   // Each submission_deadlines row is per-barangay, so a single logical
@@ -727,66 +859,68 @@ export default function LYDOHomeScreen() {
   // group those rows by document_type + description + deadline_date and
   // roll them up into submitted/pending counts, matching how the card is
   // meant to be read (e.g. "Submitted: 7/11").
-  useEffect(() => {
-    // Parse a Postgres `date` (YYYY-MM-DD) as a UTC midnight instant, to
-    // avoid local-timezone drift shifting the day by ±1.
-    const parseDateOnly = (dateStr) => {
-      const [y, m, d] = dateStr.toString().slice(0, 10).split('-').map(Number);
-      return Date.UTC(y, m - 1, d);
-    };
+  useFocusEffect(
+    React.useCallback(() => {
+      // Parse a Postgres `date` (YYYY-MM-DD) as a UTC midnight instant, to
+      // avoid local-timezone drift shifting the day by ±1.
+      const parseDateOnly = (dateStr) => {
+        const [y, m, d] = dateStr.toString().slice(0, 10).split('-').map(Number);
+        return Date.UTC(y, m - 1, d);
+      };
 
-    const fetchApproachingDeadlines = async () => {
-      try {
-        const { data, error } = await supabase
-          .from('submission_deadlines')
-          .select('deadline_id, document_type, description, deadline_date, is_met')
-          .order('deadline_date', { ascending: true });
+      const fetchApproachingDeadlines = async () => {
+        try {
+          const { data, error } = await supabase
+            .from('submission_deadlines')
+            .select('deadline_id, document_type, description, deadline_date, is_met')
+            .order('deadline_date', { ascending: true });
 
-        if (error) throw error;
+          if (error) throw error;
 
-        const groups = {};
-        (data || []).forEach((row) => {
-          const key = `${row.document_type}|${row.description}|${row.deadline_date}`;
-          if (!groups[key]) {
-            groups[key] = {
-              id: key,
-              title: row.description || row.document_type,
-              deadline_date: row.deadline_date,
-              total: 0,
-              submitted: 0,
-            };
-          }
-          groups[key].total += 1;
-          if (row.is_met) groups[key].submitted += 1;
-        });
+          const groups = {};
+          (data || []).forEach((row) => {
+            const key = `${row.document_type}|${row.description}|${row.deadline_date}`;
+            if (!groups[key]) {
+              groups[key] = {
+                id: key,
+                title: row.description || row.document_type,
+                deadline_date: row.deadline_date,
+                total: 0,
+                submitted: 0,
+              };
+            }
+            groups[key].total += 1;
+            if (row.is_met) groups[key].submitted += 1;
+          });
 
-        const todayUtc = Date.UTC(new Date().getFullYear(), new Date().getMonth(), new Date().getDate());
-        const approaching = Object.values(groups)
-          .filter((g) => g.submitted < g.total) // only deadlines still pending somewhere
-          .map((g) => {
-            const deadlineUtc = parseDateOnly(g.deadline_date);
-            const daysLeft = Math.round((deadlineUtc - todayUtc) / (24 * 60 * 60 * 1000));
-            return {
-              id: g.id,
-              title: g.title,
-              deadline: new Date(deadlineUtc).toLocaleDateString('en-PH', { timeZone: 'UTC', month: 'long', day: 'numeric', year: 'numeric' }),
-              daysLeft,
-              submitted: g.submitted,
-              total: g.total,
-              pending: g.total - g.submitted,
-              urgent: daysLeft <= 3,
-            };
-          })
-          .sort((a, b) => a.daysLeft - b.daysLeft);
+          const todayUtc = Date.UTC(new Date().getFullYear(), new Date().getMonth(), new Date().getDate());
+          const approaching = Object.values(groups)
+            .filter((g) => g.submitted < g.total) // only deadlines still pending somewhere
+            .map((g) => {
+              const deadlineUtc = parseDateOnly(g.deadline_date);
+              const daysLeft = Math.round((deadlineUtc - todayUtc) / (24 * 60 * 60 * 1000));
+              return {
+                id: g.id,
+                title: g.title,
+                deadline: new Date(deadlineUtc).toLocaleDateString('en-PH', { timeZone: 'UTC', month: 'long', day: 'numeric', year: 'numeric' }),
+                daysLeft,
+                submitted: g.submitted,
+                total: g.total,
+                pending: g.total - g.submitted,
+                urgent: daysLeft <= 3,
+              };
+            })
+            .sort((a, b) => a.daysLeft - b.daysLeft);
 
-        setApproachingDeadlines(approaching);
-      } catch (err) {
-        console.error('Error fetching approaching deadlines:', err);
-      }
-    };
+          setApproachingDeadlines(approaching);
+        } catch (err) {
+          console.error('Error fetching approaching deadlines:', err);
+        }
+      };
 
-    fetchApproachingDeadlines();
-  }, []);
+      fetchApproachingDeadlines();
+    }, [])
+  );
 
   const today = toPhilippineDate(new Date(), { weekday: undefined, month: 'long', day: 'numeric', year: 'numeric' });
 
@@ -804,51 +938,18 @@ export default function LYDOHomeScreen() {
 
   const handleSendReminder = () => Alert.alert('Reminder Sent', 'All non-compliant barangays have been notified.');
 
-  // ── SIDEBAR ──
-  const NAV_ITEMS = [
-    { tab: 'Dashboard', IconComponent: DashboardIcon },
-    { tab: 'Documents', IconComponent: DocumentsIcon },
-    { tab: 'Monitor',   IconComponent: MonitorIcon   },
-    { tab: 'Barangay',  IconComponent: BarangayIcon  },
-    { tab: 'Logs',      IconComponent: LogsIcon      },
-  ];
-
-  const renderSidebar = () => (
-    <View style={styles.sidebar}>
-      <View style={styles.logoPill}>
-        <Image
-          source={require('./../../assets/images/lydo-logo.png')}
-          style={styles.logoImage}
-          resizeMode="contain"
-        />
-      </View>
-      <View style={styles.sidebarSpacer} />
-      {NAV_ITEMS.map(({ tab, IconComponent }) => {
-        const active = activeTab === tab;
-        const iconColor = active ? '#133E75' : 'rgba(255,255,255,0.85)';
-        return (
-          <TouchableOpacity
-            key={tab}
-            style={[styles.navItem, active && styles.navItemActive]}
-            onPress={() => handleNav(tab)}
-            activeOpacity={0.8}
-          >
-            <View style={styles.navItemInner}>
-              <IconComponent color={iconColor} size={16} />
-              <Text style={[styles.navLabel, active && styles.navLabelActive]}>{tab}</Text>
-            </View>
-          </TouchableOpacity>
-        );
-      })}
-      <View style={{ flex: 1 }} />
-      <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout} activeOpacity={0.8}>
-        <View style={styles.navItemInner}>
-          <LogoutNavIcon color="rgba(255,255,255,0.85)" size={16} />
-          <Text style={styles.logoutText}>Logout</Text>
-        </View>
-      </TouchableOpacity>
-    </View>
-  );
+  // Handle monitoring task button click
+  const handleMonitoringTask = (task) => {
+    if (task.actionType === 'reminder') {
+      handleSendReminder();
+    } else if (task.actionType === 'review' && task.viewFilter) {
+      // Navigate to lydo-monitor with the appropriate filter
+      router.push({
+        pathname: '/(tabs)/lydo-monitor',
+        params: { viewFilter: task.viewFilter },
+      });
+    }
+  };
 
   const activityIconColor = (type) => {
     if (type === 'approved') return COLORS.green;
@@ -860,12 +961,84 @@ export default function LYDOHomeScreen() {
     <SafeAreaView style={styles.safe}>
       <StatusBar barStyle="light-content" backgroundColor={COLORS.navy} />
       <CalendarModal visible={calendarVisible} onClose={() => setCalendarVisible(false)} />
+
+      {/* Notification Modal — lists documents sent by SK officials */}
+      <LydoNotificationModal
+        {...notif.modalProps}
+        onReview={(doc) => {
+          notif.close();
+          router.push({
+            pathname: '/(tabs)/lydo-monitor',
+            params: { viewFilter: 'submitted' },
+          });
+        }}
+      />
+
+      {/* Missing Documents Modal */}
+      <Modal visible={missingDocsModalVisible} transparent animationType="fade" onRequestClose={() => setMissingDocsModalVisible(false)}>
+        <View style={missingModalStyles.backdrop}>
+          <View style={missingModalStyles.modal}>
+            <View style={missingModalStyles.header}>
+              <View style={{ flex: 1 }}>
+                <Text style={missingModalStyles.title}>Missing Documents</Text>
+                <Text style={missingModalStyles.subtitle}>
+                  {missingDocsList.length > 0
+                    ? `${missingDocsList.length} document${missingDocsList.length !== 1 ? 's' : ''} not yet submitted`
+                    : 'All barangays are up to date'}
+                </Text>
+              </View>
+              <TouchableOpacity style={missingModalStyles.closeBtn} onPress={() => setMissingDocsModalVisible(false)} activeOpacity={0.8}>
+                <Text style={missingModalStyles.closeText}>✕</Text>
+              </TouchableOpacity>
+            </View>
+            <View style={missingModalStyles.divider} />
+
+            <ScrollView
+              style={missingModalStyles.body}
+              contentContainerStyle={missingModalStyles.bodyContent}
+              showsVerticalScrollIndicator={false}
+            >
+              {missingDocsList.length === 0 ? (
+                <View style={missingModalStyles.emptyState}>
+                  <Text style={missingModalStyles.emptyText}>No missing documents</Text>
+                  <Text style={missingModalStyles.emptySubText}>All barangays have submitted their documents.</Text>
+                </View>
+              ) : (
+                <View style={missingModalStyles.list}>
+                  {missingDocsList.map((doc, idx) => (
+                    <View key={doc.id} style={[missingModalStyles.itemRow, idx < missingDocsList.length - 1 && missingModalStyles.itemRowBorder]}>
+                      <View style={missingModalStyles.itemInfo}>
+                        <Text style={missingModalStyles.itemTitle}>{doc.title}</Text>
+                        <Text style={missingModalStyles.itemBarangay}>{doc.barangay}</Text>
+                      </View>
+                      <View style={[missingModalStyles.statusBadge, missingModalStyles.statusNotSubmitted]}>
+                        <Text style={[missingModalStyles.statusText, missingModalStyles.statusNotSubmittedText]}>
+                          Not Submitted
+                        </Text>
+                      </View>
+                    </View>
+                  ))}
+                </View>
+              )}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
       <View style={styles.layout}>
         {/* Sidebar overlay (mobile) */}
         {isMobile && sidebarVisible && (
           <TouchableOpacity style={styles.sidebarOverlay} activeOpacity={1} onPress={() => setSidebarVisible(false)} />
         )}
-        {isMobile ? (sidebarVisible && renderSidebar()) : renderSidebar()}
+        <Sidebar
+          activeTab={activeTab}
+          onNavPress={handleNav}
+          onLogout={handleLogout}
+          isMobile={isMobile}
+          sidebarVisible={sidebarVisible}
+          navItems={LYDO_NAV_ITEMS}
+          logoSource={require('./../../assets/images/lydo-logo.png')}
+        />
 
         {/* ── MAIN CONTENT ── */}
         <ScrollView
@@ -880,13 +1053,8 @@ export default function LYDOHomeScreen() {
                 <MenuIcon />
               </TouchableOpacity>
               <Text style={styles.mobileTitle}>LYDO Dashboard</Text>
-              <TouchableOpacity style={styles.bellBtn} activeOpacity={0.7}>
-                <BellIcon hasNotif={notifCount > 0} />
-                {notifCount > 0 && (
-                  <View style={styles.notifBadge}>
-                    <Text style={styles.notifBadgeText}>{notifCount}</Text>
-                  </View>
-                )}
+              <TouchableOpacity style={styles.bellBtnMobile} activeOpacity={0.7} onPress={notif.open}>
+                <LydoBellIcon count={notif.count} />
               </TouchableOpacity>
             </View>
           )}
@@ -913,13 +1081,8 @@ export default function LYDOHomeScreen() {
                   </View>
                 </View>
               </View>
-              <TouchableOpacity style={styles.bellBtn} activeOpacity={0.7}>
-                <BellIcon hasNotif={notifCount > 0} />
-                {notifCount > 0 && (
-                  <View style={styles.notifBadge}>
-                    <Text style={styles.notifBadgeText}>{notifCount}</Text>
-                  </View>
-                )}
+              <TouchableOpacity style={styles.bellBtn} activeOpacity={0.7} onPress={notif.open}>
+                <LydoBellIcon count={notif.count} />
               </TouchableOpacity>
             </View>
           </View>
@@ -1031,40 +1194,47 @@ export default function LYDOHomeScreen() {
               <View style={styles.card}>
                 <Text style={styles.cardTitle}>Monitoring Tasks</Text>
                 <View style={styles.divider} />
-                {MONITORING_TASKS.map((task, idx) => (
-                  <View key={task.id} style={[styles.taskRow, idx < MONITORING_TASKS.length - 1 && styles.taskRowBorder]}>
-                    <Text style={styles.taskDesc}>{task.description}</Text>
-                    <View style={styles.taskBtnWrapper}>
-                      {task.badge ? (
-                        <View style={styles.taskBadge}>
-                          <Text style={styles.taskBadgeText}>{task.badge}</Text>
-                        </View>
-                      ) : null}
-                      <TouchableOpacity
-                        style={styles.taskBtn}
-                        onPress={task.actionType === 'reminder' ? handleSendReminder : undefined}
-                        activeOpacity={0.8}
-                      >
-                        <Text style={styles.taskBtnText}>{task.action}</Text>
-                      </TouchableOpacity>
+                {MONITORING_TASKS_BASE.map((task, idx) => {
+                  // Get badge count based on the badgeProp
+                  let badgeCount = 0;
+                  if (task.badgeProp === 'proposalsForReview') badgeCount = proposalsForReview;
+                  else if (task.badgeProp === 'forRevision') badgeCount = forRevision;
+                  else if (task.badgeProp === 'missingDocs') badgeCount = missingDocs;
+                  else if (task.badgeProp === 'approachingDeadlines') badgeCount = approachingDeadlines.filter(d => d.urgent).length;
+
+                  return (
+                    <View key={task.id} style={[styles.taskRow, idx < MONITORING_TASKS_BASE.length - 1 && styles.taskRowBorder]}>
+                      <Text style={styles.taskDesc}>{task.description}</Text>
+                      <View style={styles.taskBtnWrapper}>
+                        {badgeCount > 0 && (
+                          <View style={styles.taskBadge}>
+                            <Text style={styles.taskBadgeText}>{badgeCount}</Text>
+                          </View>
+                        )}
+                        <TouchableOpacity
+                          style={styles.taskBtn}
+                          onPress={() => handleMonitoringTask(task)}
+                          activeOpacity={0.8}
+                        >
+                          <Text style={styles.taskBtnText}>{task.action}</Text>
+                        </TouchableOpacity>
+                      </View>
                     </View>
-                  </View>
-                ))}
+                  );
+                })}
               </View>
 
               {/* Recent Activity */}
               <View style={styles.card}>
                 <View style={styles.cardHeaderRow}>
                   <Text style={styles.cardTitle}>Recent Activity</Text>
-                  <TouchableOpacity>
+                  <TouchableOpacity onPress={() => router.push('/(tabs)/lydo-logs')}>
                     <Text style={styles.viewAll}>View All</Text>
                   </TouchableOpacity>
                 </View>
                 <View style={styles.divider} />
-                {(activities.length > 0 ? activities.slice(0, 3) : [
-                  { id: '1', label: 'Approved Annual Budget', barangay: 'Barangay San Jose', time: '3:00 PM', date: 'May 30, 2026', type: 'approved', icon: '✔' },
-                  { id: '2', label: 'Sent the ABYIP Template', barangay: 'Barangay San Roque', time: '3:00 PM', date: 'May 30, 2026', type: 'create', icon: '▷' },
-                  { id: '3', label: 'Returned ABYIP Proposal', barangay: 'Barangay San José', time: '3:00 PM', date: 'May 30, 2026', type: 'returned', icon: '↩' },
+                {(lydoActivities.length > 0 ? lydoActivities.slice(0, 3) : [
+                  { id: '1', label: 'No recent activity', description: '', performedBy: '', time: '--:--', date: '--', type: 'create', icon: '✎' },
                 ]).map((act, idx, arr) => (
                   <View key={act.id} style={[styles.activityRow, idx < arr.length - 1 && styles.activityRowBorder]}>
                     <View style={[styles.activityIconBox, { backgroundColor: activityIconColor(act.type) + '20' }]}>
@@ -1072,7 +1242,7 @@ export default function LYDOHomeScreen() {
                     </View>
                     <View style={styles.activityInfo}>
                       <Text style={styles.activityLabel}>{act.label}</Text>
-                      <Text style={styles.activityMeta}>{act.barangay}</Text>
+                      <Text style={styles.activityMeta}>{act.description || act.performedBy}</Text>
                     </View>
                     <View style={styles.activityTime}>
                       <Text style={styles.activityDateText}>{act.date}</Text>
@@ -1088,27 +1258,38 @@ export default function LYDOHomeScreen() {
               <Text style={styles.cardTitle}>Quick Actions</Text>
               <View style={styles.divider} />
               <View style={styles.quickGrid}>
-                {QUICK_ACTIONS.filter(a => !a.fullWidth).map((action) => (
-                  <TouchableOpacity
-                    key={action.id}
-                    style={styles.quickBtn}
-                    activeOpacity={0.8}
-                    onPress={() => {
-                      if (action.id === 'calendar') setCalendarVisible(true);
-                      else if (action.route) router.push(action.route);
-                    }}
-                  >
-                    <View style={[styles.quickIconBox, { backgroundColor: action.color + '18' }]}>
-                      <Text style={styles.quickIcon}>{action.icon}</Text>
-                    </View>
-                    <Text style={styles.quickLabel}>{action.label}</Text>
-                    {action.badge ? (
-                      <View style={styles.quickBadge}>
-                        <Text style={styles.quickBadgeText}>{action.badge}</Text>
+                {QUICK_ACTIONS.filter(a => !a.fullWidth).map((action) => {
+                  // Get badge count based on the badgeProp
+                  let badgeCount = 0;
+                  if (action.badgeProp === 'proposalsForReview') badgeCount = proposalsForReview;
+
+                  return (
+                    <TouchableOpacity
+                      key={action.id}
+                      style={styles.quickBtn}
+                      activeOpacity={0.8}
+                      onPress={() => {
+                        if (action.id === 'calendar') setCalendarVisible(true);
+                        else if (action.id === 'missing') setMissingDocsModalVisible(true);
+                        else if (action.route) {
+                          // Pass viewFilter param if defined
+                          const params = action.viewFilter ? { viewFilter: action.viewFilter } : {};
+                          router.push({ pathname: action.route, params });
+                        }
+                      }}
+                    >
+                      <View style={[styles.quickIconBox, { backgroundColor: action.color + '18' }]}>
+                        <Text style={styles.quickIcon}>{action.icon}</Text>
                       </View>
-                    ) : null}
-                  </TouchableOpacity>
-                ))}
+                      <Text style={styles.quickLabel}>{action.label}</Text>
+                      {badgeCount > 0 && (
+                        <View style={styles.quickBadge}>
+                          <Text style={styles.quickBadgeText}>{badgeCount}</Text>
+                        </View>
+                      )}
+                    </TouchableOpacity>
+                  );
+                })}
               </View>
               <TouchableOpacity style={styles.createTaskBtn} activeOpacity={0.8}>
                 <Text style={styles.createTaskText}>Create Task</Text>
@@ -1129,45 +1310,10 @@ const styles = StyleSheet.create({
   layout: { flex: 1, flexDirection: 'row' },
 
   // Sidebar
-  sidebar: {
-    width: 250,
-    backgroundColor: COLORS.navy,
-    alignItems: 'center',
-    paddingTop: 20,
-    paddingBottom: 24,
-    paddingHorizontal: 10,
-    zIndex: 10,
-  },
   sidebarOverlay: {
     position: 'absolute', left: 0, top: 0, bottom: 0, right: 0,
     backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 5,
   },
-  logoPill: {
-    marginTop: 20,
-    width: 70, height: 70, borderRadius: 35,
-    backgroundColor: 'rgba(255,255,255,0.15)',
-    alignItems: 'center', justifyContent: 'center',
-    marginBottom: 8, borderWidth: 2, borderColor: 'rgba(255,255,255,0.3)',
-  },
-  logoImage: { width: 110, height: 110 },
-  sidebarSpacer: { height: 28 },
-  navItem: {
-    width: '100%', paddingVertical: 12, paddingHorizontal: 12,
-    borderRadius: 24, marginBottom: 8, alignItems: 'center',
-    borderWidth: 1.5, borderColor: COLORS.white,
-    backgroundColor: COLORS.navy,
-  },
-  navItemInner: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  navItemActive: { backgroundColor: COLORS.white, borderColor: '#000' },
-  navLabel: { fontSize: 13, fontWeight: '600', color: COLORS.white, letterSpacing: 0.3 },
-  navLabelActive: { color: '#000', fontWeight: '800' },
-  logoutBtn: {
-    width: '100%', paddingVertical: 12, paddingHorizontal: 12,
-    borderRadius: 24, marginTop: 8, alignItems: 'center',
-    borderWidth: 1.5, borderColor: COLORS.white,
-    backgroundColor: 'rgba(255,255,255,0.1)',
-  },
-  logoutText: { fontSize: 13, fontWeight: '600', color: COLORS.white, letterSpacing: 0.3 },
 
   // Main
   main: { flex: 1, backgroundColor: COLORS.offWhite, borderTopLeftRadius: 20 },
@@ -1195,7 +1341,10 @@ const styles = StyleSheet.create({
     fontSize: 10, fontWeight: '600', color: COLORS.subText,
     letterSpacing: 2, textTransform: 'uppercase', marginBottom: 2,
   },
-  headerTitle: { fontSize: 20, fontWeight: '900', color: COLORS.darkText, letterSpacing: 0.5 },
+  headerTitle: {
+    fontSize: 20, fontWeight: '900', color: COLORS.darkText, letterSpacing: 0.5,
+    borderBottomWidth: 2, borderBottomColor: COLORS.lightGray, paddingBottom: 4, marginBottom: 6,
+  },
   datetimeCard: {
     backgroundColor: '#F7F5F2',
     borderRadius: 12,
@@ -1251,20 +1400,20 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
 
-  // Bell
+  // Bell — unread-count badge lives in LydoBellIcon (notificationCenter.js);
+  // only the button containers are styled here.
   bellBtn: {
+    width: 44, height: 44, borderRadius: 22,
+    backgroundColor: COLORS.white, alignItems: 'center', justifyContent: 'center',
+    shadowColor: COLORS.navy, shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.15, shadowRadius: 8, elevation: 4,
+  },
+  bellBtnMobile: {
     width: 40, height: 40, borderRadius: 20,
-    backgroundColor: COLORS.cardBg, alignItems: 'center', justifyContent: 'center',
-    shadowColor: 'rgba(0,0,0,0.08)', shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 1, shadowRadius: 6, elevation: 3,
+    backgroundColor: COLORS.white, alignItems: 'center', justifyContent: 'center',
+    shadowColor: COLORS.navy, shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15, shadowRadius: 6, elevation: 4,
   },
-  notifBadge: {
-    position: 'absolute', top: -2, right: -2,
-    width: 16, height: 16, borderRadius: 8,
-    backgroundColor: '#E8C547', alignItems: 'center', justifyContent: 'center',
-    borderWidth: 1.5, borderColor: COLORS.white,
-  },
-  notifBadgeText: { fontSize: 8, fontWeight: '900', color: '#133E75' },
 
   // Stat Cards
   statsRow: { flexDirection: 'row', gap: 10, marginBottom: 18, flexWrap: 'wrap' },
@@ -1590,3 +1739,51 @@ const calStyles = StyleSheet.create({
   timelineStatusIconText: { fontSize: 9, fontWeight: '900', color: COLORS.white, lineHeight: 10 },
   timelineLabel: { flex: 1, fontSize: 12, color: '#444', lineHeight: 16, fontWeight: '500' },
 });
+
+// ─── MISSING DOCUMENTS MODAL STYLES ──────────────────────────────────────────
+const missingModalStyles = StyleSheet.create({
+  backdrop: {
+    flex: 1, backgroundColor: 'rgba(0,0,0,0.65)',
+    justifyContent: 'center', alignItems: 'center', padding: 24,
+  },
+  modal: {
+    backgroundColor: COLORS.white, borderRadius: 16,
+    width: isMobile ? '92%' : 480,
+    height: isMobile ? '75%' : 560,
+    overflow: 'hidden', elevation: 20, shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.25, shadowRadius: 20,
+  },
+  header: {
+    flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between',
+    paddingHorizontal: 16, paddingVertical: 14, backgroundColor: COLORS.navy,
+  },
+  title: { fontSize: 16, fontWeight: '800', color: COLORS.white },
+  subtitle: { fontSize: 12, fontWeight: '600', color: 'rgba(255,255,255,0.75)', marginTop: 3 },
+  closeBtn: {
+    width: 28, height: 28, borderRadius: 14,
+    backgroundColor: 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center',
+    marginLeft: 12,
+  },
+  closeText: { fontSize: 12, fontWeight: '700', color: COLORS.white },
+  divider: { height: 1, backgroundColor: COLORS.lightGray },
+  body: { flex: 1 },
+  bodyContent: { padding: 16, flexGrow: 1 },
+  emptyState: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 40 },
+  emptyText: { fontSize: 15, fontWeight: '700', color: COLORS.darkText, marginBottom: 4 },
+  emptySubText: { fontSize: 13, color: COLORS.subText, textAlign: 'center' },
+  list: { flex: 1 },
+  itemRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, gap: 10 },
+  itemRowBorder: { borderBottomWidth: 1, borderBottomColor: COLORS.lightGray },
+  itemInfo: { flex: 1 },
+  itemTitle: { fontSize: 13, fontWeight: '600', color: COLORS.darkText, marginBottom: 2 },
+  itemBarangay: { fontSize: 12, color: COLORS.subText },
+  statusBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 },
+  statusDraft: { backgroundColor: '#FEF3C7' },
+  statusSaved: { backgroundColor: '#DBEAFE' },
+  statusNotSubmitted: { backgroundColor: '#FEE2E2' },
+  statusText: { fontSize: 10, fontWeight: '700' },
+  statusDraftText: { color: '#B45309' },
+  statusSavedText: { color: '#1D4ED8' },
+  statusNotSubmittedText: { color: '#DC2626' },
+});
+
+// Notification modal styles now live in notificationCenter.js (shared).

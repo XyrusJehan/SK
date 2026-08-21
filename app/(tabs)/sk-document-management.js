@@ -1,20 +1,32 @@
-import React, { useState, useRef, useMemo, useEffect, useCallback } from 'react';
+import { Feather } from '@expo/vector-icons';
+import * as DocumentPicker from 'expo-document-picker';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  View, Text, TextInput, ScrollView, TouchableOpacity,
-  StyleSheet, SafeAreaView, StatusBar, Dimensions, Image, Modal,
-  Linking, ActivityIndicator, Alert, KeyboardAvoidingView, Animated,
+  ActivityIndicator, Alert,
+  Animated,
+  Dimensions, Image,
+  Linking,
+  Modal,
+  Platform,
+  SafeAreaView,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text, TextInput,
+  TouchableOpacity,
+  View
 } from 'react-native';
-import { Platform } from 'react-native';
+import { supabase } from '../../utils/supabase';
+import { useAuth } from './authContext';
+import { useNav } from './navContext';
+import { NotificationModal, useNotificationCenter, BellIcon } from './notificationCenter';
+import Sidebar from './../components/Sidebar';
 // WebView: use react-native-webview on native, iframe on web
 let WebView = null;
 if (Platform.OS !== 'web') {
   WebView = require('react-native-webview').WebView;
 }
-import { useRouter, useFocusEffect, useLocalSearchParams } from 'expo-router';
-import { Feather } from '@expo/vector-icons';
-import { useNav } from './navContext';
-import { useAuth } from './authContext';
-import { supabase } from '../../utils/supabase';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const isMobile = SCREEN_WIDTH < 768;
@@ -39,7 +51,9 @@ const COLORS = {
 const NAV_TABS       = ['Dashboard', 'Documents', 'Planning', 'Portal', 'Logs', 'Account'];
 const DOCUMENT_TABS  = ['Folder', 'Document Management'];
 const STATUS_TABS    = ['All', 'Drafts', 'Saved', 'Submitted', 'Approved', 'Returned'];
-const DRAFT_TYPES    = ['All Types', 'Planning', 'Financial', 'Governance', 'Performance'];
+// DRAFT_TYPES is built dynamically from the fetched document_category table.
+// "All Types" remains a fixed sentinel for the unfiltered view.
+const DRAFT_ALL_LABEL = 'All Types';
 const SORT_OPTIONS   = ['Newest', 'Oldest', 'Title A-Z', 'Title Z-A'];
 
 // ─── MOCK DATA ────────────────────────────────────────────────────────────────
@@ -54,111 +68,7 @@ const MenuIcon = () => (
   </View>
 );
 
-// Dashboard: 2×2 grid of rounded squares
-const DashboardIcon = ({ color = '#fff', size = 16 }) => {
-  const s = size * 0.38;
-  const gap = size * 0.12;
-  const r = size * 0.12;
-  const box = { width: s, height: s, borderRadius: r, backgroundColor: color };
-  return (
-    <View style={{ width: size, height: size, justifyContent: 'center', alignItems: 'center' }}>
-      <View style={{ flexDirection: 'row', gap }}>
-        <View style={box} />
-        <View style={box} />
-      </View>
-      <View style={{ height: gap }} />
-      <View style={{ flexDirection: 'row', gap }}>
-        <View style={box} />
-        <View style={box} />
-      </View>
-    </View>
-  );
-};
-
-// Documents: file shape with fold + two lines
-const DocumentsIcon = ({ color = '#fff', size = 16 }) => {
-  const w = size * 0.6, h = size * 0.78;
-  const fold = size * 0.22;
-  return (
-    <View style={{ width: size, height: size, justifyContent: 'center', alignItems: 'center' }}>
-      <View style={{ width: w, height: h, justifyContent: 'flex-end', paddingBottom: size * 0.08, paddingHorizontal: size * 0.1 }}>
-        <View style={{ position: 'absolute', left: 0, right: 0, top: fold, bottom: 0, borderWidth: 1.5, borderColor: color, borderRadius: size * 0.08 }} />
-        <View style={{ position: 'absolute', top: 0, right: 0, width: fold, height: fold, backgroundColor: color, borderBottomLeftRadius: size * 0.06 }} />
-        <View style={{ position: 'absolute', top: 0, left: 0, width: w - fold, height: fold, borderTopWidth: 1.5, borderLeftWidth: 1.5, borderColor: color, borderTopLeftRadius: size * 0.08 }} />
-        <View style={{ height: 1.5, backgroundColor: color, borderRadius: 1, marginBottom: size * 0.1, width: '80%' }} />
-        <View style={{ height: 1.5, backgroundColor: color, borderRadius: 1, width: '55%' }} />
-      </View>
-    </View>
-  );
-};
-
-// Planning: calendar grid
-const PlanningIcon = ({ color = '#fff', size = 16 }) => {
-  const bw = 1.5;
-  return (
-    <View style={{ width: size, height: size, justifyContent: 'center', alignItems: 'center' }}>
-      <View style={{ width: size * 0.82, height: size * 0.75, borderWidth: bw, borderColor: color, borderRadius: size * 0.1, overflow: 'hidden' }}>
-        <View style={{ height: size * 0.22, backgroundColor: color, width: '100%' }} />
-        <View style={{ flex: 1, flexDirection: 'row', justifyContent: 'space-around', alignItems: 'center', paddingHorizontal: size * 0.05 }}>
-          {[0,1,2].map(i => <View key={i} style={{ width: size * 0.1, height: size * 0.1, borderRadius: size * 0.05, backgroundColor: color }} />)}
-        </View>
-      </View>
-      <View style={{ position: 'absolute', top: 0, flexDirection: 'row', gap: size * 0.32 }}>
-        {[0,1].map(i => <View key={i} style={{ width: size * 0.1, height: size * 0.2, backgroundColor: color, borderRadius: size * 0.05 }} />)}
-      </View>
-    </View>
-  );
-};
-
-// Portal: simple globe
-const PortalIcon = ({ color = '#fff', size = 16 }) => (
-  <View style={{ width: size, height: size, justifyContent: 'center', alignItems: 'center' }}>
-    <View style={{ width: size * 0.82, height: size * 0.82, borderRadius: size * 0.41, borderWidth: 1.5, borderColor: color, justifyContent: 'center', alignItems: 'center', overflow: 'hidden' }}>
-      <View style={{ position: 'absolute', height: 1.5, width: '100%', backgroundColor: color }} />
-      <View style={{ width: size * 0.38, height: size * 0.78, borderRadius: size * 0.19, borderWidth: 1.5, borderColor: color, backgroundColor: 'transparent' }} />
-    </View>
-  </View>
-);
-
-// Logs: clipboard with checkmark lines
-const LogsIcon = ({ color = '#fff', size = 16 }) => (
-  <View style={{ width: size, height: size, justifyContent: 'center', alignItems: 'center' }}>
-    <View style={{ width: size * 0.75, height: size * 0.85, borderWidth: 1.5, borderColor: color, borderRadius: size * 0.1, paddingHorizontal: size * 0.1, paddingVertical: size * 0.1, justifyContent: 'space-around' }}>
-      <View style={{ position: 'absolute', top: -size * 0.08, alignSelf: 'center', width: size * 0.3, height: size * 0.14, backgroundColor: color, borderRadius: size * 0.04 }} />
-      {[0,1,2].map(i => (
-        <View key={i} style={{ flexDirection: 'row', alignItems: 'center', gap: size * 0.08, marginTop: i === 0 ? size * 0.1 : 0 }}>
-          <View style={{ width: size * 0.1, height: size * 0.1, borderRadius: size * 0.05, backgroundColor: color }} />
-          <View style={{ flex: 1, height: 1.5, backgroundColor: color, borderRadius: 1 }} />
-        </View>
-      ))}
-    </View>
-  </View>
-);
-
-// Account: head + shoulders silhouette
-const AccountIcon = ({ color = '#fff', size = 16 }) => (
-  <View style={{ width: size, height: size, justifyContent: 'center', alignItems: 'center' }}>
-    <View style={{ width: size * 0.38, height: size * 0.38, borderRadius: size * 0.19, borderWidth: 1.5, borderColor: color, marginBottom: size * 0.04 }} />
-    <View style={{ width: size * 0.72, height: size * 0.36, borderBottomLeftRadius: size * 0.36, borderBottomRightRadius: size * 0.36, borderWidth: 1.5, borderColor: color, borderTopWidth: 0, overflow: 'hidden' }} />
-  </View>
-);
-
-// Logout: door with arrow
-const LogoutNavIcon = ({ color = '#fff', size = 16 }) => (
-  <View style={{ width: size, height: size, justifyContent: 'center', alignItems: 'center' }}>
-    <View style={{ position: 'absolute', left: 0, top: 0, width: size * 0.55, height: size, borderWidth: 1.5, borderColor: color, borderRadius: size * 0.08 }} />
-    <View style={{ position: 'absolute', right: size * 0.02, width: size * 0.52, height: 1.8, backgroundColor: color, borderRadius: 1 }} />
-    <View style={{ position: 'absolute', right: size * 0.02, width: size * 0.2, height: size * 0.2, borderTopWidth: 1.8, borderRightWidth: 1.8, borderColor: color, transform: [{ rotate: '45deg' }], marginTop: -size * 0.01 }} />
-  </View>
-);
-
-const BellIcon = ({ hasNotif }) => (
-  <View style={styles.bellWrapper}>
-    <View style={styles.bellBody} />
-    <View style={styles.bellBottom} />
-    {hasNotif && <View style={styles.bellDot} />}
-  </View>
-);
+// Nav icons + NAV_ITEMS now live in the shared Sidebar module (see import above).
 
 // Edit icon
 const EditIcon = () => (
@@ -493,6 +403,10 @@ export default function SKDocumentManagementScreen() {
   const barangayName = user?.barangay?.barangay_name || 'Unknown Barangay';
   const barangayId = user?.barangayId;
 
+  // ── Shared notification bell (returned/approved docs, templates, deadlines) ──
+  const notif = useNotificationCenter(barangayId);
+  const notifCount = notif.count;
+
   // Helper function to log SK activity
   const logActivity = async (action, description) => {
     try {
@@ -518,7 +432,6 @@ export default function SKDocumentManagementScreen() {
   const [yearDropdownOpen, setYearDropdownOpen] = useState(false);
   const [sortDropdownOpen, setSortDropdownOpen] = useState(false);
   const [selectedYear, setSelectedYear] = useState('All Years');
-  const [notifCount]                          = useState(2);
   const [documents, setDocuments]             = useState([]);
   const [deleteModalVisible, setDeleteModalVisible] = useState(false);
   const [documentToDelete, setDocumentToDelete] = useState(null);
@@ -532,11 +445,69 @@ export default function SKDocumentManagementScreen() {
   const [viewerModal, setViewerModal] = useState({ visible: false, fileUrl: null, title: '' });
   const [webViewLoading, setWebViewLoading] = useState(false);
   const [returnedViewerDoc, setReturnedViewerDoc] = useState(null);
+  const [editModalVisible, setEditModalVisible] = useState(false);
+  const [documentToEdit, setDocumentToEdit] = useState(null);
+  const [editTitle, setEditTitle] = useState('');
+  const [editLoading, setEditLoading] = useState(false);
+  const [selectedEditFile, setSelectedEditFile] = useState(null);
+  const [uploadingEditFile, setUploadingEditFile] = useState(false);
 
   const showAlert = (type, title, message) => {
     setAlertModal({ visible: true, type, title, message });
   };
   const hideAlert = () => setAlertModal(a => ({ ...a, visible: false }));
+
+  // Reference tables for mapping IDs to names — fetched from database.
+  const [documentCategories, setDocumentCategories] = useState([]);
+  const [documentTypes, setDocumentTypes] = useState([]);
+  const [folderYears, setFolderYears] = useState([]);
+
+  // Build the DRAFT_TYPES list from fetched categories (with "All Types" sentinel first).
+  const DRAFT_TYPES = useMemo(
+    () => [DRAFT_ALL_LABEL, ...documentCategories.map(c => c.document_category)],
+    [documentCategories]
+  );
+
+  // Fetch reference tables on mount
+  useEffect(() => {
+    const fetchReferenceData = async () => {
+      try {
+        // Fetch document categories
+        const { data: categories, error: catError } = await supabase
+          .from('document_category')
+          .select('id, document_category, year')
+          .order('document_category');
+
+        if (!catError && categories) {
+          setDocumentCategories(categories);
+        }
+
+        // Fetch document types
+        const { data: types, error: typeError } = await supabase
+          .from('document_types')
+          .select('id, document_type, category, year')
+          .order('document_type');
+
+        if (!typeError && types) {
+          setDocumentTypes(types);
+        }
+
+        // Fetch folder years
+        const { data: years, error: yearError } = await supabase
+          .from('folder_year')
+          .select('id, fiscal_year')
+          .order('fiscal_year', { ascending: false });
+
+        if (!yearError && years) {
+          setFolderYears(years);
+        }
+      } catch (error) {
+        console.error('Error fetching reference data:', error);
+      }
+    };
+
+    fetchReferenceData();
+  }, []);
 
   const handleViewPress = (doc) => {
     if (!doc.fileUrl) {
@@ -597,13 +568,18 @@ export default function SKDocumentManagementScreen() {
         // Prefer the latest version's file_url, fall back to the documents table file_url
         const resolvedFileUrl = versions?.[0]?.file_url || doc.file_url || null;
 
+        // Get category and document type names from joined data
+        const categoryName = documentCategories.find(c => String(c.id) === doc.folder_category)?.document_category || doc.folder_category || 'planning';
+        const docTypeName = documentTypes.find(t => String(t.id) === doc.document_type)?.document_type || doc.document_type || 'Unknown';
+        const yearValue = folderYears.find(y => String(y.id) === String(doc.year))?.fiscal_year || doc.year;
+
         return {
           id: doc.document_id,
           title: doc.title || 'Untitled',
-          type: doc.document_type || 'Unknown',
-          category: doc.folder_category || 'planning',
+          type: docTypeName,
+          category: categoryName,
           status: doc.status || 'draft',
-          year: doc.year,
+          year: yearValue,
           createdBy: usersMap[doc.submitted_by] || 'Unknown',
           lastModified: doc.saved_at || doc.created_at || new Date().toISOString(),
           fileUrl: resolvedFileUrl,
@@ -614,7 +590,7 @@ export default function SKDocumentManagementScreen() {
     } catch (error) {
       console.error('Error:', error);
     }
-  }, [barangayId, supabase, user]);
+  }, [barangayId, supabase, user, documentCategories, documentTypes, folderYears]);
 
   // Auto-fetch on screen focus - always fetch fresh data
   useFocusEffect(
@@ -702,6 +678,187 @@ export default function SKDocumentManagementScreen() {
       console.error('Download error:', error);
       showAlert('error', 'Download Failed', `Could not open the file: ${error.message}`);
     }
+  };
+
+  // Handle edit button press for returned documents
+  const handleEditPress = (doc) => {
+    setDocumentToEdit(doc);
+    setEditTitle(doc.title);
+    setSelectedEditFile(null);
+    setEditModalVisible(true);
+  };
+
+  // Pick file for editing
+  const pickEditFile = async () => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'],
+        copyToCacheDirectory: true,
+      });
+
+      if (result.canceled) {
+        return;
+      }
+
+      setSelectedEditFile(result.assets[0]);
+    } catch (error) {
+      console.error('Error picking file:', error);
+      showAlert('error', 'Error', 'Failed to select file. Please try again.');
+    }
+  };
+
+  // Upload file to Supabase storage
+  const uploadEditFile = async (file) => {
+    if (!file) return null;
+
+    try {
+      const sanitizedName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+      const fileName = `${Date.now()}_${sanitizedName}`;
+
+      const response = await fetch(file.uri);
+      const blob = await response.blob();
+
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from('documents')
+        .upload(fileName, blob, {
+          contentType: file.type || 'application/octet-stream',
+        });
+
+      if (uploadError) {
+        console.error('Upload error:', uploadError);
+        return null;
+      }
+
+      const { data: urlData } = supabase.storage
+        .from('documents')
+        .getPublicUrl(fileName);
+
+      return urlData.publicUrl;
+    } catch (error) {
+      console.error('Error uploading file:', error);
+      return null;
+    }
+  };
+
+  // Handle confirm edit - update the document with new file and forward to LYDO
+  const handleConfirmEdit = async () => {
+    if (!documentToEdit) {
+      showAlert('error', 'Error', 'No document selected.');
+      return;
+    }
+
+    // Check if a new file is selected
+    if (!selectedEditFile) {
+      showAlert('error', 'Error', 'Please select a file to replace the current document.');
+      return;
+    }
+
+    setEditLoading(true);
+    try {
+      // First, get the current file URL from the document to save as the returned version
+      const { data: currentDoc } = await supabase
+        .from('documents')
+        .select('file_url, current_version')
+        .eq('document_id', documentToEdit.id)
+        .single();
+
+      const currentFileUrl = currentDoc?.file_url;
+      const currentVersion = currentDoc?.current_version || 1;
+
+      // Upload the new file
+      setUploadingEditFile(true);
+      const newFileUrl = await uploadEditFile(selectedEditFile);
+
+      if (!newFileUrl) {
+        showAlert('error', 'Upload Failed', 'Failed to upload the file. Please try again.');
+        setEditLoading(false);
+        setUploadingEditFile(false);
+        return;
+      }
+      setUploadingEditFile(false);
+
+      // Get current max version number
+      const { data: existingVersions } = await supabase
+        .from('document_versions')
+        .select('version_number')
+        .eq('document_id', documentToEdit.id)
+        .order('version_number', { ascending: false })
+        .limit(1);
+
+      const newVersionNumber = (existingVersions?.[0]?.version_number || 0) + 1;
+
+      // If there's a current file URL, save it as a 'returned' version before replacing
+      if (currentFileUrl) {
+        const { error: returnedVersionError } = await supabase
+          .from('document_versions')
+          .insert({
+            document_id: documentToEdit.id,
+            version_number: currentVersion,
+            file_url: currentFileUrl,
+            action: 'returned',
+            actioned_by: user.userId,
+          });
+
+        if (returnedVersionError) {
+          console.error('Error saving returned version:', returnedVersionError);
+          // Continue anyway - this is not critical
+        }
+      }
+
+      // Create version record with action 'submitted' for the new file
+      const { error: versionError } = await supabase
+        .from('document_versions')
+        .insert({
+          document_id: documentToEdit.id,
+          version_number: newVersionNumber,
+          file_url: newFileUrl,
+          action: 'submitted',
+          actioned_by: user.userId,
+        });
+
+      if (versionError) {
+        console.error('Error creating version:', versionError);
+        showAlert('error', 'Edit Failed', 'Failed to save document version. Please try again.');
+        setEditLoading(false);
+        return;
+      }
+
+      // Update document with new file URL, increment version, and set status to submitted (forward to LYDO)
+      const { error: updateError } = await supabase
+        .from('documents')
+        .update({
+          file_url: newFileUrl,
+          current_version: newVersionNumber,
+          status: 'submitted',
+          saved_at: new Date().toISOString(),
+          submitted_at: new Date().toISOString(),
+        })
+        .eq('document_id', documentToEdit.id);
+
+      if (updateError) {
+        console.error('Error updating document:', updateError);
+        showAlert('error', 'Edit Failed', 'Failed to update the document. Please try again.');
+        setEditLoading(false);
+        return;
+      }
+
+      setEditModalVisible(false);
+      setDocumentToEdit(null);
+      setEditTitle('');
+      setSelectedEditFile(null);
+
+      // Refresh documents
+      await fetchDocuments();
+
+      // Log the activity
+      await logActivity('Save & Forward', `Saved and forwarded "${documentToEdit?.title}" to LYDO`);
+
+      showAlert('success', 'Saved & Forwarded', 'The document has been saved and forwarded to LYDO.');
+    } catch (error) {
+      console.error('Error:', error);
+      showAlert('error', 'Unexpected Error', 'An error occurred while editing the document.');
+    }
+    setEditLoading(false);
   };
 
   // Handle forward button press
@@ -828,54 +985,16 @@ export default function SKDocumentManagementScreen() {
   }, [activeStatusTab, draftType, selectedYear, searchText, sortBy, documents]);
 
   // ── Sidebar ──
-  const NAV_ITEMS = [
-    { tab: 'Dashboard', IconComponent: DashboardIcon },
-    { tab: 'Documents', IconComponent: DocumentsIcon },
-    { tab: 'Planning',  IconComponent: PlanningIcon  },
-    { tab: 'Portal',    IconComponent: PortalIcon    },
-    { tab: 'Logs',      IconComponent: LogsIcon      },
-    { tab: 'Account',   IconComponent: AccountIcon   },
-  ];
+  const handleLogout = () => { logout(); router.replace('/'); };
 
   const renderSidebar = () => (
-    <View style={[styles.sidebar, isMobile && !sidebarVisible && styles.sidebarHidden]}>
-      <View style={styles.logoPill}>
-        <Image
-          source={require('./../../assets/images/sk-logo.png')}
-          style={styles.logoImage}
-          resizeMode="contain"
-        />
-      </View>
-      <View style={{ height: 28 }} />
-      {NAV_ITEMS.map(({ tab, IconComponent }) => {
-        const active = activeTab === tab;
-        const iconColor = active ? '#133E75' : 'rgba(255,255,255,0.85)';
-        return (
-          <TouchableOpacity
-            key={tab}
-            style={[styles.navItem, active && styles.navItemActive]}
-            onPress={() => handleNavPress(tab)}
-            activeOpacity={0.8}
-          >
-            <View style={styles.navItemInner}>
-              <IconComponent color={iconColor} size={16} />
-              <Text style={[styles.navLabel, active && styles.navLabelActive]}>{tab}</Text>
-            </View>
-          </TouchableOpacity>
-        );
-      })}
-      <View style={{ flex: 1 }} />
-      <TouchableOpacity
-        style={styles.logoutBtn}
-        onPress={() => { logout(); router.replace('/'); }}
-        activeOpacity={0.8}
-      >
-        <View style={styles.navItemInner}>
-          <LogoutNavIcon color="rgba(255,255,255,0.85)" size={16} />
-          <Text style={styles.logoutText}>Logout</Text>
-        </View>
-      </TouchableOpacity>
-    </View>
+    <Sidebar
+      activeTab={activeTab}
+      onNavPress={handleNavPress}
+      onLogout={handleLogout}
+      isMobile={isMobile}
+      sidebarVisible={sidebarVisible}
+    />
   );
 
   // ── Main Content ──
@@ -893,8 +1012,8 @@ export default function SKDocumentManagementScreen() {
             <MenuIcon />
           </TouchableOpacity>
           <Text style={styles.mobileTitle}>Document Management</Text>
-          <TouchableOpacity style={styles.bellBtn}>
-            <BellIcon hasNotif={notifCount > 0} />
+          <TouchableOpacity style={styles.bellBtn} onPress={notif.open} activeOpacity={0.7}>
+            <BellIcon count={notifCount} />
           </TouchableOpacity>
         </View>
       )}
@@ -906,14 +1025,11 @@ export default function SKDocumentManagementScreen() {
             <Text style={styles.headerSub}>SANGGUNIANG KABATAAN</Text>
             <Text style={styles.headerTitle}>{barangayName.toUpperCase()}</Text>
           </View>
-          <TouchableOpacity style={styles.bellBtn} activeOpacity={0.7}>
-            <BellIcon hasNotif={notifCount > 0} />
-            {notifCount > 0 && (
-              <View style={styles.notifBadge}>
-                <Text style={styles.notifBadgeText}>{notifCount}</Text>
-              </View>
-            )}
-          </TouchableOpacity>
+          <View style={styles.headerRight}>
+            <TouchableOpacity style={styles.bellBtn} onPress={notif.open} activeOpacity={0.7}>
+              <BellIcon count={notifCount} />
+            </TouchableOpacity>
+          </View>
         </View>
       )}
 
@@ -934,11 +1050,6 @@ export default function SKDocumentManagementScreen() {
             </TouchableOpacity>
           )}
         </View>
-      </View>
-
-      {/* Category label */}
-      <View style={styles.categoryRow}>
-        <Text style={styles.categoryLabel}>Category:</Text>
       </View>
 
       {/* Folder / Document Management Tab Bar */}
@@ -1155,7 +1266,7 @@ export default function SKDocumentManagementScreen() {
                   </TouchableOpacity>
                 ) : doc.status === 'returned' ? (
                   <>
-                    <TouchableOpacity activeOpacity={0.7} onPress={() => {}}>
+                    <TouchableOpacity activeOpacity={0.7} onPress={() => handleEditPress(doc)}>
                       <EditIcon />
                     </TouchableOpacity>
                     <TouchableOpacity activeOpacity={0.7} onPress={() => setReturnedViewerDoc(doc)}>
@@ -1201,6 +1312,13 @@ export default function SKDocumentManagementScreen() {
   return (
     <SafeAreaView style={styles.safe}>
       <StatusBar barStyle="light-content" backgroundColor={COLORS.navy} />
+      <NotificationModal
+        {...notif.modalProps}
+        onOpenRoute={(route) => {
+          notif.close();
+          setTimeout(() => router.push(route), 120);
+        }}
+      />
       <View style={styles.layout}>
         {isMobile && sidebarVisible && (
           <TouchableOpacity
@@ -1489,6 +1607,95 @@ export default function SKDocumentManagementScreen() {
         </Modal>
       </View>
 
+      {/* ── Edit Returned Document Modal ── */}
+      <Modal
+        visible={editModalVisible}
+        animationType="fade"
+        transparent={true}
+        onRequestClose={() => setEditModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalIconStrip}>
+              <View style={[styles.modalIconCircle, { backgroundColor: '#DBEAFE' }]}>
+                <Feather name="send" size={28} color={COLORS.blue} />
+              </View>
+            </View>
+            <View style={styles.modalBody}>
+              <Text style={styles.modalTitle}>Save & Forward to LYDO</Text>
+              <Text style={styles.modalBodyText}>
+                Replace the returned file and forward to LYDO.{'\n'}Select a new file to replace the current one.
+              </Text>
+
+              {/* Document Title (Read-only) */}
+              <View style={styles.editInputContainer}>
+                <Text style={styles.editInputLabel}>Document Title:</Text>
+                <View style={styles.editTitleDisplay}>
+                  <Text style={styles.editTitleText}>{documentToEdit?.title}</Text>
+                </View>
+              </View>
+
+              {/* Current File */}
+              <View style={styles.editInputContainer}>
+                <Text style={styles.editInputLabel}>Current File:</Text>
+                <View style={styles.editFileDisplay}>
+                  <Feather name="file-text" size={16} color={COLORS.subText} />
+                  <Text style={styles.editFileName} numberOfLines={1}>
+                    {documentToEdit?.fileUrl ? documentToEdit.fileUrl.split('/').pop() : 'No file'}
+                  </Text>
+                </View>
+              </View>
+
+              {/* New File Selection */}
+              <View style={styles.editInputContainer}>
+                <Text style={styles.editInputLabel}>Replace with new file:</Text>
+                <TouchableOpacity
+                  style={styles.editFilePickerBtn}
+                  onPress={pickEditFile}
+                  activeOpacity={0.8}
+                >
+                  <Feather name="upload-cloud" size={18} color={COLORS.navy} />
+                  <Text style={styles.editFilePickerText}>
+                    {selectedEditFile ? selectedEditFile.name : 'Choose File (PDF, Word)'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+            <View style={styles.modalDivider} />
+            <View style={styles.modalFooter}>
+              <TouchableOpacity
+                style={styles.modalCancelBtn}
+                onPress={() => { setEditModalVisible(false); setDocumentToEdit(null); setSelectedEditFile(null); }}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.modalCancelBtnText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.modalActionBtn,
+                  { backgroundColor: COLORS.blue },
+                  (editLoading || !selectedEditFile) && styles.modalBtnDisabled
+                ]}
+                onPress={handleConfirmEdit}
+                disabled={editLoading || !selectedEditFile}
+                activeOpacity={0.8}
+              >
+                {editLoading ? (
+                  <Text style={styles.modalActionBtnText}>
+                    {uploadingEditFile ? 'Uploading...' : 'Saving...'}
+                  </Text>
+                ) : (
+                  <>
+                    <Feather name="send" size={14} color={COLORS.white} style={{ marginRight: 6 }} />
+                    <Text style={styles.modalActionBtnText}>Save & Forward</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
       {/* ── Returned Document Viewer (with LYDO comment panel) ── */}
       {returnedViewerDoc && (
         <ReturnedDocumentViewer
@@ -1507,44 +1714,11 @@ const styles = StyleSheet.create({
   safe:   { flex: 1, backgroundColor: COLORS.navy },
   layout: { flex: 1, flexDirection: 'row' },
 
-  // ── Sidebar ──
-  sidebar: {
-    width: 250, backgroundColor: COLORS.navy,
-    alignItems: 'center', paddingTop: 20, paddingBottom: 24,
-    paddingHorizontal: 10, zIndex: 20,
-    ...(isMobile ? {
-      position: 'absolute', top: 0, left: 0, bottom: 0, zIndex: 20,
-    } : {}),
-  },
-  sidebarHidden: {
-    display: 'none',
-  },
+  // ── Sidebar now rendered by the shared Sidebar module ──
   sidebarOverlay: {
     position: 'absolute', left: 0, top: 0, bottom: 0, right: 0,
     backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 15,
   },
-  logoPill: {
-    marginTop: 20, width: 70, height: 70, borderRadius: 35,
-    backgroundColor: 'rgba(255,255,255,0.15)',
-    alignItems: 'center', justifyContent: 'center',
-    marginBottom: 8, borderWidth: 2, borderColor: 'rgba(255,255,255,0.3)',
-  },
-  logoImage:     { width: 100, height: 100 },
-  navItem: {
-    width: '100%', paddingVertical: 12, paddingHorizontal: 12,
-    borderRadius: 24, marginBottom: 8, alignItems: 'center',
-    borderWidth: 1.5, borderColor: COLORS.white, backgroundColor: COLORS.navy,
-  },
-  navItemInner: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  navItemActive:  { backgroundColor: COLORS.white, borderColor: COLORS.white },
-  navLabel:       { fontSize: 13, fontWeight: '600', color: 'rgba(255,255,255,0.85)', letterSpacing: 0.3 },
-  navLabelActive: { color: '#000', fontWeight: '800' },
-  logoutBtn: {
-    width: '100%', paddingVertical: 12, paddingHorizontal: 12, borderRadius: 24,
-    marginTop: 8, alignItems: 'center', borderWidth: 1.5, borderColor: COLORS.white,
-    backgroundColor: 'rgba(255,255,255,0.1)',
-  },
-  logoutText: { fontSize: 13, fontWeight: '600', color: '#fff', letterSpacing: 0.3 },
 
   // ── Main ──
   main:        { flex: 1, backgroundColor: COLORS.offWhite, borderTopLeftRadius: 20 },
@@ -1565,24 +1739,24 @@ const styles = StyleSheet.create({
   // Desktop header
   header: {
     flexDirection: 'row', alignItems: 'flex-start',
-    justifyContent: 'space-between', marginBottom: 16,
+    justifyContent: 'space-between', marginBottom: 12,
   },
   headerSub:   { fontSize: 10, fontWeight: '600', color: COLORS.subText, letterSpacing: 2, textTransform: 'uppercase', marginBottom: 2 },
-  headerTitle: { fontSize: 22, fontWeight: '900', color: COLORS.darkText },
+  headerTitle: {
+    fontSize: 22, fontWeight: '900', color: COLORS.darkText, letterSpacing: 0.3,
+    borderBottomWidth: 2, borderBottomColor: COLORS.lightGray, paddingBottom: 4, marginBottom: 6,
+  },
+  headerRight: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
 
-  // Bell
+  // Bell — unread-count badge lives in BellIcon (notificationCenter.js);
+  // only the button container is styled here.
   bellBtn: {
     width: 40, height: 40, borderRadius: 20,
     backgroundColor: COLORS.cardBg, alignItems: 'center', justifyContent: 'center',
     shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.08, shadowRadius: 6, elevation: 3,
   },
-  bellWrapper: { width: 20, height: 22, alignItems: 'center' },
-  bellBody:    { width: 14, height: 12, borderRadius: 7, borderWidth: 2, borderColor: '#8B0000', marginTop: 4 },
-  bellBottom:  { width: 8, height: 4, borderBottomLeftRadius: 4, borderBottomRightRadius: 4, backgroundColor: '#8B0000', marginTop: -1 },
-  bellDot:     { position: 'absolute', top: 0, right: 1, width: 7, height: 7, borderRadius: 4, backgroundColor: COLORS.gold, borderWidth: 1.5, borderColor: COLORS.cardBg },
-  notifBadge:  { position: 'absolute', top: -2, right: -2, width: 16, height: 16, borderRadius: 8, backgroundColor: COLORS.gold, alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: COLORS.white },
-  notifBadgeText: { fontSize: 8, fontWeight: '900', color: COLORS.navy },
+
 
   // ── DOCUMENT TAB BAR (4 tabs only) ──
   docTabBar: {
@@ -1597,7 +1771,7 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.15)', alignItems: 'center', justifyContent: 'center',
   },
   docTabActive: {
-    backgroundColor: COLORS.gold, borderRadius: 4, borderColor: COLORS.gold,
+    backgroundColor: COLORS.gold, borderColor: COLORS.gold,
     shadowColor: COLORS.gold, shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.4, shadowRadius: 4, elevation: 3,
   },
@@ -1846,6 +2020,83 @@ const styles = StyleSheet.create({
   viewerLoadingText: {
     fontSize: 13,
     color: COLORS.subText,
+  },
+
+  // Edit Input
+  editInputContainer: {
+    width: '100%',
+    marginTop: 16,
+  },
+  editInputLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: COLORS.darkText,
+    marginBottom: 6,
+  },
+  editInput: {
+    width: '100%',
+    backgroundColor: COLORS.offWhite,
+    borderWidth: 1,
+    borderColor: COLORS.lightGray,
+    borderRadius: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: 14,
+    color: COLORS.darkText,
+    minHeight: 48,
+  },
+  editTitleDisplay: {
+    width: '100%',
+    backgroundColor: COLORS.lightGray,
+    borderWidth: 1,
+    borderColor: COLORS.lightGray,
+    borderRadius: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    minHeight: 48,
+    justifyContent: 'center',
+  },
+  editTitleText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: COLORS.darkText,
+  },
+  editFileDisplay: {
+    width: '100%',
+    backgroundColor: COLORS.lightGray,
+    borderWidth: 1,
+    borderColor: COLORS.lightGray,
+    borderRadius: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    minHeight: 44,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  editFileName: {
+    flex: 1,
+    fontSize: 13,
+    color: COLORS.subText,
+  },
+  editFilePickerBtn: {
+    width: '100%',
+    backgroundColor: COLORS.white,
+    borderWidth: 1.5,
+    borderColor: COLORS.navy,
+    borderRadius: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    minHeight: 48,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  editFilePickerText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: COLORS.navy,
   },
 
 });

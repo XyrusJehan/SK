@@ -1,16 +1,93 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import {
-  View, Text, TextInput, ScrollView, TouchableOpacity,
-  StyleSheet, SafeAreaView, StatusBar, Dimensions, Image, Modal, ActivityIndicator,
-} from 'react-native';
-import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
-import { useNav } from './navContext';
-import { useAuth } from './authContext';
+import { useRouter } from 'expo-router';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import React, { useCallback, useEffect, useState } from 'react';
+import {
+  ActivityIndicator,
+  Dimensions, Image, Modal,
+  SafeAreaView,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
+} from 'react-native';
 import { supabase } from '../../utils/supabase';
+import { useAuth } from './authContext';
+import { useNav } from './navContext';
+import Sidebar from './../components/Sidebar';
+import { BellIcon } from './notificationCenter';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const isMobile = SCREEN_WIDTH < 768;
+
+// ─── PERSISTED "SEEN" COUNTS ──────────────────────────────────────────────────
+// The bell badge counts how many notifications are NEW since the user last
+// opened the bell modal. Those seen counts are kept in AsyncStorage so they
+// survive pull-to-refresh, screen re-mounts, and app restarts.
+const SEEN_KEYS = {
+  approved:  'sk_notif_seen_approved',
+  templates: 'sk_notif_seen_templates',
+  returned:  'sk_notif_seen_returned',
+  deadlines: 'sk_notif_seen_deadlines',
+};
+
+const loadSeenCounts = async () => {
+  try {
+    const entries = await Promise.all([
+      AsyncStorage.getItem(SEEN_KEYS.approved),
+      AsyncStorage.getItem(SEEN_KEYS.templates),
+      AsyncStorage.getItem(SEEN_KEYS.returned),
+      AsyncStorage.getItem(SEEN_KEYS.deadlines),
+    ]);
+    return {
+      approved:  parseInt(entries[0] || '0', 10) || 0,
+      templates: parseInt(entries[1] || '0', 10) || 0,
+      returned:  parseInt(entries[2] || '0', 10) || 0,
+      deadlines: parseInt(entries[3] || '0', 10) || 0,
+    };
+  } catch (err) {
+    console.error('Error loading seen counts:', err);
+    return { approved: 0, templates: 0, returned: 0, deadlines: 0 };
+  }
+};
+
+const saveSeenCounts = async (counts) => {
+  try {
+    await Promise.all([
+      AsyncStorage.setItem(SEEN_KEYS.approved,  String(counts.approved  || 0)),
+      AsyncStorage.setItem(SEEN_KEYS.templates, String(counts.templates || 0)),
+      AsyncStorage.setItem(SEEN_KEYS.returned,  String(counts.returned  || 0)),
+      AsyncStorage.setItem(SEEN_KEYS.deadlines, String(counts.deadlines || 0)),
+    ]);
+  } catch (err) {
+    console.error('Error saving seen counts:', err);
+  }
+};
+
+// Supabase timestamps have no 'Z' suffix — JS mis-parses them as local time.
+// toUtcDate forces correct UTC parsing before PHT display.
+const toUtcDate = (dateStr) => {
+  if (!dateStr) return new Date();
+  if (dateStr instanceof Date) return dateStr;
+  const iso = String(dateStr).replace(' ', 'T').replace(/Z?$/, 'Z');
+  return new Date(iso);
+};
+
+const toPhilippineDate = (dateStr, options) => {
+  if (!dateStr) return '';
+  const d = toUtcDate(dateStr);
+  if (isNaN(d.getTime())) return '';
+  return d.toLocaleDateString('en-PH', { timeZone: 'Asia/Manila', ...options });
+};
+
+const toPhilippineTime = (dateStr, options) => {
+  if (!dateStr) return '';
+  const d = toUtcDate(dateStr);
+  if (isNaN(d.getTime())) return '';
+  return d.toLocaleTimeString('en-PH', { timeZone: 'Asia/Manila', ...options });
+};
 
 const COLORS = {
   maroon: '#8B0000', maroonDark: '#6B0000', maroonLight: '#A50000',
@@ -25,128 +102,12 @@ const CAL_MONTHS = ['January','February','March','April','May','June','July','Au
 const CAL_DAY_NAMES = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
 const CAL_DOWS = ['SUN','MON','TUE','WED','THU','FRI','SAT'];
 
-// ─── NAV ICONS (pure React Native Views — no react-native-svg dependency) ─────
-
-// Dashboard: 2×2 grid of rounded squares
-const DashboardIcon = ({ color = '#fff', size = 16 }) => {
-  const s = size * 0.38;
-  const gap = size * 0.12;
-  const r = size * 0.12;
-  const box = { width: s, height: s, borderRadius: r, backgroundColor: color };
-  return (
-    <View style={{ width: size, height: size, justifyContent: 'center', alignItems: 'center' }}>
-      <View style={{ flexDirection: 'row', gap }}>
-        <View style={box} />
-        <View style={box} />
-      </View>
-      <View style={{ height: gap }} />
-      <View style={{ flexDirection: 'row', gap }}>
-        <View style={box} />
-        <View style={box} />
-      </View>
-    </View>
-  );
-};
-
-// Documents: file shape with fold + two lines
-const DocumentsIcon = ({ color = '#fff', size = 16 }) => {
-  const w = size * 0.6, h = size * 0.78;
-  const fold = size * 0.22;
-  return (
-    <View style={{ width: size, height: size, justifyContent: 'center', alignItems: 'center' }}>
-      <View style={{ width: w, height: h, justifyContent: 'flex-end', paddingBottom: size * 0.08, paddingHorizontal: size * 0.1 }}>
-        {/* body border */}
-        <View style={{ position: 'absolute', left: 0, right: 0, top: fold, bottom: 0, borderWidth: 1.5, borderColor: color, borderRadius: size * 0.08 }} />
-        {/* fold triangle approximation */}
-        <View style={{ position: 'absolute', top: 0, right: 0, width: fold, height: fold, backgroundColor: color, borderBottomLeftRadius: size * 0.06 }} />
-        <View style={{ position: 'absolute', top: 0, left: 0, width: w - fold, height: fold, borderTopWidth: 1.5, borderLeftWidth: 1.5, borderColor: color, borderTopLeftRadius: size * 0.08 }} />
-        {/* lines */}
-        <View style={{ height: 1.5, backgroundColor: color, borderRadius: 1, marginBottom: size * 0.1, width: '80%' }} />
-        <View style={{ height: 1.5, backgroundColor: color, borderRadius: 1, width: '55%' }} />
-      </View>
-    </View>
-  );
-};
-
-// Planning: calendar grid
-const PlanningIcon = ({ color = '#fff', size = 16 }) => {
-  const bw = 1.5;
-  return (
-    <View style={{ width: size, height: size, justifyContent: 'center', alignItems: 'center' }}>
-      <View style={{ width: size * 0.82, height: size * 0.75, borderWidth: bw, borderColor: color, borderRadius: size * 0.1, overflow: 'hidden' }}>
-        {/* header strip */}
-        <View style={{ height: size * 0.22, backgroundColor: color, width: '100%' }} />
-        {/* dot row */}
-        <View style={{ flex: 1, flexDirection: 'row', justifyContent: 'space-around', alignItems: 'center', paddingHorizontal: size * 0.05 }}>
-          {[0,1,2].map(i => <View key={i} style={{ width: size * 0.1, height: size * 0.1, borderRadius: size * 0.05, backgroundColor: color }} />)}
-        </View>
-      </View>
-      {/* binding pegs */}
-      <View style={{ position: 'absolute', top: 0, flexDirection: 'row', gap: size * 0.32 }}>
-        {[0,1].map(i => <View key={i} style={{ width: size * 0.1, height: size * 0.2, backgroundColor: color, borderRadius: size * 0.05 }} />)}
-      </View>
-    </View>
-  );
-};
-
-// Portal: simple globe — circle + horizontal line + vertical oval hint
-const PortalIcon = ({ color = '#fff', size = 16 }) => (
-  <View style={{ width: size, height: size, justifyContent: 'center', alignItems: 'center' }}>
-    <View style={{ width: size * 0.82, height: size * 0.82, borderRadius: size * 0.41, borderWidth: 1.5, borderColor: color, justifyContent: 'center', alignItems: 'center', overflow: 'hidden' }}>
-      {/* equator */}
-      <View style={{ position: 'absolute', height: 1.5, width: '100%', backgroundColor: color }} />
-      {/* meridian oval */}
-      <View style={{ width: size * 0.38, height: size * 0.78, borderRadius: size * 0.19, borderWidth: 1.5, borderColor: color, backgroundColor: 'transparent' }} />
-    </View>
-  </View>
-);
-
-// Logs: clipboard with checkmark lines
-const LogsIcon = ({ color = '#fff', size = 16 }) => (
-  <View style={{ width: size, height: size, justifyContent: 'center', alignItems: 'center' }}>
-    <View style={{ width: size * 0.75, height: size * 0.85, borderWidth: 1.5, borderColor: color, borderRadius: size * 0.1, paddingHorizontal: size * 0.1, paddingVertical: size * 0.1, justifyContent: 'space-around' }}>
-      {/* clip tab */}
-      <View style={{ position: 'absolute', top: -size * 0.08, alignSelf: 'center', width: size * 0.3, height: size * 0.14, backgroundColor: color, borderRadius: size * 0.04 }} />
-      {[0,1,2].map(i => (
-        <View key={i} style={{ flexDirection: 'row', alignItems: 'center', gap: size * 0.08, marginTop: i === 0 ? size * 0.1 : 0 }}>
-          <View style={{ width: size * 0.1, height: size * 0.1, borderRadius: size * 0.05, backgroundColor: color }} />
-          <View style={{ flex: 1, height: 1.5, backgroundColor: color, borderRadius: 1 }} />
-        </View>
-      ))}
-    </View>
-  </View>
-);
-
-// Account: head + shoulders silhouette
-const AccountIcon = ({ color = '#fff', size = 16 }) => (
-  <View style={{ width: size, height: size, justifyContent: 'center', alignItems: 'center' }}>
-    {/* head */}
-    <View style={{ width: size * 0.38, height: size * 0.38, borderRadius: size * 0.19, borderWidth: 1.5, borderColor: color, marginBottom: size * 0.04 }} />
-    {/* shoulders arc: bottom half of a larger circle */}
-    <View style={{ width: size * 0.72, height: size * 0.36, borderBottomLeftRadius: size * 0.36, borderBottomRightRadius: size * 0.36, borderWidth: 1.5, borderColor: color, borderTopWidth: 0, overflow: 'hidden' }} />
-  </View>
-);
-
-// Logout: door with arrow
-const LogoutNavIcon = ({ color = '#fff', size = 16 }) => (
-  <View style={{ width: size, height: size, justifyContent: 'center', alignItems: 'center' }}>
-    {/* door frame — left 60% */}
-    <View style={{ position: 'absolute', left: 0, top: 0, width: size * 0.55, height: size, borderWidth: 1.5, borderColor: color, borderRadius: size * 0.08 }} />
-    {/* arrow shaft */}
-    <View style={{ position: 'absolute', right: size * 0.02, width: size * 0.52, height: 1.8, backgroundColor: color, borderRadius: 1 }} />
-    {/* arrowhead */}
-    <View style={{ position: 'absolute', right: size * 0.02, width: size * 0.2, height: size * 0.2, borderTopWidth: 1.8, borderRightWidth: 1.8, borderColor: color, transform: [{ rotate: '45deg' }], marginTop: -size * 0.01 }} />
-  </View>
-);
+// Nav icons + NAV_ITEMS now live in the shared Sidebar module (see import above).
 
 // ─── ICON COMPONENTS ──────────────────────────────────────────────────────────
-const BellIcon = ({ hasNotif }) => (
-  <View style={styles.bellWrapper}>
-    <View style={styles.bellBody} />
-    <View style={styles.bellBottom} />
-    {hasNotif && <View style={styles.bellDot} />}
-  </View>
-);
+// BellIcon now lives in notificationCenter.js and is imported above — kept
+// there so every screen (SK + LYDO) shares one definition instead of each
+// file redrawing its own bell.
 
 const SearchIcon = () => (
   <View style={styles.searchIcon}>
@@ -501,20 +462,371 @@ function CalendarModal({ visible, onClose, barangayId }) {
   );
 }
 
+// ─── NOTIFICATION MODAL ──────────────────────────────────────────────────────
+// Lists every notification relevant to the SK: documents returned by LYDO,
+// documents approved by LYDO, templates forwarded by LYDO, and approaching
+// submission deadlines. Rows are grouped by category via tab pills (with
+// counts), each row shows a relative timestamp, and tapping a row deep-links
+// to the relevant screen.
+function NotificationModal({
+  visible,
+  onClose,
+  returnedDocuments,
+  approvedDocuments,
+  forwardedTemplates,
+  approachingDeadlines,
+  unviewedCounts = { returned: 0, approved: 0, templates: 0, deadlines: 0 },
+  onMarkAllRead,
+  onViewCategory,
+  onOpenRoute,
+}) {
+  // ── Filter state ──
+  const TABS = ['all', 'returned', 'approved', 'templates', 'deadlines'];
+  const [activeTab, setActiveTab] = useState('all');
+  const [dropdownVisible, setDropdownVisible] = useState(false);
+
+  useEffect(() => {
+    if (!visible) {
+      setDropdownVisible(false);
+      setActiveTab('all');
+    }
+  }, [visible]);
+
+  // Selecting a specific category tab (not "All") counts as viewing that
+  // category, so its unread badge clears. "All" never auto-clears anything —
+  // that only happens via the explicit "Mark all read" button.
+  useEffect(() => {
+    if (visible && activeTab !== 'all' && onViewCategory) {
+      onViewCategory(activeTab);
+    }
+  }, [visible, activeTab, onViewCategory]);
+
+  // ── Build the unified notification list once per data change ──
+  const notifications = React.useMemo(() => {
+    const items = [];
+
+    returnedDocuments.forEach((doc) => {
+      items.push({
+        id: `returned-${doc.id}`,
+        type: 'returned',
+        title: doc.title || 'Returned document',
+        subtitle: 'Returned for revision',
+        rawDate: doc.returned_at || doc.created_at,
+        icon: '↩',
+        accentBg: '#FFEDD5',
+        iconColor: '#F97316',
+      });
+    });
+
+    approvedDocuments.forEach((doc) => {
+      items.push({
+        id: `approved-${doc.id}`,
+        type: 'approved',
+        title: doc.title || 'Approved document',
+        subtitle: 'Approved by LYDO',
+        rawDate: doc.approved_at || doc.created_at,
+        icon: '✅',
+        accentBg: '#DCFCE7',
+        iconColor: '#22C55E',
+      });
+    });
+
+    forwardedTemplates.forEach((doc) => {
+      items.push({
+        id: `template-${doc.id}`,
+        type: 'templates',
+        title: doc.title || 'New template',
+        subtitle: `New template received (v${doc.version || 1})`,
+        rawDate: doc.distributed_at || doc.date,
+        icon: '📄',
+        accentBg: '#EDE9FE',
+        iconColor: '#8B5CF6',
+      });
+    });
+
+    approachingDeadlines.forEach((item) => {
+      items.push({
+        id: `deadline-${item.id}`,
+        type: 'deadlines',
+        title: item.title || 'Upcoming deadline',
+        subtitle:
+          item.daysLeft < 0
+            ? `${Math.abs(item.daysLeft)} days overdue`
+            : item.daysLeft === 0
+              ? 'Due today'
+              : `${item.daysLeft} day${item.daysLeft !== 1 ? 's' : ''} left`,
+        rawDate: item.deadlineIso || item.deadline,
+        icon: '⏰',
+        accentBg: item.urgent ? '#FEE2E2' : '#FEF3C7',
+        iconColor: item.urgent ? '#EF4444' : '#F97316',
+      });
+    });
+
+    // Sort by raw date descending (latest first). Items missing a date sink to
+    // the bottom of the list.
+    return items.sort((a, b) => {
+      const ta = a.rawDate ? toUtcDate(a.rawDate).getTime() : 0;
+      const tb = b.rawDate ? toUtcDate(b.rawDate).getTime() : 0;
+      return tb - ta;
+    });
+  }, [returnedDocuments, approvedDocuments, forwardedTemplates, approachingDeadlines]);
+
+  // ── Per-category counts for the tab pills ──
+  const counts = React.useMemo(() => {
+    const c = { all: notifications.length, returned: 0, approved: 0, templates: 0, deadlines: 0 };
+    notifications.forEach((n) => { c[n.type] = (c[n.type] || 0) + 1; });
+    return c;
+  }, [notifications]);
+
+  // ── Unread badge counts for the dropdown ──
+  // These are separate from `counts` above: `counts` is the total number of
+  // items in each category (used for the header subtitle and list), while
+  // `badgeCounts` is how many of those are still unread. Unread counts drop
+  // to 0 the moment the modal is viewed or "Mark all read" is pressed, since
+  // `unviewedCounts` is driven by the same seen-state as the bell badge.
+  const badgeCounts = React.useMemo(() => {
+    const returned  = unviewedCounts.returned  || 0;
+    const approved  = unviewedCounts.approved  || 0;
+    const templates = unviewedCounts.templates || 0;
+    const deadlines = unviewedCounts.deadlines || 0;
+    return { all: returned + approved + templates + deadlines, returned, approved, templates, deadlines };
+  }, [unviewedCounts]);
+
+  const filteredNotifications = React.useMemo(() => {
+    if (activeTab === 'all') return notifications;
+    return notifications.filter((n) => n.type === activeTab);
+  }, [notifications, activeTab]);
+
+  // ── Philippine-time helpers ──
+  const formatLongDate = (dateStr) => {
+    if (!dateStr) return '';
+    return toPhilippineDate(dateStr, { month: 'short', day: 'numeric', year: 'numeric' });
+  };
+  const formatTimeOfDay = (dateStr) => {
+    if (!dateStr) return '';
+    return toPhilippineTime(dateStr, { hour: '2-digit', minute: '2-digit' });
+  };
+
+  // Relative time string ("2h ago", "Yesterday", "3d ago") anchored on
+  // Philippine wall-clock time, not raw UTC, so the user sees their local clock.
+  const formatRelative = (dateStr) => {
+    if (!dateStr) return '';
+    const target = toUtcDate(dateStr);
+    if (isNaN(target.getTime())) return '';
+    // Current Philippine wall-clock time
+    const nowPh = new Date(
+      new Date().toLocaleString('en-US', { timeZone: 'Asia/Manila' })
+    );
+    const targetPh = new Date(
+      target.toLocaleString('en-US', { timeZone: 'Asia/Manila' })
+    );
+    const diffMs = nowPh.getTime() - targetPh.getTime();
+    if (diffMs < 0) return formatLongDate(dateStr);
+    const mins = Math.floor(diffMs / 60000);
+    if (mins < 1) return 'Just now';
+    if (mins < 60) return `${mins}m ago`;
+    const hrs = Math.floor(mins / 60);
+    if (hrs < 24) return `${hrs}h ago`;
+    // calendar-day comparison in PHT
+    const startOfDay = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
+    const dayDelta = Math.round((startOfDay(nowPh) - startOfDay(targetPh)) / (24 * 3600 * 1000));
+    if (dayDelta === 1) return 'Yesterday';
+    if (dayDelta < 7) return `${dayDelta}d ago`;
+    return formatLongDate(dateStr);
+  };
+
+  // Per-tab navigation targets — tapping a row routes the user to the screen
+  // that owns that data.
+  const tabRoute = {
+    returned: () => '/(tabs)/sk-document-management?initialTab=Returned',
+    approved: () => '/(tabs)/sk-document-management?initialTab=Approved',
+    templates: () => '/(tabs)/sk-portal',
+    deadlines: () => '/(tabs)/sk-document-management?initialTab=Saved',
+  }[activeTab];
+
+  const handleRowPress = (item) => {
+    const route = tabRoute ? tabRoute() : '/(tabs)/sk-document-management';
+    if (onOpenRoute) onOpenRoute(route);
+  };
+
+  const handleMarkAllRead = () => {
+    if (onMarkAllRead) onMarkAllRead();
+  };
+
+  // Human-friendly label for the active tab — reused by the empty state.
+  const activeLabel =
+    activeTab === 'all' ? 'All'
+    : activeTab === 'returned' ? 'Returned'
+    : activeTab === 'approved' ? 'Approved'
+    : activeTab === 'templates' ? 'Templates'
+    : 'Deadlines';
+
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <TouchableOpacity style={notifModalStyles.backdrop} activeOpacity={1} onPress={onClose}>
+        <TouchableOpacity activeOpacity={1} onPress={() => {}} style={notifModalStyles.caret} />
+        <TouchableOpacity activeOpacity={1} onPress={() => {}} style={notifModalStyles.modal}>
+          {/* ── Header ── */}
+          <View style={notifModalStyles.header}>
+            <View style={notifModalStyles.headerLeft}>
+              <View style={notifModalStyles.headerIcon}>
+                <Text style={notifModalStyles.headerIconText}>🔔</Text>
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={notifModalStyles.title}>Notifications</Text>
+                <Text style={notifModalStyles.headerSub}>
+                  {counts.all} update{counts.all !== 1 ? 's' : ''} from LYDO
+                </Text>
+              </View>
+            </View>
+            <View style={notifModalStyles.headerActions}>
+              <TouchableOpacity
+                style={notifModalStyles.markAllBtn}
+                onPress={handleMarkAllRead}
+                activeOpacity={0.8}
+                disabled={counts.all === 0}
+              >
+                <Text style={notifModalStyles.markAllBtnText}>Mark all read</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={notifModalStyles.closeBtn} onPress={onClose} activeOpacity={0.8}>
+                <Text style={notifModalStyles.closeBtnText}>✕</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          {/* ── Dropdown filter (All / Returned / Approved / Templates / Deadlines) ── */}
+          <View style={notifModalStyles.filterContainer}>
+            <TouchableOpacity
+              style={notifModalStyles.dropdownButton}
+              onPress={() => setDropdownVisible(!dropdownVisible)}
+              activeOpacity={0.8}
+            >
+              <View style={notifModalStyles.dropdownButtonLeft}>
+                <Text style={notifModalStyles.dropdownButtonText}>{activeLabel}</Text>
+                {badgeCounts[activeTab] > 0 && (
+                  <View style={notifModalStyles.dropdownButtonBadge}>
+                    <Text style={notifModalStyles.dropdownButtonBadgeText}>
+                      {badgeCounts[activeTab] > 99 ? '99+' : badgeCounts[activeTab]}
+                    </Text>
+                  </View>
+                )}
+              </View>
+              <Text style={notifModalStyles.dropdownArrow}>{dropdownVisible ? '▲' : '▼'}</Text>
+            </TouchableOpacity>
+
+            {dropdownVisible && (
+              <View style={notifModalStyles.dropdownMenu}>
+                {TABS.map((tab, idx) => {
+                  const isActive = activeTab === tab;
+                  const itemLabel =
+                    tab === 'all' ? 'All'
+                    : tab === 'returned' ? 'Returned'
+                    : tab === 'approved' ? 'Approved'
+                    : tab === 'templates' ? 'Templates'
+                    : 'Deadlines';
+                  const itemCount = badgeCounts[tab] || 0;
+                  return (
+                    <TouchableOpacity
+                      key={tab}
+                      style={[
+                        notifModalStyles.dropdownItem,
+                        isActive && notifModalStyles.dropdownItemActive,
+                        idx < TABS.length - 1 && notifModalStyles.dropdownItemBorder,
+                      ]}
+                      onPress={() => { setActiveTab(tab); setDropdownVisible(false); }}
+                      activeOpacity={0.8}
+                    >
+                      <Text style={[notifModalStyles.dropdownItemText, isActive && notifModalStyles.dropdownItemTextActive]}>
+                        {itemLabel}
+                      </Text>
+                      {itemCount > 0 && (
+                        <View style={[notifModalStyles.dropdownItemBadge, isActive && notifModalStyles.dropdownItemBadgeActive]}>
+                          <Text style={[notifModalStyles.dropdownItemBadgeText, isActive && notifModalStyles.dropdownItemBadgeTextActive]}>
+                            {itemCount > 99 ? '99+' : itemCount}
+                          </Text>
+                        </View>
+                      )}
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            )}
+          </View>
+
+          {/* ── Body ── */}
+          <View style={notifModalStyles.listContainer}>
+            {filteredNotifications.length === 0 ? (
+              <View style={notifModalStyles.emptyState}>
+                <View style={notifModalStyles.emptyIconCircle}>
+                  <Text style={notifModalStyles.emptyIcon}>🔕</Text>
+                </View>
+                <Text style={notifModalStyles.emptyText}>You're all caught up</Text>
+                <Text style={notifModalStyles.emptySubText}>
+                  {activeTab === 'all'
+                    ? 'No updates from LYDO right now. New returned documents, approvals, templates, and deadline reminders will appear here.'
+                    : `No ${activeLabel.toLowerCase()} updates right now.`}
+                </Text>
+              </View>
+            ) : (
+              <ScrollView
+                style={notifModalStyles.list}
+                showsVerticalScrollIndicator={false}
+                contentContainerStyle={notifModalStyles.listContent}
+              >
+                {filteredNotifications.map((item) => (
+                  <TouchableOpacity
+                    key={item.id}
+                    style={notifModalStyles.notifItem}
+                    onPress={() => handleRowPress(item)}
+                    activeOpacity={0.7}
+                  >
+                    <View style={[notifModalStyles.notifIcon, { backgroundColor: item.accentBg }]}>
+                      <Text style={[notifModalStyles.notifIconText, { color: item.iconColor }]}>{item.icon}</Text>
+                    </View>
+                    <View style={notifModalStyles.notifContent}>
+                      <Text style={notifModalStyles.notifTitle} numberOfLines={1}>{item.title}</Text>
+                      <Text style={[notifModalStyles.notifSubtitle, { color: item.iconColor }]} numberOfLines={1}>
+                        {item.subtitle}
+                      </Text>
+                      <View style={notifModalStyles.notifMetaRow}>
+                        <Text style={notifModalStyles.notifRelative}>{formatRelative(item.rawDate)}</Text>
+                        {item.rawDate && (
+                          <>
+                            <Text style={notifModalStyles.notifDotSep}>•</Text>
+                            <Text style={notifModalStyles.notifDate}>{formatLongDate(item.rawDate)}</Text>
+                            <Text style={notifModalStyles.notifDotSep}>•</Text>
+                            <Text style={notifModalStyles.notifTime}>{formatTimeOfDay(item.rawDate)}</Text>
+                          </>
+                        )}
+                      </View>
+                    </View>
+                    <Text style={notifModalStyles.notifChevron}>›</Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            )}
+          </View>
+        </TouchableOpacity>
+      </TouchableOpacity>
+    </Modal>
+  );
+}
+
 // ─── APPROACHING DEADLINES ────────────────────────────────────────────────────
 // Now derived live from submission_deadlines (see fetchTasks below) instead of
 // this static mock list.
 
 // ─── QUICK ACTIONS DATA ───────────────────────────────────────────────────────
+// Badge values will be dynamically updated in the render
 const SK_QUICK_ACTIONS = [
   { id: 'proposal', label: 'Create Proposal', icon: '🔔', color: '#133E75' },
   { id: 'drafts', label: 'View Drafts', icon: '📋', color: '#133E75' },
   { id: 'logs', label: 'Activity logs', icon: '📝', color: '#133E75' },
   { id: 'upload', label: 'Scan & Upload', icon: '📄', color: '#133E75', isScan: true },
-  { id: 'consultation', label: 'Consultation', icon: '💬', color: '#133E75', badge: 2 },
-  { id: 'calendar', label: 'View Deadline Calendar', icon: '📅', color: '#F97316' },
+  { id: 'consultation', label: 'Consultation', icon: '💬', color: '#133E75' },
+  { id: 'calendar', label: 'View Deadline Calendar', icon: '📅', color: '#F97316', badgeProp: 'deadlinesCount' },
   { id: 'archive', label: 'View Archive', icon: '🗃', color: '#6B7A8F' },
-  { id: 'returned', label: 'Returned Proposal', icon: '💬', color: '#9333EA', badge: 2 },
+  { id: 'returned', label: 'Returned Proposal', icon: '↩', color: '#9333EA', badgeProp: 'returnedProposalsCount' },
 ];
 
 // ─── MAIN COMPONENT ───────────────────────────────────────────────────────────
@@ -522,17 +834,59 @@ export default function HomeScreen({ navigation }) {
   const router = useRouter();
   const { activeTab, setActiveTab } = useNav();
   const { logout, user } = useAuth();
-  const [notifCount] = useState(2);
+  const [notifCount, setNotifCount] = useState(0);
+  const [seenApprovedCount, setSeenApprovedCount] = useState(0);
+  const [seenTemplatesCount, setSeenTemplatesCount] = useState(0);
+  const [seenReturnedCount, setSeenReturnedCount] = useState(0);
+  const [seenDeadlinesCount, setSeenDeadlinesCount] = useState(0);
+  const [seenLoaded, setSeenLoaded] = useState(false);
   const [sidebarVisible, setSidebarVisible] = useState(false);
   const [calendarVisible, setCalendarVisible] = useState(false);
+  const [notificationModalVisible, setNotificationModalVisible] = useState(false);
+  const [returnedDocuments, setReturnedDocuments] = useState([]);
+  const [approvedDocuments, setApprovedDocuments] = useState([]);
+  const [forwardedTemplates, setForwardedTemplates] = useState([]);
   const [docStats, setDocStats] = useState({ total: 0, submitted: 0, forRevision: 0, approved: 0, drafts: 0 });
   const [recentActivities, setRecentActivities] = useState([]);
+  // Bumped on every screen focus so fetches always re-run with the latest server data
+  const [refreshKey, setRefreshKey] = useState(0);
   const [complianceTasks, setComplianceTasks] = useState([]);
   const [approachingDeadlines, setApproachingDeadlines] = useState([]);
+  const [consultationsCount, setConsultationsCount] = useState(0);
+  const [returnedProposalsCount, setReturnedProposalsCount] = useState(0);
+  const [deadlinesCount, setDeadlinesCount] = useState(0);
 
   useEffect(() => {
     if (user && user.role !== 'sk') router.replace('/');
   }, [user]);
+
+  // Load persisted "seen" counts once on mount so the bell badge doesn't show
+  // stale notifications as "new" after a refresh or app restart.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const stored = await loadSeenCounts();
+      if (cancelled) return;
+      setSeenApprovedCount(stored.approved);
+      setSeenTemplatesCount(stored.templates);
+      setSeenReturnedCount(stored.returned);
+      setSeenDeadlinesCount(stored.deadlines);
+      setSeenLoaded(true);
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  // Persist seen counts to AsyncStorage whenever they change after the
+  // initial load. This keeps the bell badge accurate across refreshes.
+  useEffect(() => {
+    if (!seenLoaded) return;
+    saveSeenCounts({
+      approved:  seenApprovedCount,
+      templates: seenTemplatesCount,
+      returned:  seenReturnedCount,
+      deadlines: seenDeadlinesCount,
+    });
+  }, [seenLoaded, seenApprovedCount, seenTemplatesCount, seenReturnedCount, seenDeadlinesCount]);
 
   const barangayName = user?.barangay?.barangay_name || 'Unknown Barangay';
   const barangayId = user?.barangayId;
@@ -551,7 +905,7 @@ export default function HomeScreen({ navigation }) {
     try {
       const { data: documents, error } = await supabase
         .from('documents')
-        .select('status, title, created_at, submitted_at, saved_at')
+        .select('document_id, status, title, created_at, submitted_at, saved_at, reviewed_at')
         .eq('barangay_id', barangayId)
         .order('created_at', { ascending: false });
 
@@ -565,32 +919,233 @@ export default function HomeScreen({ navigation }) {
 
       setDocStats({ total, submitted, forRevision, approved, drafts });
 
-      // Build recent activities from docs
-      const acts = (documents || []).slice(0, 5).map(doc => {
-        const date = doc.submitted_at || doc.saved_at || doc.created_at;
-        let label = doc.title;
-        let actionType = 'create';
-        let role = 'Secretary';
-        if (doc.status === 'submitted' || doc.status === 'approved') { actionType = 'submit'; role = 'Treasurer'; }
-        else if (doc.status === 'returned') { actionType = 'returned'; role = 'Chairman'; }
-        return {
-          id: doc.title + date,
-          label,
-          role,
-          time: new Date(doc.created_at).toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit' }),
-          date: new Date(doc.created_at).toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' }),
-          type: actionType,
+      // Set returned proposals count for badge
+      setReturnedProposalsCount(forRevision);
+
+      // Store returned documents for notification modal
+      const returnedDocs = (documents || []).filter(d => d.status === 'returned').map(doc => ({
+        id: doc.document_id,
+        title: doc.title,
+        created_at: doc.created_at,
+        returned_at: doc.submitted_at || doc.saved_at,
+        date: doc.submitted_at || doc.saved_at || doc.created_at,
+      }));
+      setReturnedDocuments(returnedDocs);
+
+      // Store approved documents for notification modal (approved by LYDO)
+      const approvedDocs = (documents || []).filter(d => d.status === 'approved').map(doc => ({
+        id: doc.document_id,
+        title: doc.title,
+        created_at: doc.created_at,
+        approved_at: doc.reviewed_at || doc.submitted_at,
+        date: doc.reviewed_at || doc.submitted_at || doc.created_at,
+      }));
+      setApprovedDocuments(approvedDocs);
+
+      // Fetch forwarded templates from template_distributions
+      try {
+        const { data: distributions, error: distError } = await supabase
+          .from('template_distributions')
+          .select(`
+            distribution_id,
+            distributed_at,
+            template_id,
+            templates (
+              template_id,
+              title,
+              template_category,
+              version
+            )
+          `)
+          .eq('barangay_id', barangayId)
+          .order('distributed_at', { ascending: false });
+
+        if (!distError && distributions) {
+          const forwarded = distributions.map(d => ({
+            id: d.distribution_id,
+            title: d.templates?.title || 'Template',
+            category: d.templates?.template_category || 'General',
+            version: d.templates?.version || 1,
+            distributed_at: d.distributed_at,
+            date: d.distributed_at,
+          }));
+          setForwardedTemplates(forwarded);
+        }
+      } catch (error) {
+        console.error('Error fetching forwarded templates:', error);
+      }
+
+      // Recent activities are fetched separately by fetchRecentActivities
+      // so this section only handles documents and notifications.
+    } catch (error) { console.error('Error:', error); }
+  }, [barangayId, refreshKey]);
+
+  // Fetch recent activity from sk_activity_logs (same source as sk-logs.js)
+  const fetchRecentActivities = useCallback(async () => {
+    if (!barangayId) return;
+    try {
+      // 1. Get all users in this barangay to map user_id → officer info
+      const { data: barangayUsers, error: usersError } = await supabase
+        .from('users')
+        .select('user_id, first_name, last_name, middle_initial, position')
+        .eq('barangay_id', barangayId);
+
+      if (usersError || !barangayUsers || barangayUsers.length === 0) {
+        setRecentActivities([]);
+        return;
+      }
+
+      const userMap = {};
+      barangayUsers.forEach((u) => {
+        const nameParts = [u.first_name, u.middle_initial, u.last_name].filter(Boolean);
+        userMap[u.user_id] = {
+          fullName: nameParts.join(' '),
+          position: u.position
+            ? u.position.charAt(0).toUpperCase() + u.position.slice(1)
+            : 'Officer',
         };
       });
+
+      const barangayUserIds = barangayUsers.map((u) => u.user_id);
+
+      // 2. Fetch the latest activity logs for those users
+      const { data, error } = await supabase
+        .from('sk_activity_logs')
+        .select('id, action, description, created_at, user_id')
+        .in('user_id', barangayUserIds)
+        .order('created_at', { ascending: false })
+        .limit(5);
+
+      if (error || !data) {
+        setRecentActivities([]);
+        return;
+      }
+
+      // 3. Map into dashboard's existing { label, role, time, date, type } shape
+      const acts = data.map((row) => {
+        const officer = userMap[row.user_id] || { fullName: 'Unknown', position: 'Officer' };
+        const action = row.action || 'Create document';
+        // Map action strings to the dashboard's icon type
+        let type = 'create';
+        if (action === 'Submit to LYDO') type = 'submit';
+        else if (action === 'Scan & upload') type = 'scan';
+        else if (action === 'Upload to website') type = 'submit';
+        else if (action === 'Return document') type = 'returned';
+
+        return {
+          id: row.id,
+          label: row.description || action,
+          role: `${officer.fullName} · ${officer.position}`,
+          time: toPhilippineTime(row.created_at, { hour: 'numeric', minute: '2-digit', hour12: true }),
+          date: toPhilippineDate(row.created_at, { month: 'short', day: 'numeric', year: 'numeric' }),
+          type,
+        };
+      });
+
       setRecentActivities(acts);
-    } catch (error) { console.error('Error:', error); }
-  }, [barangayId]);
+    } catch (err) {
+      console.error('Error fetching recent activities:', err);
+      setRecentActivities([]);
+    }
+  }, [barangayId, refreshKey]);
+
+  // Fetch consultations (documents submitted to LYDO for review) for this barangay
+  const fetchConsultations = useCallback(async () => {
+    if (!barangayId) return;
+    try {
+      const { count: consultCount } = await supabase
+        .from('documents')
+        .select('*', { count: 'exact', head: true })
+        .eq('barangay_id', barangayId)
+        .eq('status', 'submitted');
+
+      setConsultationsCount(consultCount || 0);
+    } catch (error) { console.error('Error fetching consultations:', error); }
+  }, [barangayId, refreshKey]);
 
   // Parse a Postgres `date` (YYYY-MM-DD) as a UTC midnight instant, avoiding
   // local-timezone drift that could shift the day by ±1.
   const parseDateOnly = (dateStr) => {
     const [y, m, d] = dateStr.toString().slice(0, 10).split('-').map(Number);
     return Date.UTC(y, m - 1, d);
+  };
+
+  // Helper to map document_type to folder_category
+  const getFolderCategory = (docType) => {
+    const planningTypes = [
+      'Comprehensive Barangay Youth Development Plan (CBYDP)',
+      'Annual Barangay Youth Investment Program (ABYIP)',
+      'SK PPK Template', 'Program of Work', 'Work Plans', 'Project Proposals',
+    ];
+    const financialTypes = [
+      'Approved Annual Budget', 'SK Supplemental Budget',
+      'Registry of Cash Receipts and Deposits', 'Registry of Cash Disbursements',
+      'Monthly Itemized List', 'Quarterly Financial Reports',
+      'Disbursement Vouchers', 'Liquidation Reports',
+    ];
+    const governanceTypes = ['Resolutions', 'Ordinances'];
+    const performanceTypes = [
+      'Accomplishment Reports', 'Documentation', 'Event Reports', 'Minutes of Meetings',
+      'Barangay Youth Investment Monitoring Form', 'Monthly/Quarterly Accomplishment Report',
+    ];
+
+    if (planningTypes.includes(docType)) return 'planning';
+    if (financialTypes.includes(docType)) return 'financial';
+    if (governanceTypes.includes(docType)) return 'governance';
+    if (performanceTypes.includes(docType)) return 'performance';
+    return null;
+  };
+
+  // Handle compliance task button click
+  const handleTaskAction = async (task) => {
+    // If already completed, do nothing
+    if (task.isMet) return;
+
+    try {
+      // First, find the matching document type ID from document_types table
+      // The description/document_type from submission_deadlines may be the full name or shorthand
+      const { data: docTypeRecords } = await supabase
+        .from('document_types')
+        .select('id, document_type')
+        .or(`document_type.ilike.%${task.description}%,document_type.ilike.%${task.document_type}%`)
+        .limit(1);
+
+      const docTypeId = docTypeRecords && docTypeRecords.length > 0
+        ? String(docTypeRecords[0].id)
+        : task.document_type;
+
+      // Check if document already exists for this document type
+      const { data: existingDocs } = await supabase
+        .from('documents')
+        .select('document_id, status')
+        .eq('barangay_id', barangayId)
+        .eq('document_type', docTypeId)
+        .in('status', ['saved', 'submitted', 'approved', 'returned'])
+        .limit(1);
+
+      const folderCategory = task.folder_category || getFolderCategory(task.document_type);
+
+      if (existingDocs && existingDocs.length > 0) {
+        // Document exists - go to document management Saved tab
+        router.push({ pathname: '/(tabs)/sk-document-management', params: { initialTab: 'Saved' } });
+      } else {
+        // Document doesn't exist - go to document list with upload modal
+        // Use document_type for querying, but pass description for the title display
+        router.push({
+          pathname: '/(tabs)/sk-document-list',
+          params: {
+            category: folderCategory ? folderCategory.charAt(0).toUpperCase() + folderCategory.slice(1) : 'Planning',
+            subType: docTypeId,
+            docTitle: task.description,
+            openUpload: 'true',
+          },
+        });
+      }
+    } catch (error) {
+      console.error('Error checking document status:', error);
+      // Default to going to document list
+      router.push({ pathname: '/(tabs)/sk-document-list' });
+    }
   };
 
   // Fetch compliance tasks/deadlines
@@ -605,13 +1160,82 @@ export default function HomeScreen({ navigation }) {
 
       if (error) { console.error('Error fetching tasks:', error); return; }
 
-      const taskList = (deadlines || []).map(d => ({
-        id: d.deadline_id.toString(),
-        description: d.title || d.document_type,
-        action: d.action_type === 'publish' ? 'Publish' : 'Submit',
-        urgent: new Date(d.deadline_date) <= new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-        isMet: !!d.is_met,
-      }));
+      // Get all document types to map short codes to IDs
+      const { data: docTypes } = await supabase
+        .from('document_types')
+        .select('id, document_type');
+
+      // Build a map of document_type names/shortcodes to IDs
+      const docTypeToId = {};
+      (docTypes || []).forEach(dt => {
+        const name = (dt.document_type || '').trim().toLowerCase();
+        docTypeToId[name] = String(dt.id);
+        const shortMatch = name.match(/\b\w/g);
+        if (shortMatch) {
+          docTypeToId[shortMatch.join('')] = String(dt.id);
+        }
+      });
+
+      // Get all approved documents for this barangay
+      const { data: docs } = await supabase
+        .from('documents')
+        .select('document_id, document_type, status, title')
+        .eq('barangay_id', barangayId)
+        .eq('status', 'approved');
+
+      // Build a map: document_type_id -> exists
+      const approvedDocsSet = new Set((docs || []).map(d => d.document_type));
+
+      // Set deadlines count for badge (only count pending/partially met deadlines)
+      const notMetCount = (deadlines || []).filter(d => !d.is_met).length;
+      setDeadlinesCount(notMetCount);
+
+      const now = new Date().toISOString();
+      const taskList = [];
+
+      for (const d of (deadlines || [])) {
+        const docType = d.document_type;
+        const descFromDeadline = (d.description || '').toLowerCase().trim();
+
+        // Find matching document type ID
+        let docTypeId = docTypeToId[docType.toUpperCase()] ||
+                        docTypeToId[docType.toLowerCase()] ||
+                        docTypeToId[descFromDeadline];
+
+        if (!docTypeId) {
+          const matched = (docTypes || []).find(dt =>
+            (dt.document_type || '').toLowerCase().includes(descFromDeadline) ||
+            descFromDeadline.includes((dt.document_type || '').toLowerCase().trim())
+          );
+          if (matched) {
+            docTypeId = String(matched.id);
+          }
+        }
+
+        // Check if there's an approved document
+        const hasApprovedDoc = docTypeId ? approvedDocsSet.has(docTypeId) : false;
+
+        // If deadline says not met but there's an approved doc, update it
+        let isMet = !!d.is_met;
+        if (!isMet && hasApprovedDoc) {
+          await supabase
+            .from('submission_deadlines')
+            .update({ is_met: true, met_at: now })
+            .eq('deadline_id', d.deadline_id);
+          isMet = true;
+        }
+
+        const folderCategory = getFolderCategory(docType);
+        taskList.push({
+          id: d.deadline_id.toString(),
+          description: d.description || docType,
+          action: d.action_type === 'publish' ? 'Publish' : 'Submit',
+          urgent: new Date(d.deadline_date) <= new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+          isMet: isMet,
+          document_type: docType,
+          folder_category: folderCategory,
+        });
+      }
       setComplianceTasks(taskList);
 
       // Approaching Deadline card: only deadlines not yet met, nearest first.
@@ -625,6 +1249,7 @@ export default function HomeScreen({ navigation }) {
             id: d.deadline_id.toString(),
             title: d.description || d.document_type,
             deadline: new Date(deadlineUtc).toLocaleDateString('en-PH', { timeZone: 'UTC', month: 'long', day: 'numeric', year: 'numeric' }),
+            deadlineIso: d.deadline_date, // raw ISO for the notification modal
             daysLeft,
             urgent: daysLeft <= 3,
           };
@@ -632,15 +1257,46 @@ export default function HomeScreen({ navigation }) {
         .sort((a, b) => a.daysLeft - b.daysLeft);
       setApproachingDeadlines(approaching);
     } catch (error) { console.error('Error:', error); }
-  }, [barangayId]);
+  }, [barangayId, refreshKey]);
 
-  // Refresh all data whenever the screen comes into focus
+  // Refresh all data whenever the screen comes into focus.
+  // The focus effect bumps refreshKey; the effect below listens for that bump
+  // and re-invokes every fetch, so the dashboard always shows the latest server data.
   useFocusEffect(
     useCallback(() => {
-      fetchDocuments();
-      fetchTasks();
-    }, [fetchDocuments, fetchTasks])
+      setRefreshKey((k) => k + 1);
+    }, [])
   );
+
+  useEffect(() => {
+    if (!barangayId) return;
+    fetchDocuments();
+    fetchTasks();
+    fetchConsultations();
+    fetchRecentActivities();
+  }, [refreshKey, barangayId, fetchDocuments, fetchTasks, fetchConsultations, fetchRecentActivities]);
+
+  // Compute unviewed notification counts per category.
+// Each category contributes only its NEW items (count - last seen count).
+// When the modal is opened, the seen counts are bumped to match current counts
+// so that category contributes 0 next time — until a new item arrives.
+// Until seen counts have been loaded from AsyncStorage, treat everything as
+// already seen — this prevents a flash of the old count on first paint after
+// a refresh.
+const seenReady = seenLoaded ? 1 : 0;
+  const unviewedApproved  = seenReady ? Math.max(0, approvedDocuments.length  - seenApprovedCount)  : 0;
+  const unviewedTemplates = seenReady ? Math.max(0, forwardedTemplates.length - seenTemplatesCount) : 0;
+  const unviewedReturned  = seenReady ? Math.max(0, returnedProposalsCount   - seenReturnedCount)  : 0;
+  const unviewedDeadlines = seenReady ? Math.max(0, deadlinesCount           - seenDeadlinesCount) : 0;
+
+  const totalUnviewed = unviewedApproved + unviewedTemplates + unviewedReturned + unviewedDeadlines;
+
+  // Update notification count when unviewed counts change. BellIcon's own
+  // numbered badge (count > 0) now handles showing "there's something new" —
+  // no separate boolean needed.
+  useEffect(() => {
+    setNotifCount(totalUnviewed);
+  }, [totalUnviewed]);
 
   const handleNavPress = (tab) => {
     if (tab === 'Dashboard') router.push('/(tabs)/sk-dashboard');
@@ -669,50 +1325,25 @@ export default function HomeScreen({ navigation }) {
   const activityIconColor = (type) => {
     if (type === 'submit') return '#22C55E';
     if (type === 'returned') return '#F97316';
+    if (type === 'scan') return '#8B5CF6';
     return '#3B82F6';
   };
 
   const activityIcon = (type) => {
     if (type === 'submit') return '↑';
     if (type === 'returned') return '↩';
+    if (type === 'scan') return '↓';
     return '✎';
   };
 
-  const NAV_ITEMS = [
-    { tab: 'Dashboard', IconComponent: DashboardIcon },
-    { tab: 'Documents', IconComponent: DocumentsIcon },
-    { tab: 'Planning',  IconComponent: PlanningIcon  },
-    { tab: 'Portal',    IconComponent: PortalIcon    },
-    { tab: 'Logs',      IconComponent: LogsIcon      },
-    { tab: 'Account',   IconComponent: AccountIcon   },
-  ];
-
   const renderSidebar = () => (
-    <View style={[styles.sidebar, isMobile && !sidebarVisible && styles.sidebarHidden]}>
-      <View style={styles.logoPill}>
-        <Image source={require('./../../assets/images/sk-logo.png')} style={styles.logoImage} resizeMode="contain" />
-      </View>
-      <View style={{ height: 28 }} />
-      {NAV_ITEMS.map(({ tab, IconComponent }) => {
-        const active = activeTab === tab;
-        const iconColor = active ? '#133E75' : 'rgba(255,255,255,0.85)';
-        return (
-          <TouchableOpacity key={tab} style={[styles.navItem, active && styles.navItemActive]} onPress={() => handleNavPress(tab)} activeOpacity={0.8}>
-            <View style={styles.navItemInner}>
-              <IconComponent color={iconColor} size={16} />
-              <Text style={[styles.navLabel, active && styles.navLabelActive]}>{tab}</Text>
-            </View>
-          </TouchableOpacity>
-        );
-      })}
-      <View style={{ flex: 1 }} />
-      <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout} activeOpacity={0.8}>
-        <View style={styles.navItemInner}>
-          <LogoutNavIcon color="rgba(255,255,255,0.85)" size={16} />
-          <Text style={styles.logoutText}>Logout</Text>
-        </View>
-      </TouchableOpacity>
-    </View>
+    <Sidebar
+      activeTab={activeTab}
+      onNavPress={handleNavPress}
+      onLogout={handleLogout}
+      isMobile={isMobile}
+      sidebarVisible={sidebarVisible}
+    />
   );
 
   return (
@@ -721,6 +1352,45 @@ export default function HomeScreen({ navigation }) {
 
       {/* ── Calendar Modal ── */}
       <CalendarModal visible={calendarVisible} onClose={() => setCalendarVisible(false)} barangayId={barangayId} />
+
+      {/* ── Notification Modal ── */}
+      <NotificationModal
+        visible={notificationModalVisible}
+        onClose={() => setNotificationModalVisible(false)}
+        returnedDocuments={returnedDocuments}
+        approvedDocuments={approvedDocuments}
+        forwardedTemplates={forwardedTemplates}
+        approachingDeadlines={approachingDeadlines}
+        unviewedCounts={{
+          returned: unviewedReturned,
+          approved: unviewedApproved,
+          templates: unviewedTemplates,
+          deadlines: unviewedDeadlines,
+        }}
+        onViewCategory={(category) => {
+          // Selecting a specific tab marks only that category as seen —
+          // "All" is intentionally excluded, since it only clears via
+          // the "Mark all read" button.
+          if (category === 'returned')  setSeenReturnedCount(returnedProposalsCount);
+          if (category === 'approved')  setSeenApprovedCount(approvedDocuments.length);
+          if (category === 'templates') setSeenTemplatesCount(forwardedTemplates.length);
+          if (category === 'deadlines') setSeenDeadlinesCount(deadlinesCount);
+        }}
+        onMarkAllRead={() => {
+          // Treat the current inventory as fully seen across every category —
+          // this clears the bell badge count and red dot.
+          setSeenApprovedCount(approvedDocuments.length);
+          setSeenTemplatesCount(forwardedTemplates.length);
+          setSeenReturnedCount(returnedProposalsCount);
+          setSeenDeadlinesCount(deadlinesCount);
+          setHasUnviewedNotif(false);
+        }}
+        onOpenRoute={(route) => {
+          setNotificationModalVisible(false);
+          // Tiny delay so the modal close animation can complete before push.
+          setTimeout(() => router.push(route), 120);
+        }}
+      />
 
       <View style={styles.layout}>
         {isMobile && sidebarVisible && (
@@ -738,41 +1408,31 @@ export default function HomeScreen({ navigation }) {
               </TouchableOpacity>
               <Text style={styles.mobileTitle}>SK Dashboard</Text>
               <View style={styles.mobileHeaderActions}>
-<TouchableOpacity style={styles.bellBtnMobile} activeOpacity={0.7}>
-                  <BellIcon hasNotif={notifCount > 0} />
-                  {notifCount > 0 && (
-                    <View style={styles.notifBadgeMobile}>
-                      <Text style={styles.notifBadgeTextMobile}>{notifCount}</Text>
-                    </View>
-                  )}
+                <TouchableOpacity style={styles.bellBtnMobile} activeOpacity={0.7} onPress={() => {
+                  setNotificationModalVisible(true);
+                }}>
+                  <BellIcon count={notifCount} />
                 </TouchableOpacity>
               </View>
             </View>
           )}
 
           {/* Desktop Header */}
-          <View style={styles.header}>
-            <View>
-              <Text style={styles.headerSub}>SANGGUNIANG KABATAAN</Text>
-              <Text style={styles.headerTitle}>{barangayName.toUpperCase()}</Text>
-            </View>
-            {!isMobile && (
-              <View style={styles.headerActions}>
-                <TouchableOpacity style={styles.headerActionBtn} activeOpacity={0.7}>
-                  <View style={{ position: 'relative' }}>
-                    <BellIcon hasNotif={notifCount > 0} />
-                    {notifCount > 0 && (
-                      <View style={styles.notifBadge}>
-                        <Text style={styles.notifBadgeText}>{notifCount}</Text>
-                      </View>
-                    )}
-                  </View>
-                  <Text style={styles.headerActionLabel}>Notification</Text>
-                </TouchableOpacity>
-
+          {!isMobile && (
+            <View style={styles.header}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.headerSub}>SANGGUNIANG KABATAAN</Text>
+                <Text style={styles.headerTitle}>{barangayName.toUpperCase()}</Text>
               </View>
-            )}
-          </View>
+              <View style={styles.headerActions}>
+                <TouchableOpacity style={styles.bellBtn} activeOpacity={0.7} onPress={() => {
+                  setNotificationModalVisible(true);
+                }}>
+                  <BellIcon count={notifCount} />
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
 
           {/* ── STAT CARDS ROW ── */}
           <View style={isMobile ? styles.statsCol : styles.statsRow}>
@@ -837,35 +1497,37 @@ export default function HomeScreen({ navigation }) {
                   <TouchableOpacity><Text style={styles.viewAll}>View All</Text></TouchableOpacity>
                 </View>
                 <View style={styles.divider} />
-                {(complianceTasks.length > 0 ? complianceTasks : [
-                  { id: '1', description: 'Submit the Approved Annual Budget to LYDO', action: 'Submit', isMet: false },
-                  { id: '2', description: 'Submit Annual Budget Youth Investment Program proposal', action: 'Submit', isMet: false },
-                  { id: '3', description: 'Publish the Comprehensive Barangay Youth Development Program to policy board', action: 'Publish', isMet: false },
-                  { id: '4', description: 'Submit Monthly Report for the month of february', action: 'Submit', isMet: false },
-                ]).map((task, idx, arr) => (
-                  <View key={task.id} style={[styles.taskRow, idx < arr.length - 1 && styles.taskRowBorder]}>
-                    <View style={[styles.taskStatusDot, task.isMet ? styles.taskStatusDotMet : styles.taskStatusDotPending]} />
-                    <Text style={styles.taskDesc}>{task.description}</Text>
-                    <TouchableOpacity
-                      style={[
-                        styles.taskBtn,
-                        task.isMet ? styles.taskBtnMet : styles.taskBtnPending,
-                      ]}
-                      activeOpacity={0.8}
-                    >
-                      <Text style={[styles.taskBtnText, task.isMet ? styles.taskBtnMetText : styles.taskBtnPendingText]}>
-                        {task.isMet ? 'Completed' : task.action}
-                      </Text>
-                    </TouchableOpacity>
-                  </View>
-                ))}
+                {complianceTasks.length > 0 ? (
+                  complianceTasks.map((task, idx, arr) => (
+                    <View key={task.id} style={[styles.taskRow, idx < arr.length - 1 && styles.taskRowBorder]}>
+                      <View style={[styles.taskStatusDot, task.isMet ? styles.taskStatusDotMet : styles.taskStatusDotPending]} />
+                      <Text style={styles.taskDesc}>{task.description}</Text>
+                      <TouchableOpacity
+                        style={[
+                          styles.taskBtn,
+                          task.isMet ? styles.taskBtnMet : styles.taskBtnPending,
+                        ]}
+                        onPress={() => handleTaskAction(task)}
+                        activeOpacity={0.8}
+                      >
+                        <Text style={[styles.taskBtnText, task.isMet ? styles.taskBtnMetText : styles.taskBtnPendingText]}>
+                          {task.isMet ? 'Completed' : task.action}
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                  ))
+                ) : (
+                  <Text style={styles.noTaskText}>No Pending Task</Text>
+                )}
               </View>
 
               {/* Recent Activity */}
               <View style={styles.card}>
                 <View style={styles.cardHeaderRow}>
                   <Text style={styles.cardTitle}>Recent Activity</Text>
-                  <TouchableOpacity><Text style={styles.viewAll}>View All</Text></TouchableOpacity>
+                  <TouchableOpacity onPress={() => router.push('/(tabs)/sk-logs')}>
+                    <Text style={styles.viewAll}>View All</Text>
+                  </TouchableOpacity>
                 </View>
                 <View style={styles.divider} />
                 {(recentActivities.length > 0 ? recentActivities.slice(0, 3) : [
@@ -894,28 +1556,39 @@ export default function HomeScreen({ navigation }) {
             <View style={[styles.card, styles.flex1, { alignSelf: 'flex-start' }]}>
               <View style={styles.quickActionsHeader}>
                 <Text style={styles.cardTitle}>Quick Actions</Text>
-                <Text style={styles.scanLabel}>Scan</Text>
+                
               </View>
               <View style={styles.divider} />
               <View style={styles.quickGrid}>
-                {SK_QUICK_ACTIONS.map((action) => (
-                  <TouchableOpacity
-                    key={action.id}
-                    style={[styles.quickBtn, action.isScan && styles.quickBtnScan]}
-                    activeOpacity={0.8}
-                    onPress={() => handleQuickAction(action.id)}
-                  >
-                    <View style={[styles.quickIconBox, { backgroundColor: action.color + '18' }]}>
-                      <Text style={styles.quickIcon}>{action.icon}</Text>
-                    </View>
-                    <Text style={styles.quickLabel}>{action.label}</Text>
-                    {action.badge ? (
-                      <View style={styles.quickBadge}>
-                        <Text style={styles.quickBadgeText}>{action.badge}</Text>
+                {SK_QUICK_ACTIONS.map((action) => {
+                  // Get badge count based on the badgeProp
+                  let badgeCount = 0;
+                  if (action.badgeProp === 'returnedProposalsCount') badgeCount = returnedProposalsCount;
+                  else if (action.badgeProp === 'deadlinesCount') badgeCount = deadlinesCount;
+
+                  return (
+                    <TouchableOpacity
+                      key={action.id}
+                      style={[
+                        styles.quickBtn,
+                        action.isScan && styles.quickBtnScan,
+                        { position: 'relative' }
+                      ]}
+                      activeOpacity={0.8}
+                      onPress={() => handleQuickAction(action.id)}
+                    >
+                      <View style={[styles.quickIconBox, { backgroundColor: action.color + '18' }]}>
+                        <Text style={styles.quickIcon}>{action.icon}</Text>
                       </View>
-                    ) : null}
-                  </TouchableOpacity>
-                ))}
+                      <Text style={styles.quickLabel}>{action.label}</Text>
+                      {badgeCount > 0 && (
+                        <View style={styles.quickBadge}>
+                          <Text style={styles.quickBadgeText}>{badgeCount}</Text>
+                        </View>
+                      )}
+                    </TouchableOpacity>
+                  );
+                })}
               </View>
             </View>
 
@@ -1098,68 +1771,201 @@ const calStyles = StyleSheet.create({
   timelineLabel: { flex: 1, fontSize: 12, color: '#444', lineHeight: 16, fontWeight: '500' },
 });
 
+// ─── NOTIFICATION MODAL STYLES ─────────────────────────────────────────────────
+const notifModalStyles = StyleSheet.create({
+  backdrop: {
+    flex: 1, backgroundColor: 'rgba(15,23,42,0.25)',
+    alignItems: 'flex-end',
+    paddingTop: isMobile ? 58 : 84,
+    paddingRight: isMobile ? 10 : 24,
+  },
+  caret: {
+    width: 16, height: 16, backgroundColor: COLORS.navy,
+    borderTopLeftRadius: 3,
+    transform: [{ rotate: '45deg' }],
+    marginBottom: -8, marginRight: isMobile ? 18 : 26,
+  },
+  modal: {
+    width: isMobile ? SCREEN_WIDTH - 20 : 400,
+    height: isMobile ? 460 : 560,
+    backgroundColor: COLORS.white, borderRadius: 16, overflow: 'hidden',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.22, shadowRadius: 22, elevation: 18,
+  },
+
+  // ── Header ──
+  header: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    paddingHorizontal: 16, paddingVertical: 14, backgroundColor: COLORS.navy,
+  },
+  headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 },
+  headerIcon: {
+    width: 38, height: 38, borderRadius: 19,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  headerIconText: { fontSize: 18 },
+  title: { fontSize: 16, fontWeight: '800', color: COLORS.white, letterSpacing: 0.3 },
+  headerSub: { fontSize: 11.5, fontWeight: '600', color: 'rgba(255,255,255,0.7)', marginTop: 2 },
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  markAllBtn: {
+    paddingHorizontal: 10, paddingVertical: 7, borderRadius: 14,
+    backgroundColor: 'rgba(255,255,255,0.15)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.25)',
+  },
+  markAllBtnText: { fontSize: 11, fontWeight: '700', color: COLORS.white, letterSpacing: 0.3 },
+  closeBtn: { width: 30, height: 30, borderRadius: 15, backgroundColor: 'rgba(255,255,255,0.15)', alignItems: 'center', justifyContent: 'center' },
+  closeBtnText: { fontSize: 14, color: COLORS.white, fontWeight: '700' },
+
+  // ── Dropdown filter ──
+  filterContainer: {
+    paddingHorizontal: 16, paddingVertical: 12, backgroundColor: '#F8FAFC',
+    position: 'relative', zIndex: 10,
+  },
+  dropdownButton: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: 16, paddingVertical: 12,
+    backgroundColor: COLORS.navy, borderRadius: 10,
+  },
+  dropdownButtonLeft: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  dropdownButtonText: { fontSize: 14, fontWeight: '700', color: COLORS.white, letterSpacing: 0.3 },
+  dropdownButtonBadge: {
+    minWidth: 22, height: 18, borderRadius: 9,
+    backgroundColor: 'rgba(255,255,255,0.25)', paddingHorizontal: 6,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  dropdownButtonBadgeText: { fontSize: 11, fontWeight: '800', color: COLORS.white },
+  dropdownArrow: { fontSize: 11, fontWeight: '800', color: COLORS.white },
+  dropdownMenu: {
+    position: 'absolute', top: 52, left: 16, right: 16,
+    backgroundColor: COLORS.white, borderRadius: 10,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.18, shadowRadius: 10, elevation: 8,
+    borderWidth: 1, borderColor: '#E5E7EB', overflow: 'hidden',
+  },
+  dropdownItem: {
+    paddingHorizontal: 16, paddingVertical: 12,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+  },
+  dropdownItemBorder: { borderBottomWidth: 1, borderBottomColor: '#F3F4F6' },
+  dropdownItemActive: { backgroundColor: '#F0F4FA' },
+  dropdownItemText: { fontSize: 14, fontWeight: '500', color: '#374151' },
+  dropdownItemTextActive: { color: COLORS.navy, fontWeight: '800' },
+  dropdownItemBadge: {
+    minWidth: 22, height: 18, borderRadius: 9,
+    backgroundColor: '#EEF2F7', paddingHorizontal: 6,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  dropdownItemBadgeActive: { backgroundColor: COLORS.navy },
+  dropdownItemBadgeText: { fontSize: 11, fontWeight: '800', color: '#374151' },
+  dropdownItemBadgeTextActive: { color: COLORS.white },
+
+  // ── List / body ──
+  listContainer: { flex: 1, backgroundColor: COLORS.white },
+  list: { flex: 1 },
+  listContent: { paddingVertical: 6 },
+  notifItem: {
+    flexDirection: 'row', alignItems: 'center',
+    paddingVertical: 12, paddingHorizontal: 14,
+    borderBottomWidth: 1, borderBottomColor: '#F1F5F9',
+    gap: 10,
+  },
+  notifIcon: {
+    width: 42, height: 42, borderRadius: 12,
+    alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+  },
+  notifIconText: { fontSize: 18 },
+  notifContent: { flex: 1 },
+  notifTitle: { fontSize: 14, fontWeight: '700', color: COLORS.darkText, marginBottom: 2 },
+  notifSubtitle: { fontSize: 12, fontWeight: '700', marginBottom: 4 },
+  notifMetaRow: { flexDirection: 'row', alignItems: 'center', gap: 5, flexWrap: 'wrap' },
+  notifRelative: { fontSize: 11.5, fontWeight: '700', color: COLORS.subText },
+  notifDotSep: { fontSize: 9, color: '#CBD5E1' },
+  notifDate: { fontSize: 11, color: COLORS.subText },
+  notifTime: {
+    fontSize: 11, fontWeight: '700', color: COLORS.navy,
+    fontVariant: ['tabular-nums'],
+  },
+  notifChevron: { fontSize: 22, color: '#94A3B8', marginLeft: 4, lineHeight: 22 },
+
+  // ── Empty state ──
+  emptyState: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 60, paddingHorizontal: 32 },
+  emptyIconCircle: {
+    width: 80, height: 80, borderRadius: 40,
+    backgroundColor: '#F1F5F9',
+    alignItems: 'center', justifyContent: 'center',
+    marginBottom: 16,
+  },
+  emptyIcon: { fontSize: 36 },
+  emptyText: { fontSize: 16, fontWeight: '800', color: COLORS.darkText, marginBottom: 6 },
+  emptySubText: {
+    fontSize: 13, color: COLORS.subText, textAlign: 'center',
+    lineHeight: 19, maxWidth: 340,
+  },
+});
+
 // ─── DASHBOARD STYLES ─────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: '#133E75' },
   layout: { flex: 1, flexDirection: 'row' },
 
-  // ── Sidebar (unchanged) ──
-  sidebar: {
-    width: 250, backgroundColor: '#133E75',
-    alignItems: 'center', paddingTop: 20, paddingBottom: 24, paddingHorizontal: 10, zIndex: 20,
-    ...(isMobile ? { position: 'absolute', top: 0, left: 0, bottom: 0, zIndex: 20 } : {}),
-  },
-  sidebarHidden: { display: 'none' },
+  // ── Sidebar now rendered by the shared Sidebar module ──
   sidebarOverlay: { position: 'absolute', left: 0, top: 0, bottom: 0, right: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 15 },
-  logoPill: { marginTop: 20, width: 70, height: 70, borderRadius: 35, backgroundColor: 'rgba(255,255,255,0.15)', alignItems: 'center', justifyContent: 'center', marginBottom: 8, borderWidth: 2, borderColor: 'rgba(255,255,255,0.3)' },
-  logoImage: { width: 100, height: 100 },
-  logoutBtn: { width: '100%', paddingVertical: 12, paddingHorizontal: 12, borderRadius: 24, marginTop: 8, alignItems: 'center', borderWidth: 1.5, borderColor: COLORS.white, backgroundColor: 'rgba(255,255,255,0.1)' },
-  logoutText: { fontSize: 13, fontWeight: '600', color: '#ffffff', letterSpacing: 0.3 },
-  navItem: { width: '100%', paddingVertical: 12, paddingHorizontal: 12, borderRadius: 24, marginBottom: 8, alignItems: 'center', borderWidth: 1.5, borderColor: COLORS.white, backgroundColor: '#133E75' },
-  navItemActive: { backgroundColor: '#ffffff', borderWidth: 1.5, borderColor: '#000000' },
-  navItemInner: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  navIcon: { fontSize: 15, color: 'rgba(255,255,255,0.85)' },
-  navIconActive: { color: '#000000' },
-  navLabel: { fontSize: 13, fontWeight: '600', color: 'rgba(255,255,255,0.8)', letterSpacing: 0.3 },
-  navLabelActive: { color: '#000000', fontWeight: '800' },
 
   // ── Main area ──
   main: { flex: 1, backgroundColor: COLORS.offWhite, borderTopLeftRadius: 20 },
   mainMobile: { borderTopLeftRadius: 0 },
-  mainContent: { padding: isMobile ? 12 : 20, paddingBottom: isMobile ? 24 : 40 },
+  mainContent: { padding: 20, paddingBottom: 40 },
 
   // ── Mobile header ──
   mobileHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, paddingBottom: 10, borderBottomWidth: 1, borderBottomColor: COLORS.lightGray },
   menuBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: COLORS.cardBg, alignItems: 'center', justifyContent: 'center' },
   menuIconContainer: { width: 20, height: 16, justifyContent: 'space-between' },
   menuLine: { width: 20, height: 2, backgroundColor: COLORS.navy, borderRadius: 1 },
-  mobileTitle: { fontSize: 16, fontWeight: '800', color: COLORS.darkText },
+  mobileTitle: { fontSize: 18, fontWeight: '800', color: COLORS.darkText },
   mobileHeaderActions: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   mobileActionBtn: { width: 32, height: 32, borderRadius: 16, backgroundColor: COLORS.cardBg, alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.1, shadowRadius: 2, elevation: 2 },
   mobileArchivesBtn: { backgroundColor: '#133E75' },
   mobileActionIcon: { fontSize: 14 },
 
   // ── Desktop header (unchanged) ──
-  header: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: isMobile ? 12 : 16 },
-  headerSub: { fontSize: isMobile ? 8 : 10, fontWeight: '600', color: COLORS.subText, letterSpacing: 2, marginBottom: 2, textTransform: 'uppercase' },
-  headerTitle: { fontSize: isMobile ? 16 : 20, fontWeight: '900', color: COLORS.darkText, letterSpacing: 0.5 },
+ // Desktop header
+  header: {
+    flexDirection: 'row', alignItems: 'flex-start',
+    justifyContent: 'space-between', marginBottom: 12,
+  },
+  headerSub: {
+    fontSize: 10, fontWeight: '600', color: COLORS.subText,
+    letterSpacing: 2, textTransform: 'uppercase', marginBottom: 2,
+  },
+  headerTitle: {
+    fontSize: 22, fontWeight: '900', color: COLORS.darkText, letterSpacing: 0.3,
+    borderBottomWidth: 2, borderBottomColor: COLORS.lightGray, paddingBottom: 4, marginBottom: 6,
+  },
+  headerDocLabel: { fontSize: 14, fontWeight: '700', color: COLORS.darkText, marginTop: 4 },
+  headerRight:    { flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
+  
   headerActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   headerActionBtn: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingVertical: 7, paddingHorizontal: 12, borderRadius: 20, backgroundColor: COLORS.cardBg, borderWidth: 1, borderColor: COLORS.lightGray, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 4, elevation: 2 },
   archivesBtn: { backgroundColor: '#133E75', borderColor: '#133E75' },
   headerActionIcon: { fontSize: 16 },
   headerActionLabel: { fontSize: 12, fontWeight: '600', color: COLORS.darkText },
   archivesBtnText: { color: COLORS.white },
+  bellBtn: {
+    position: 'relative',
+    width: 40, height: 40, borderRadius: 20,
+    backgroundColor: COLORS.cardBg, alignItems: 'center', justifyContent: 'center',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08, shadowRadius: 6, elevation: 3,
+  },
 
-  // ── Bell icons ──
-  bellWrapper: { width: 20, height: 22, alignItems: 'center' },
-  bellBody: { width: 14, height: 12, borderRadius: 7, borderWidth: 2, borderColor: COLORS.maroon, marginTop: 4 },
-  bellBottom: { width: 8, height: 4, borderBottomLeftRadius: 4, borderBottomRightRadius: 4, backgroundColor: COLORS.maroon, marginTop: -1 },
-  bellDot: { position: 'absolute', top: 0, right: 1, width: 7, height: 7, borderRadius: 4, backgroundColor: COLORS.gold, borderWidth: 1.5, borderColor: COLORS.cardBg },
-  notifBadge: { position: 'absolute', top: -2, right: -2, width: 16, height: 16, borderRadius: 8, backgroundColor: COLORS.gold, alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: COLORS.white },
-  notifBadgeText: { fontSize: 8, fontWeight: '900', color: COLORS.navy },
-  bellBtnMobile: { width: 36, height: 36, borderRadius: 18, backgroundColor: COLORS.cardBg, alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.1, shadowRadius: 3, elevation: 2 },
-  notifBadgeMobile: { position: 'absolute', top: -2, right: -2, width: 14, height: 14, borderRadius: 7, backgroundColor: COLORS.gold, alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: COLORS.white },
-  notifBadgeTextMobile: { fontSize: 7, fontWeight: '900', color: COLORS.navy },
+  // ── Bell icon — the unread-count badge itself now lives in BellIcon
+  // (notificationCenter.js), so only the button container is styled here.
+  bellBtnMobile: {
+    width: 40, height: 40, borderRadius: 20,
+    backgroundColor: COLORS.white, alignItems: 'center', justifyContent: 'center',
+    shadowColor: COLORS.navy, shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15, shadowRadius: 6, elevation: 4,
+  },
 
   // ── Stat Cards ──
   statsRow: { flexDirection: isMobile ? 'column' : 'row', gap: isMobile ? 8 : 10, marginBottom: isMobile ? 14 : 18, flexWrap: 'wrap' },
@@ -1223,6 +2029,7 @@ const styles = StyleSheet.create({
   taskBtnMetText: { color: COLORS.white },
   taskBtnPending: { borderColor: '#F59E0B', backgroundColor: '#FEF3C7' },
   taskBtnPendingText: { color: '#B45309' },
+  noTaskText: { fontSize: 13, color: COLORS.subText, paddingVertical: 14, textAlign: 'center' },
 
   // ── Recent Activity ──
   activityRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, gap: 10 },

@@ -8,6 +8,19 @@ import { useRouter } from 'expo-router';
 import { useNav } from './navContext';
 import { useAuth } from './authContext';
 import { supabase } from '../../utils/supabase';
+import { NotificationModal, useNotificationCenter, BellIcon } from './notificationCenter';
+import Sidebar from './../components/Sidebar';
+import {
+  Bars3Icon,
+  MagnifyingGlassIcon,
+  XMarkIcon,
+  PencilSquareIcon,
+  DocumentTextIcon,
+  EyeIcon,
+  ArrowDownTrayIcon,
+  PlusCircleIcon,
+  ArrowLeftIcon,
+} from 'react-native-heroicons/outline';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const isMobile = SCREEN_WIDTH < 768;
@@ -32,140 +45,45 @@ const PLANNING_TABS = ['Templates', 'Budget'];
 
 // ─── TEMPLATE CATEGORY CONFIG ─────────────────────────────────────────────────
 const CATEGORY_CONFIG = {
-  planning: { title: 'Planning Templates', color: '#EAF0FB', borderColor: '#B8CAE8' },
-  budgeting: { title: 'Budgeting Templates', color: '#EAFBEA', borderColor: '#B8E4B8' },
-  financial_records: { title: 'Financial Records and Evaluation Templates', color: '#FDF5E6', borderColor: '#E8D5A8' },
-  monitoring_evaluation: { title: 'Monitoring and Evaluation', color: '#F3EAFB', borderColor: '#C8B0E4' },
+  planning: { title: 'Planning Templates', color: '#EAF0FB', borderColor: '#B8CAE8', accent: '#3B6EC9' },
+  budgeting: { title: 'Budgeting Templates', color: '#EAFBEA', borderColor: '#B8E4B8', accent: '#2E9E4F' },
+  financial_records: { title: 'Financial Records and Evaluation Templates', color: '#FDF5E6', borderColor: '#E8D5A8', accent: '#C98A1E' },
+  monitoring_evaluation: { title: 'Monitoring and Evaluation', color: '#F3EAFB', borderColor: '#C8B0E4', accent: '#8B4FC9' },
 };
 
 // ─── ALL TEMPLATES — (now fetched from Supabase based on barangay_id) ─────
 // (Data fetched via useEffect)
 
-// ─── ICONS ────────────────────────────────────────────────────────────────────
-const BellIcon = ({ hasNotif }) => (
-  <View style={styles.bellWrapper}>
-    <View style={styles.bellBody} />
-    <View style={styles.bellBottom} />
-    {hasNotif && <View style={styles.bellDot} />}
-  </View>
-);
 
 const MenuIcon = () => (
-  <View style={styles.menuIconContainer}>
-    {[0, 1, 2].map(i => <View key={i} style={styles.menuLine} />)}
+  <Bars3Icon size={22} color={COLORS.navy} strokeWidth={2} />
+);
+
+// Edit icon (pencil box) — tinted per category
+const EditIcon = ({ color }) => (
+  <View style={[styles.editIconBox, { borderColor: color + '55', backgroundColor: color + '14' }]}>
+    <PencilSquareIcon size={14} color={color} strokeWidth={2} />
   </View>
 );
 
-// Dashboard: 2×2 grid of rounded squares
-const DashboardIcon = ({ color = '#fff', size = 16 }) => {
-  const s = size * 0.38;
-  const gap = size * 0.12;
-  const r = size * 0.12;
-  const box = { width: s, height: s, borderRadius: r, backgroundColor: color };
-  return (
-    <View style={{ width: size, height: size, justifyContent: 'center', alignItems: 'center' }}>
-      <View style={{ flexDirection: 'row', gap }}>
-        <View style={box} />
-        <View style={box} />
-      </View>
-      <View style={{ height: gap }} />
-      <View style={{ flexDirection: 'row', gap }}>
-        <View style={box} />
-        <View style={box} />
-      </View>
-    </View>
-  );
-};
-
-// Documents: file shape with fold + two lines
-const DocumentsIcon = ({ color = '#fff', size = 16 }) => {
-  const w = size * 0.6, h = size * 0.78;
-  const fold = size * 0.22;
-  return (
-    <View style={{ width: size, height: size, justifyContent: 'center', alignItems: 'center' }}>
-      <View style={{ width: w, height: h, justifyContent: 'flex-end', paddingBottom: size * 0.08, paddingHorizontal: size * 0.1 }}>
-        <View style={{ position: 'absolute', left: 0, right: 0, top: fold, bottom: 0, borderWidth: 1.5, borderColor: color, borderRadius: size * 0.08 }} />
-        <View style={{ position: 'absolute', top: 0, right: 0, width: fold, height: fold, backgroundColor: color, borderBottomLeftRadius: size * 0.06 }} />
-        <View style={{ position: 'absolute', top: 0, left: 0, width: w - fold, height: fold, borderTopWidth: 1.5, borderLeftWidth: 1.5, borderColor: color, borderTopLeftRadius: size * 0.08 }} />
-        <View style={{ height: 1.5, backgroundColor: color, borderRadius: 1, marginBottom: size * 0.1, width: '80%' }} />
-        <View style={{ height: 1.5, backgroundColor: color, borderRadius: 1, width: '55%' }} />
-      </View>
-    </View>
-  );
-};
-
-// Planning: calendar grid
-const PlanningIcon = ({ color = '#fff', size = 16 }) => {
-  const bw = 1.5;
-  return (
-    <View style={{ width: size, height: size, justifyContent: 'center', alignItems: 'center' }}>
-      <View style={{ width: size * 0.82, height: size * 0.75, borderWidth: bw, borderColor: color, borderRadius: size * 0.1, overflow: 'hidden' }}>
-        <View style={{ height: size * 0.22, backgroundColor: color, width: '100%' }} />
-        <View style={{ flex: 1, flexDirection: 'row', justifyContent: 'space-around', alignItems: 'center', paddingHorizontal: size * 0.05 }}>
-          {[0,1,2].map(i => <View key={i} style={{ width: size * 0.1, height: size * 0.1, borderRadius: size * 0.05, backgroundColor: color }} />)}
-        </View>
-      </View>
-      <View style={{ position: 'absolute', top: 0, flexDirection: 'row', gap: size * 0.32 }}>
-        {[0,1].map(i => <View key={i} style={{ width: size * 0.1, height: size * 0.2, backgroundColor: color, borderRadius: size * 0.05 }} />)}
-      </View>
-    </View>
-  );
-};
-
-// Portal: simple globe
-const PortalIcon = ({ color = '#fff', size = 16 }) => (
-  <View style={{ width: size, height: size, justifyContent: 'center', alignItems: 'center' }}>
-    <View style={{ width: size * 0.82, height: size * 0.82, borderRadius: size * 0.41, borderWidth: 1.5, borderColor: color, justifyContent: 'center', alignItems: 'center', overflow: 'hidden' }}>
-      <View style={{ position: 'absolute', height: 1.5, width: '100%', backgroundColor: color }} />
-      <View style={{ width: size * 0.38, height: size * 0.78, borderRadius: size * 0.19, borderWidth: 1.5, borderColor: color, backgroundColor: 'transparent' }} />
-    </View>
-  </View>
-);
-
-// Logs: clipboard with checkmark lines
-const LogsIcon = ({ color = '#fff', size = 16 }) => (
-  <View style={{ width: size, height: size, justifyContent: 'center', alignItems: 'center' }}>
-    <View style={{ width: size * 0.75, height: size * 0.85, borderWidth: 1.5, borderColor: color, borderRadius: size * 0.1, paddingHorizontal: size * 0.1, paddingVertical: size * 0.1, justifyContent: 'space-around' }}>
-      <View style={{ position: 'absolute', top: -size * 0.08, alignSelf: 'center', width: size * 0.3, height: size * 0.14, backgroundColor: color, borderRadius: size * 0.04 }} />
-      {[0,1,2].map(i => (
-        <View key={i} style={{ flexDirection: 'row', alignItems: 'center', gap: size * 0.08, marginTop: i === 0 ? size * 0.1 : 0 }}>
-          <View style={{ width: size * 0.1, height: size * 0.1, borderRadius: size * 0.05, backgroundColor: color }} />
-          <View style={{ flex: 1, height: 1.5, backgroundColor: color, borderRadius: 1 }} />
-        </View>
-      ))}
-    </View>
-  </View>
-);
-
-// Account: head + shoulders silhouette
-const AccountIcon = ({ color = '#fff', size = 16 }) => (
-  <View style={{ width: size, height: size, justifyContent: 'center', alignItems: 'center' }}>
-    <View style={{ width: size * 0.38, height: size * 0.38, borderRadius: size * 0.19, borderWidth: 1.5, borderColor: color, marginBottom: size * 0.04 }} />
-    <View style={{ width: size * 0.72, height: size * 0.36, borderBottomLeftRadius: size * 0.36, borderBottomRightRadius: size * 0.36, borderWidth: 1.5, borderColor: color, borderTopWidth: 0, overflow: 'hidden' }} />
-  </View>
-);
-
-// Logout: door with arrow
-const LogoutNavIcon = ({ color = '#fff', size = 16 }) => (
-  <View style={{ width: size, height: size, justifyContent: 'center', alignItems: 'center' }}>
-    <View style={{ position: 'absolute', left: 0, top: 0, width: size * 0.55, height: size, borderWidth: 1.5, borderColor: color, borderRadius: size * 0.08 }} />
-    <View style={{ position: 'absolute', right: size * 0.02, width: size * 0.52, height: 1.8, backgroundColor: color, borderRadius: 1 }} />
-    <View style={{ position: 'absolute', right: size * 0.02, width: size * 0.2, height: size * 0.2, borderTopWidth: 1.8, borderRightWidth: 1.8, borderColor: color, transform: [{ rotate: '45deg' }], marginTop: -size * 0.01 }} />
-  </View>
-);
-
-// Edit icon (pencil box) — matches screenshot
-const EditIcon = () => (
-  <View style={styles.editIconBox}>
-    <Text style={styles.editIconText}>✎</Text>
+// Document icon — tinted per category
+const DocFileIcon = ({ color }) => (
+  <View style={[styles.docIconOuter, { backgroundColor: color + '17' }]}>
+    <DocumentTextIcon size={20} color={color} strokeWidth={1.8} />
   </View>
 );
 
 // ─── TEMPLATE ITEM ────────────────────────────────────────────────────────────
-const TemplateItem = ({ item, onEdit }) => (
-  <TouchableOpacity style={styles.templateItem} onPress={() => onEdit(item)} activeOpacity={0.75}>
-    <Text style={styles.templateItemName} numberOfLines={2}>{item.name}</Text>
-    <EditIcon />
+const TemplateItem = ({ item, accent, onEdit }) => (
+  <TouchableOpacity style={styles.templateItem} onPress={() => onEdit(item)} activeOpacity={0.7}>
+    <DocFileIcon color={accent} />
+    <View style={styles.templateItemBody}>
+      <Text style={styles.templateItemName} numberOfLines={2}>{item.name}</Text>
+      <Text style={styles.templateItemMeta} numberOfLines={1}>
+        v{item.version || 1} · Received {item.dateReceived}
+      </Text>
+    </View>
+    <EditIcon color={accent} />
   </TouchableOpacity>
 );
 
@@ -178,26 +96,40 @@ const TemplateSection = ({ section, onEdit }) => {
   }
 
   return (
-    <View style={styles.section}>
+    <View style={[styles.section, { borderTopColor: section.accent }]}>
       {/* Section Header */}
-      <View style={[styles.sectionHeader, { backgroundColor: section.color, borderLeftColor: section.borderColor }]}>
-        <Text style={styles.sectionHeaderText}>{section.title}</Text>
+      <View style={styles.sectionHeader}>
+        <View style={styles.sectionHeaderLeft}>
+          <View style={[styles.sectionDot, { backgroundColor: section.accent }]} />
+          <Text style={styles.sectionHeaderText}>{section.title}</Text>
+        </View>
+        <View style={[styles.sectionCountPill, { backgroundColor: section.color, borderColor: section.borderColor }]}>
+          <Text style={[styles.sectionCountText, { color: section.accent }]}>
+            {section.items.length} {section.items.length === 1 ? 'file' : 'files'}
+          </Text>
+        </View>
       </View>
 
       {/* Items grid — 2 per row */}
-      <View style={styles.sectionBody}>
-        {pairs.map((pair, pIdx) => (
-          <View key={pIdx} style={styles.itemRow}>
-            {pair.map(item => (
-              <View key={item.id} style={styles.itemCol}>
-                <TemplateItem item={item} onEdit={onEdit} />
-              </View>
-            ))}
-            {/* If odd item in last row, fill empty col */}
-            {pair.length === 1 && <View style={styles.itemCol} />}
-          </View>
-        ))}
-      </View>
+      {section.items.length > 0 ? (
+        <View style={styles.sectionBody}>
+          {pairs.map((pair, pIdx) => (
+            <View key={pIdx} style={styles.itemRow}>
+              {pair.map(item => (
+                <View key={item.id} style={styles.itemCol}>
+                  <TemplateItem item={item} accent={section.accent} onEdit={onEdit} />
+                </View>
+              ))}
+              {/* If odd item in last row, fill empty col */}
+              {pair.length === 1 && <View style={styles.itemCol} />}
+            </View>
+          ))}
+        </View>
+      ) : (
+        <View style={styles.sectionEmpty}>
+          <Text style={styles.sectionEmptyText}>No templates in this category yet.</Text>
+        </View>
+      )}
     </View>
   );
 };
@@ -217,24 +149,25 @@ export default function SKPlanningScreen() {
   const [activePlanningTab, setActivePlanningTab] = useState('Templates');
   const [searchText, setSearchText]               = useState('');
   const [showAll, setShowAll]                     = useState(false); // false = Active Templates filter
-  const [notifCount]                              = useState(2);
   const [sidebarVisible, setSidebarVisible]       = useState(false);
+
+  // ── Shared notification bell (returned/approved docs, templates, deadlines) ──
+  const notif = useNotificationCenter(barangayId);
+  const notifCount = notif.count;
   const [selectedItem, setSelectedItem]           = useState(null);
   const [showEditModal, setShowEditModal]         = useState(false);
   const [templates, setTemplates]                = useState([]);
   const [budgetData, setBudgetData]               = useState(null);
   const [viewerModal, setViewerModal]             = useState({ visible: false, fileUrl: null, title: '' });
-  const [downloadModalVisible, setDownloadModalVisible] = useState(false);
-  const [documentToDownload, setDocumentToDownload]   = useState(null);
 
-  // Fetch templates distributed to this barangay
+  // Fetch templates for this barangay from template_distributions based on barangay_id
   useEffect(() => {
     const fetchTemplates = async () => {
       if (!barangayId) return;
 
       try {
-        // Get templates distributed to this barangay
-        const { data: distributions, error } = await supabase
+        // Get templates distributed to this barangay from template_distributions
+        const { data: distributions, error: distError } = await supabase
           .from('template_distributions')
           .select(`
             distribution_id,
@@ -255,22 +188,31 @@ export default function SKPlanningScreen() {
           `)
           .eq('barangay_id', barangayId);
 
-        if (error) {
-          console.error('Error fetching templates:', error);
+        if (distError) {
+          console.error('Error fetching template distributions:', distError);
           return;
         }
 
-        const formattedTemplates = distributions?.map(d => ({
-          id: d.templates?.template_id,
-          name: d.templates?.title || 'Untitled Template',
-          type: d.templates?.template_category || 'Unknown',
-          source: 'LYDO',
-          dateReceived: new Date(d.templates?.created_at || d.distributed_at).toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' }),
-          fileUrl: d.templates?.file_url || '',
-          version: d.templates?.version || 1,
-        })) || [];
+        // Build templates list from distributions only
+        const templateList = [];
 
-        setTemplates(formattedTemplates);
+        if (distributions) {
+          distributions.forEach(d => {
+            if (d.templates && d.templates.template_id) {
+              templateList.push({
+                id: d.templates.template_id,
+                name: d.templates.title || 'Untitled Template',
+                type: d.templates.template_category || 'Unknown',
+                source: 'LYDO',
+                dateReceived: new Date(d.distributed_at).toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' }),
+                fileUrl: d.templates.file_url || '',
+                version: d.templates.version || 1,
+              });
+            }
+          });
+        }
+
+        setTemplates(templateList);
       } catch (error) {
         console.error('Error:', error);
       }
@@ -337,53 +279,6 @@ export default function SKPlanningScreen() {
       .filter(t => t.name.toLowerCase().includes(searchText.toLowerCase())),
   }));
 
-  // ── Sidebar ──
-  const NAV_ITEMS = [
-    { tab: 'Dashboard', IconComponent: DashboardIcon },
-    { tab: 'Documents', IconComponent: DocumentsIcon },
-    { tab: 'Planning',  IconComponent: PlanningIcon  },
-    { tab: 'Portal',    IconComponent: PortalIcon    },
-    { tab: 'Logs',      IconComponent: LogsIcon      },
-    { tab: 'Account',   IconComponent: AccountIcon   },
-  ];
-
-  const renderSidebar = () => (
-    <View style={[styles.sidebar, isMobile && !sidebarVisible && styles.sidebarHidden]}>
-      <View style={styles.logoPill}>
-        <Image
-          source={require('./../../assets/images/sk-logo.png')}
-          style={styles.logoImage}
-          resizeMode="contain"
-        />
-      </View>
-      <View style={{ height: 28 }} />
-      {NAV_ITEMS.map(({ tab, IconComponent }) => {
-        const active = activeTab === tab;
-        const iconColor = active ? '#133E75' : 'rgba(255,255,255,0.85)';
-        return (
-          <TouchableOpacity
-            key={tab}
-            style={[styles.navItem, active && styles.navItemActive]}
-            onPress={() => handleNavPress(tab)}
-            activeOpacity={0.8}
-          >
-            <View style={styles.navItemInner}>
-              <IconComponent color={iconColor} size={16} />
-              <Text style={[styles.navLabel, active && styles.navLabelActive]}>{tab}</Text>
-            </View>
-          </TouchableOpacity>
-        );
-      })}
-      <View style={{ flex: 1 }} />
-      <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout} activeOpacity={0.8}>
-        <View style={styles.navItemInner}>
-          <LogoutNavIcon color="rgba(255,255,255,0.85)" size={16} />
-          <Text style={styles.logoutText}>Logout</Text>
-        </View>
-      </TouchableOpacity>
-    </View>
-  );
-
   // ── Edit Modal ──
   const handleViewTemplate = () => {
     if (!selectedItem?.fileUrl) {
@@ -394,78 +289,104 @@ export default function SKPlanningScreen() {
     setShowEditModal(false);
   };
 
-  const handleDownloadTemplate = () => {
+  const handleDownloadTemplate = async () => {
     if (!selectedItem?.fileUrl) {
       Alert.alert('No File', 'This template has no file to download.');
       return;
     }
-    setDocumentToDownload(selectedItem);
-    setDownloadModalVisible(true);
     setShowEditModal(false);
-  };
-
-  const handleDownloadConfirm = async () => {
-    if (!documentToDownload?.fileUrl) {
-      Alert.alert('No File', 'This template does not have an attached file.');
-      return;
-    }
-    setDownloadModalVisible(false);
-    setDocumentToDownload(null);
     try {
-      await Linking.openURL(documentToDownload.fileUrl);
+      await Linking.openURL(selectedItem.fileUrl);
     } catch (error) {
       console.error('Download error:', error);
       Alert.alert('Download Failed', `Could not open the file: ${error.message}`);
     }
   };
 
-  const renderEditModal = () => (
-    <Modal
-      visible={showEditModal}
-      transparent
-      animationType="fade"
-      onRequestClose={() => setShowEditModal(false)}
-    >
-      <TouchableOpacity
-        style={styles.modalOverlay}
-        activeOpacity={1}
-        onPress={() => setShowEditModal(false)}
+  const renderEditModal = () => {
+    const cat = CATEGORY_CONFIG[selectedItem?.type] || {};
+    const accent = cat.accent || COLORS.navy;
+
+    return (
+      <Modal
+        visible={showEditModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowEditModal(false)}
       >
-        <View style={styles.modalCard} onStartShouldSetResponder={() => true}>
-          <Text style={styles.modalTitle}>Edit Template</Text>
-          <Text style={styles.modalSubtitle}>{selectedItem?.name}</Text>
-          <Text style={styles.modalVersion}>Version {selectedItem?.version || 1}</Text>
-          <View style={styles.modalDivider} />
-          <View style={styles.modalActions}>
-            <TouchableOpacity
-              style={[styles.modalActionBtn, { backgroundColor: '#EAF0FB' }]}
-              onPress={handleViewTemplate}
-            >
-              <Text style={[styles.modalActionText, { color: COLORS.navy }]}>👁  View</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.modalActionBtn, { backgroundColor: '#EAFBEA' }]}
-              onPress={handleDownloadTemplate}
-            >
-              <Text style={[styles.modalActionText, { color: '#2E7D32' }]}>⬇  Download</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.modalActionBtn, { backgroundColor: '#FDF5E6' }]}
-              onPress={() => { Alert.alert('Info', 'Template creation is handled by LYDO.'); setShowEditModal(false); }}
-            >
-              <Text style={[styles.modalActionText, { color: '#B45309' }]}>↔  Create</Text>
-            </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setShowEditModal(false)}
+        >
+          <View style={styles.modalCard} onStartShouldSetResponder={() => true}>
+            <View style={[styles.modalAccentBar, { backgroundColor: accent }]} />
+            <View style={styles.modalContent}>
+              <TouchableOpacity
+                style={styles.modalCloseX}
+                onPress={() => setShowEditModal(false)}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <XMarkIcon size={14} color={COLORS.subText} strokeWidth={2} />
+              </TouchableOpacity>
+
+              <View style={styles.modalHeaderRow}>
+                <DocFileIcon color={accent} />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.modalEyebrow}>EDIT TEMPLATE</Text>
+                  <Text style={styles.modalTitle} numberOfLines={2}>{selectedItem?.name}</Text>
+                </View>
+              </View>
+
+              <View style={styles.modalPillRow}>
+                {cat.title && (
+                  <View style={[styles.modalPill, { backgroundColor: cat.color, borderColor: cat.borderColor }]}>
+                    <Text style={[styles.modalPillText, { color: accent }]}>{cat.title.replace(' Templates', '')}</Text>
+                  </View>
+                )}
+                <View style={styles.modalPillNeutral}>
+                  <Text style={styles.modalPillNeutralText}>Version {selectedItem?.version || 1}</Text>
+                </View>
+              </View>
+
+              <View style={styles.modalDivider} />
+
+              <View style={styles.modalActions}>
+                <TouchableOpacity
+                  style={[styles.modalActionBtn, { backgroundColor: '#EAF0FB' }]}
+                  onPress={handleViewTemplate}
+                >
+                  <EyeIcon size={15} color={COLORS.navy} strokeWidth={2} />
+                  <Text style={[styles.modalActionText, { color: COLORS.navy }]}>View</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.modalActionBtn, { backgroundColor: '#EAFBEA' }]}
+                  onPress={handleDownloadTemplate}
+                >
+                  <ArrowDownTrayIcon size={15} color="#2E7D32" strokeWidth={2} />
+                  <Text style={[styles.modalActionText, { color: '#2E7D32' }]}>Download</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.modalActionBtn, { backgroundColor: '#FDF5E6' }]}
+                  onPress={() => { Alert.alert('Info', 'Template creation is handled by LYDO.'); setShowEditModal(false); }}
+                >
+                  <PlusCircleIcon size={15} color="#B45309" strokeWidth={2} />
+                  <Text style={[styles.modalActionText, { color: '#B45309' }]}>Create</Text>
+                </TouchableOpacity>
+              </View>
+
+              <TouchableOpacity
+                style={styles.modalCloseBtn}
+                onPress={() => setShowEditModal(false)}
+              >
+                <Text style={styles.modalCloseBtnText}>Close</Text>
+              </TouchableOpacity>
+            </View>
           </View>
-          <TouchableOpacity
-            style={styles.modalCloseBtn}
-            onPress={() => setShowEditModal(false)}
-          >
-            <Text style={styles.modalCloseBtnText}>Close</Text>
-          </TouchableOpacity>
-        </View>
-      </TouchableOpacity>
-    </Modal>
-  );
+        </TouchableOpacity>
+      </Modal>
+    );
+  };
 
   // ── Viewer Modal (PDF/Image viewer) ──────────────────────────────────────────────
   const renderViewerModal = () => {
@@ -477,15 +398,19 @@ export default function SKPlanningScreen() {
       <Modal visible={viewerModal.visible} animationType="slide" onRequestClose={() => setViewerModal({ ...viewerModal, visible: false })}>
         <SafeAreaView style={styles.safe}>
           <View style={styles.viewerHeader}>
-            <TouchableOpacity onPress={() => setViewerModal({ ...viewerModal, visible: false })}>
-              <Text style={styles.viewerCloseText}>← Back</Text>
+            <TouchableOpacity style={styles.viewerBackBtn} onPress={() => setViewerModal({ ...viewerModal, visible: false })}>
+              <ArrowLeftIcon size={16} color={COLORS.white} strokeWidth={2.2} />
+              <Text style={styles.viewerCloseText}>Back</Text>
             </TouchableOpacity>
             <Text style={styles.viewerTitle} numberOfLines={1}>{viewerModal.title}</Text>
-            <TouchableOpacity onPress={() => {
-              setDocumentToDownload({ fileUrl: viewerModal.fileUrl, title: viewerModal.title });
-              setDownloadModalVisible(true);
+            <TouchableOpacity onPress={async () => {
+              try {
+                await Linking.openURL(viewerModal.fileUrl);
+              } catch (error) {
+                Alert.alert('Download Failed', `Could not open the file: ${error.message}`);
+              }
             }}>
-              <Text style={styles.viewerDownloadText}>⬇</Text>
+              <ArrowDownTrayIcon size={19} color={COLORS.white} strokeWidth={2} />
             </TouchableOpacity>
           </View>
           {viewerModal.fileUrl && (
@@ -502,34 +427,6 @@ export default function SKPlanningScreen() {
     );
   };
 
-  // ── Download Confirm Modal ───────────────────────────────────────────────────
-  const renderDownloadModal = () => (
-    <Modal visible={downloadModalVisible} transparent animationType="fade" onRequestClose={() => setDownloadModalVisible(false)}>
-      <View style={styles.downloadModalBackdrop}>
-        <View style={styles.downloadModalCard}>
-          <Text style={styles.downloadModalTitle}>Download Document</Text>
-          <Text style={styles.downloadModalText}>
-            Do you want to download "{documentToDownload?.name}"?
-          </Text>
-          <View style={styles.downloadModalActions}>
-            <TouchableOpacity
-              style={[styles.downloadModalBtn, { backgroundColor: COLORS.lightGray }]}
-              onPress={() => { setDownloadModalVisible(false); setDocumentToDownload(null); }}
-            >
-              <Text style={styles.downloadModalBtnText}>Cancel</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.downloadModalBtn, { backgroundColor: COLORS.navy }]}
-              onPress={handleDownloadConfirm}
-            >
-              <Text style={[styles.downloadModalBtnText, { color: COLORS.white }]}>Download</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </View>
-    </Modal>
-  );
-
   // ── Main Content ──
   const renderContent = () => (
     <ScrollView
@@ -544,9 +441,9 @@ export default function SKPlanningScreen() {
             <MenuIcon />
           </TouchableOpacity>
           <Text style={styles.mobileTitle}>Planning</Text>
-          <TouchableOpacity style={styles.bellBtn}>
-            <BellIcon hasNotif={notifCount > 0} />
-          </TouchableOpacity>
+<TouchableOpacity style={styles.bellBtn} onPress={notif.open} activeOpacity={0.7}>
+  <BellIcon count={notifCount} />
+</TouchableOpacity>
         </View>
       )}
 
@@ -560,14 +457,9 @@ export default function SKPlanningScreen() {
           </View>
           <View style={styles.headerRight}>
    
-            <TouchableOpacity style={styles.bellBtn} activeOpacity={0.7}>
-              <BellIcon hasNotif={notifCount > 0} />
-              {notifCount > 0 && (
-                <View style={styles.notifBadge}>
-                  <Text style={styles.notifBadgeText}>{notifCount}</Text>
-                </View>
-              )}
-            </TouchableOpacity>
+<TouchableOpacity style={styles.bellBtn} onPress={notif.open} activeOpacity={0.7}>
+  <BellIcon count={notifCount} />
+</TouchableOpacity>
           </View>
         </View>
       )}
@@ -594,10 +486,20 @@ export default function SKPlanningScreen() {
       {/* ── TEMPLATES TAB ── */}
       {activePlanningTab === 'Templates' && (
         <>
-          {/* Search row */}
-          <View style={styles.searchRow}>
+          {/* Section title + search */}
+          <View style={styles.templatesTopRow}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.templatesTitle}>
+                {showAll ? 'All Templates' : 'Active Templates'}
+              </Text>
+              <Text style={styles.templatesSubtitle}>
+                {showAll
+                  ? 'Every template distributed to your barangay by LYDO.'
+                  : 'Templates currently distributed to your barangay by LYDO.'}
+              </Text>
+            </View>
             <View style={styles.searchBox}>
-              <Text style={{ fontSize: 12, color: COLORS.midGray, marginRight: 4 }}>🔍</Text>
+              <MagnifyingGlassIcon size={14} color={COLORS.midGray} strokeWidth={2} style={{ marginRight: 4 }} />
               <TextInput
                 style={styles.searchInput}
                 placeholder="Search"
@@ -607,25 +509,27 @@ export default function SKPlanningScreen() {
               />
               {searchText.length > 0 && (
                 <TouchableOpacity onPress={() => setSearchText('')}>
-                  <Text style={{ color: COLORS.midGray, fontSize: 12 }}>✕</Text>
+                  <XMarkIcon size={13} color={COLORS.midGray} strokeWidth={2} />
                 </TouchableOpacity>
               )}
             </View>
-            {/* Archive icon — top right */}
-            <View style={{ flex: 1 }} />
-
           </View>
 
-          {/* All / Active Templates filter pills */}
-          <View style={styles.filterRow}>
+          {/* All / Active Templates segmented toggle */}
+          <View style={styles.segmentTrack}>
             <TouchableOpacity
-              style={!showAll ? styles.filterLinkActive : styles.filterLink}
+              style={[styles.segmentBtn, !showAll && styles.segmentBtnActive]}
               onPress={() => setShowAll(false)}
-              activeOpacity={0.8}
+              activeOpacity={0.85}
             >
-              <Text style={[styles.filterLinkText, !showAll && styles.filterLinkTextActive]}>
-                Active Templates
-              </Text>
+              <Text style={[styles.segmentText, !showAll && styles.segmentTextActive]}>Active Templates</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.segmentBtn, showAll && styles.segmentBtnActive]}
+              onPress={() => setShowAll(true)}
+              activeOpacity={0.85}
+            >
+              <Text style={[styles.segmentText, showAll && styles.segmentTextActive]}>All</Text>
             </TouchableOpacity>
           </View>
 
@@ -665,17 +569,10 @@ export default function SKPlanningScreen() {
           )}
 
           {/* ── ACTIVE TEMPLATES view: category grid ── */}
-          {!showAll && (
-            templateSections.length > 0 ? (
-              templateSections.map(sec => (
-                <TemplateSection key={sec.id} section={sec} onEdit={handleEdit} />
-              ))
-            ) : (
-              <View style={styles.emptyState}>
-                <Text style={styles.emptyText}>No templates found.</Text>
-              </View>
-            )
-          )}
+          {!showAll &&
+            templateSections.map(sec => (
+              <TemplateSection key={sec.id} section={sec} onEdit={handleEdit} />
+            ))}
         </>
       )}
 
@@ -694,7 +591,14 @@ export default function SKPlanningScreen() {
 
       {renderEditModal()}
       {renderViewerModal()}
-      {renderDownloadModal()}
+
+      <NotificationModal
+        {...notif.modalProps}
+        onOpenRoute={(route) => {
+          notif.close();
+          setTimeout(() => router.push(route), 120);
+        }}
+      />
 
       <View style={styles.layout}>
         {isMobile && sidebarVisible && (
@@ -704,7 +608,13 @@ export default function SKPlanningScreen() {
             onPress={() => setSidebarVisible(false)}
           />
         )}
-        {renderSidebar()}
+        <Sidebar
+          activeTab={activeTab}
+          onNavPress={handleNavPress}
+          onLogout={handleLogout}
+          isMobile={isMobile}
+          sidebarVisible={sidebarVisible}
+        />
         {renderContent()}
       </View>
     </SafeAreaView>
@@ -717,49 +627,10 @@ const styles = StyleSheet.create({
   layout: { flex: 1, flexDirection: 'row' },
 
   // ── Sidebar ──
-  sidebar: {
-    width: 250, backgroundColor: COLORS.navy,
-    alignItems: 'center', paddingTop: 20, paddingBottom: 24,
-    paddingHorizontal: 10, zIndex: 20,
-    ...(isMobile ? {
-      position: 'absolute', top: 0, left: 0, bottom: 0, zIndex: 20,
-    } : {}),
-  },
-  sidebarHidden: {
-    display: 'none',
-  },
   sidebarOverlay: {
     position: 'absolute', left: 0, top: 0, bottom: 0, right: 0,
     backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 15,
   },
-  logoPill: {
-    marginTop: 20, width: 70, height: 70, borderRadius: 35,
-    backgroundColor: 'rgba(255,255,255,0.15)',
-    alignItems: 'center', justifyContent: 'center',
-    marginBottom: 8, borderWidth: 2, borderColor: 'rgba(255,255,255,0.3)',
-  },
-  logoImage: { width: 100, height: 100 },
-  navItem: {
-    width: '100%', paddingVertical: 12, paddingHorizontal: 12,
-    borderRadius: 24, marginBottom: 8, alignItems: 'center',
-    borderWidth: 1.5, borderColor: COLORS.white,
-    backgroundColor: COLORS.navy,
-  },
-  navItemInner: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  navItemActive: { backgroundColor: COLORS.white, borderColor: COLORS.white },
-  navLabel: { fontSize: 13, fontWeight: '600', color: 'rgba(255,255,255,0.85)', letterSpacing: 0.3 },
-  navLabelActive: { color: '#000', fontWeight: '800' },
-  navBadge: {
-    width: 18, height: 18, borderRadius: 9,
-    backgroundColor: COLORS.gold, alignItems: 'center', justifyContent: 'center',
-  },
-  navBadgeText: { fontSize: 9, fontWeight: '900', color: COLORS.navy },
-  logoutBtn: {
-    width: '100%', paddingVertical: 12, paddingHorizontal: 12, borderRadius: 24,
-    marginTop: 8, alignItems: 'center', borderWidth: 1.5, borderColor: COLORS.white,
-    backgroundColor: 'rgba(255,255,255,0.1)',
-  },
-  logoutText: { fontSize: 13, fontWeight: '600', color: '#fff', letterSpacing: 0.3 },
 
   // ── Main ──
   main:        { flex: 1, backgroundColor: COLORS.offWhite, borderTopLeftRadius: 20 },
@@ -776,8 +647,6 @@ const styles = StyleSheet.create({
     width: 40, height: 40, borderRadius: 20,
     backgroundColor: COLORS.cardBg, alignItems: 'center', justifyContent: 'center',
   },
-  menuIconContainer: { width: 20, height: 16, justifyContent: 'space-between' },
-  menuLine: { width: 20, height: 2, backgroundColor: COLORS.navy, borderRadius: 1 },
   mobileTitle: { fontSize: 18, fontWeight: '800', color: COLORS.darkText },
 
   // Desktop header
@@ -852,27 +721,50 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
 
-  // Search row (with archive icon)
-  searchRow: {
-    flexDirection: 'row', alignItems: 'center',
-    gap: 8, marginBottom: 8,
+  // Section title + search row
+  templatesTopRow: {
+    flexDirection: isMobile ? 'column' : 'row',
+    alignItems: isMobile ? 'flex-start' : 'flex-end',
+    justifyContent: 'space-between',
+    gap: 12,
+    marginBottom: 14,
   },
+  templatesTitle: {
+    fontSize: isMobile ? 17 : 19, fontWeight: '900', color: COLORS.darkText,
+    letterSpacing: 0.2,
+  },
+  templatesSubtitle: {
+    fontSize: 12, color: COLORS.subText, marginTop: 3,
+  },
+
+  // All / Active Templates segmented toggle
+  segmentTrack: {
+    flexDirection: 'row',
+    backgroundColor: '#EDEBE6',
+    borderRadius: 10,
+    padding: 3,
+    marginBottom: 16,
+    alignSelf: 'flex-start',
+  },
+  segmentBtn: {
+    paddingHorizontal: 16, paddingVertical: 8,
+    borderRadius: 8,
+  },
+  segmentBtnActive: {
+    backgroundColor: COLORS.white,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1, shadowRadius: 3, elevation: 2,
+  },
+  segmentText: { fontSize: 12, fontWeight: '600', color: COLORS.subText },
+  segmentTextActive: { color: COLORS.navy, fontWeight: '800' },
+
+  // Archive icon (unused, kept for compatibility)
   archiveIconBtn: {
     width: 34, height: 34, borderRadius: 8,
     backgroundColor: COLORS.white, borderWidth: 1, borderColor: COLORS.lightGray,
     alignItems: 'center', justifyContent: 'center',
   },
   archiveIconText: { fontSize: 16 },
-
-  // Filter links (All / Active Templates) — plain text style like screenshot
-  filterRow: {
-    flexDirection: 'row', alignItems: 'center',
-    gap: 16, marginBottom: 14,
-  },
-  filterLink: { paddingVertical: 2 },
-  filterLinkActive: { paddingVertical: 2, borderBottomWidth: 2, borderBottomColor: COLORS.navy },
-  filterLinkText: { fontSize: 13, fontWeight: '500', color: COLORS.subText },
-  filterLinkTextActive: { color: COLORS.navy, fontWeight: '800' },
 
   // ── All-view flat table ──
   tableContainer: {
@@ -927,10 +819,11 @@ const styles = StyleSheet.create({
   // ── Template Sections ──
   section: {
     backgroundColor: COLORS.white,
-    borderRadius: 10,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: COLORS.lightGray,
-    marginBottom: 14,
+    borderTopWidth: 3,
+    marginBottom: 16,
     overflow: 'hidden',
     elevation: 1,
     shadowColor: '#000',
@@ -939,41 +832,61 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
   },
   sectionHeader: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderLeftWidth: 4,
+    paddingVertical: 13,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.lightGray,
   },
+  sectionHeaderLeft: { flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1, paddingRight: 8 },
+  sectionDot: { width: 7, height: 7, borderRadius: 4 },
   sectionHeaderText: {
-    fontSize: 13, fontWeight: '800', color: COLORS.darkText,
+    fontSize: 13, fontWeight: '800', color: COLORS.darkText, flexShrink: 1,
   },
+  sectionCountPill: {
+    borderRadius: 20, borderWidth: 1,
+    paddingHorizontal: 9, paddingVertical: 3,
+  },
+  sectionCountText: { fontSize: 10, fontWeight: '800' },
   sectionBody: {
-    paddingHorizontal: 12, paddingVertical: 8,
+    paddingHorizontal: 12, paddingVertical: 12,
   },
+  sectionEmpty: { paddingHorizontal: 16, paddingVertical: 20 },
+  sectionEmptyText: { fontSize: 12, color: COLORS.midGray, fontStyle: 'italic' },
   itemRow: {
-    flexDirection: 'row', gap: 10, marginBottom: 4,
+    flexDirection: 'row', gap: 10, marginBottom: 10,
   },
   itemCol: { flex: 1 },
 
-  // Template item row (name + edit icon)
+  // Template item card (icon + name + meta + edit)
   templateItem: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: 10, paddingVertical: 12,
-    borderBottomWidth: 1, borderBottomColor: COLORS.lightGray,
-    gap: 8,
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: COLORS.offWhite,
+    borderRadius: 10, borderWidth: 1, borderColor: COLORS.lightGray,
+    paddingHorizontal: 10, paddingVertical: 10,
+    gap: 10,
   },
+  templateItemBody: { flex: 1 },
   templateItemName: {
-    flex: 1, fontSize: isMobile ? 11 : 12,
-    color: COLORS.darkText, lineHeight: 17,
+    fontSize: isMobile ? 11 : 12, fontWeight: '700',
+    color: COLORS.darkText, lineHeight: 16,
+  },
+  templateItemMeta: {
+    fontSize: 10, color: COLORS.subText, marginTop: 3,
+  },
+
+  // Document file icon
+  docIconOuter: {
+    width: 38, height: 38, borderRadius: 10,
+    alignItems: 'center', justifyContent: 'center', flexShrink: 0,
   },
 
   // Edit icon
   editIconBox: {
-    width: 28, height: 28, borderRadius: 6,
-    borderWidth: 1, borderColor: COLORS.lightGray,
-    backgroundColor: COLORS.offWhite,
-    alignItems: 'center', justifyContent: 'center',
+    width: 28, height: 28, borderRadius: 8,
+    borderWidth: 1,
+    alignItems: 'center', justifyContent: 'center', flexShrink: 0,
   },
-  editIconText: { fontSize: 14, color: COLORS.navy },
 
   // Empty / Budget placeholder
   emptyState: { alignItems: 'center', paddingVertical: 40 },
@@ -990,17 +903,44 @@ const styles = StyleSheet.create({
   },
   modalCard: {
     backgroundColor: COLORS.white, borderRadius: 16,
-    padding: 24, width: '100%', maxWidth: 380,
+    width: '100%', maxWidth: 380, overflow: 'hidden',
     shadowColor: '#000', shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.18, shadowRadius: 20, elevation: 12,
   },
-  modalTitle:    { fontSize: 16, fontWeight: '800', color: COLORS.darkText, marginBottom: 6 },
-  modalSubtitle: { fontSize: 13, color: COLORS.subText, lineHeight: 18, marginBottom: 4 },
-  modalVersion:  { fontSize: 11, color: COLORS.midGray, marginBottom: 14 },
+  modalAccentBar: { height: 4, width: '100%' },
+  modalContent: { padding: 22 },
+  modalCloseX: {
+    position: 'absolute', top: 16, right: 16, zIndex: 1,
+    width: 26, height: 26, borderRadius: 13,
+    alignItems: 'center', justifyContent: 'center',
+    backgroundColor: COLORS.offWhite,
+  },
+  modalCloseXText: { fontSize: 12, color: COLORS.subText },
+  modalHeaderRow: {
+    flexDirection: 'row', alignItems: 'flex-start', gap: 12,
+    marginBottom: 14, paddingRight: 26,
+  },
+  modalEyebrow: {
+    fontSize: 10, fontWeight: '800', color: COLORS.midGray,
+    letterSpacing: 1, marginBottom: 3,
+  },
+  modalTitle: { fontSize: 16, fontWeight: '800', color: COLORS.darkText, lineHeight: 21 },
+  modalPillRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 16 },
+  modalPill: {
+    borderRadius: 20, borderWidth: 1,
+    paddingHorizontal: 10, paddingVertical: 4,
+  },
+  modalPillText: { fontSize: 10, fontWeight: '800' },
+  modalPillNeutral: {
+    borderRadius: 20, borderWidth: 1, borderColor: COLORS.lightGray,
+    backgroundColor: COLORS.offWhite,
+    paddingHorizontal: 10, paddingVertical: 4,
+  },
+  modalPillNeutralText: { fontSize: 10, fontWeight: '700', color: COLORS.subText },
   modalDivider:  { height: 1, backgroundColor: COLORS.lightGray, marginBottom: 14 },
   modalActions:  { flexDirection: 'row', gap: 8, marginBottom: 16 },
   modalActionBtn: {
-    flex: 1, paddingVertical: 10, borderRadius: 10, alignItems: 'center',
+    flex: 1, paddingVertical: 10, borderRadius: 10, alignItems: 'center', gap: 4,
   },
   modalActionText: { fontSize: 12, fontWeight: '700' },
   modalCloseBtn: {
@@ -1015,9 +955,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16, paddingVertical: 12,
     backgroundColor: COLORS.navy, borderBottomWidth: 1, borderBottomColor: COLORS.lightGray,
   },
+  viewerBackBtn: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   viewerCloseText: { fontSize: 14, fontWeight: '600', color: COLORS.white },
   viewerTitle: { flex: 1, fontSize: 14, fontWeight: '700', color: COLORS.white, textAlign: 'center', marginHorizontal: 10 },
-  viewerDownloadText: { fontSize: 18, color: COLORS.white },
   viewerLoading: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: COLORS.offWhite },
   viewerLoadingText: { marginTop: 12, fontSize: 14, color: COLORS.subText },
   viewerWebContainer: { flex: 1, backgroundColor: COLORS.white },
@@ -1025,13 +965,4 @@ const styles = StyleSheet.create({
   viewerFallbackText: { fontSize: 14, color: COLORS.subText, marginBottom: 16 },
   viewerFallbackBtn: { backgroundColor: COLORS.navy, paddingHorizontal: 20, paddingVertical: 12, borderRadius: 8 },
   viewerFallbackBtnText: { fontSize: 14, fontWeight: '700', color: COLORS.white },
-
-  // ── Download Modal ──
-  downloadModalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', alignItems: 'center', justifyContent: 'center' },
-  downloadModalCard: { backgroundColor: COLORS.white, borderRadius: 16, padding: 24, width: '100%', maxWidth: 340 },
-  downloadModalTitle: { fontSize: 16, fontWeight: '800', color: COLORS.darkText, marginBottom: 12, textAlign: 'center' },
-  downloadModalText: { fontSize: 13, color: COLORS.subText, marginBottom: 20, textAlign: 'center', lineHeight: 18 },
-  downloadModalActions: { flexDirection: 'row', gap: 10 },
-  downloadModalBtn: { flex: 1, paddingVertical: 12, borderRadius: 10, alignItems: 'center' },
-  downloadModalBtnText: { fontSize: 13, fontWeight: '700', color: COLORS.darkText },
 });

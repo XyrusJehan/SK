@@ -15,9 +15,12 @@ if (Platform.OS !== 'web') {
   WebView = require('react-native-webview').WebView;
 }
 import { Feather } from '@expo/vector-icons';
+import { MagnifyingGlassIcon } from 'react-native-heroicons/outline';
 import { useNav } from './navContext';
 import { useAuth } from './authContext';
 import { supabase } from '../../utils/supabase';
+import { NotificationModal, useNotificationCenter, BellIcon } from './notificationCenter';
+import Sidebar from './../components/Sidebar';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const isMobile = SCREEN_WIDTH < 768;
@@ -76,115 +79,12 @@ const YEAR_FILTERS = ['All Years', '2026', '2025', '2024'];
 // (Data now fetched from Supabase based on barangay_id)
 
 // ─── ICONS ────────────────────────────────────────────────────────────────────
-const BellIcon = ({ hasNotif }) => (
-  <View style={styles.bellWrapper}>
-    <View style={styles.bellBody} />
-    <View style={styles.bellBottom} />
-    {hasNotif && <View style={styles.bellDot} />}
-  </View>
-);
+// BellIcon now lives in notificationCenter.js and is imported above — shared
+// across every screen (SK + LYDO, desktop + mobile) instead of being redrawn here.
 
 const MenuIcon = () => (
   <View style={styles.menuIconContainer}>
     {[0, 1, 2].map(i => <View key={i} style={styles.menuLine} />)}
-  </View>
-);
-
-// Dashboard: 2×2 grid of rounded squares
-const DashboardIcon = ({ color = '#fff', size = 16 }) => {
-  const s = size * 0.38;
-  const gap = size * 0.12;
-  const r = size * 0.12;
-  const box = { width: s, height: s, borderRadius: r, backgroundColor: color };
-  return (
-    <View style={{ width: size, height: size, justifyContent: 'center', alignItems: 'center' }}>
-      <View style={{ flexDirection: 'row', gap }}>
-        <View style={box} />
-        <View style={box} />
-      </View>
-      <View style={{ height: gap }} />
-      <View style={{ flexDirection: 'row', gap }}>
-        <View style={box} />
-        <View style={box} />
-      </View>
-    </View>
-  );
-};
-
-// Documents: file shape with fold + two lines
-const DocumentsIcon = ({ color = '#fff', size = 16 }) => {
-  const w = size * 0.6, h = size * 0.78;
-  const fold = size * 0.22;
-  return (
-    <View style={{ width: size, height: size, justifyContent: 'center', alignItems: 'center' }}>
-      <View style={{ width: w, height: h, justifyContent: 'flex-end', paddingBottom: size * 0.08, paddingHorizontal: size * 0.1 }}>
-        <View style={{ position: 'absolute', left: 0, right: 0, top: fold, bottom: 0, borderWidth: 1.5, borderColor: color, borderRadius: size * 0.08 }} />
-        <View style={{ position: 'absolute', top: 0, right: 0, width: fold, height: fold, backgroundColor: color, borderBottomLeftRadius: size * 0.06 }} />
-        <View style={{ position: 'absolute', top: 0, left: 0, width: w - fold, height: fold, borderTopWidth: 1.5, borderLeftWidth: 1.5, borderColor: color, borderTopLeftRadius: size * 0.08 }} />
-        <View style={{ height: 1.5, backgroundColor: color, borderRadius: 1, marginBottom: size * 0.1, width: '80%' }} />
-        <View style={{ height: 1.5, backgroundColor: color, borderRadius: 1, width: '55%' }} />
-      </View>
-    </View>
-  );
-};
-
-// Planning: calendar grid
-const PlanningIcon = ({ color = '#fff', size = 16 }) => {
-  const bw = 1.5;
-  return (
-    <View style={{ width: size, height: size, justifyContent: 'center', alignItems: 'center' }}>
-      <View style={{ width: size * 0.82, height: size * 0.75, borderWidth: bw, borderColor: color, borderRadius: size * 0.1, overflow: 'hidden' }}>
-        <View style={{ height: size * 0.22, backgroundColor: color, width: '100%' }} />
-        <View style={{ flex: 1, flexDirection: 'row', justifyContent: 'space-around', alignItems: 'center', paddingHorizontal: size * 0.05 }}>
-          {[0,1,2].map(i => <View key={i} style={{ width: size * 0.1, height: size * 0.1, borderRadius: size * 0.05, backgroundColor: color }} />)}
-        </View>
-      </View>
-      <View style={{ position: 'absolute', top: 0, flexDirection: 'row', gap: size * 0.32 }}>
-        {[0,1].map(i => <View key={i} style={{ width: size * 0.1, height: size * 0.2, backgroundColor: color, borderRadius: size * 0.05 }} />)}
-      </View>
-    </View>
-  );
-};
-
-// Portal: simple globe
-const PortalIcon = ({ color = '#fff', size = 16 }) => (
-  <View style={{ width: size, height: size, justifyContent: 'center', alignItems: 'center' }}>
-    <View style={{ width: size * 0.82, height: size * 0.82, borderRadius: size * 0.41, borderWidth: 1.5, borderColor: color, justifyContent: 'center', alignItems: 'center', overflow: 'hidden' }}>
-      <View style={{ position: 'absolute', height: 1.5, width: '100%', backgroundColor: color }} />
-      <View style={{ width: size * 0.38, height: size * 0.78, borderRadius: size * 0.19, borderWidth: 1.5, borderColor: color, backgroundColor: 'transparent' }} />
-    </View>
-  </View>
-);
-
-// Logs: clipboard with checkmark lines
-const LogsIcon = ({ color = '#fff', size = 16 }) => (
-  <View style={{ width: size, height: size, justifyContent: 'center', alignItems: 'center' }}>
-    <View style={{ width: size * 0.75, height: size * 0.85, borderWidth: 1.5, borderColor: color, borderRadius: size * 0.1, paddingHorizontal: size * 0.1, paddingVertical: size * 0.1, justifyContent: 'space-around' }}>
-      <View style={{ position: 'absolute', top: -size * 0.08, alignSelf: 'center', width: size * 0.3, height: size * 0.14, backgroundColor: color, borderRadius: size * 0.04 }} />
-      {[0,1,2].map(i => (
-        <View key={i} style={{ flexDirection: 'row', alignItems: 'center', gap: size * 0.08, marginTop: i === 0 ? size * 0.1 : 0 }}>
-          <View style={{ width: size * 0.1, height: size * 0.1, borderRadius: size * 0.05, backgroundColor: color }} />
-          <View style={{ flex: 1, height: 1.5, backgroundColor: color, borderRadius: 1 }} />
-        </View>
-      ))}
-    </View>
-  </View>
-);
-
-// Account: head + shoulders silhouette
-const AccountIcon = ({ color = '#fff', size = 16 }) => (
-  <View style={{ width: size, height: size, justifyContent: 'center', alignItems: 'center' }}>
-    <View style={{ width: size * 0.38, height: size * 0.38, borderRadius: size * 0.19, borderWidth: 1.5, borderColor: color, marginBottom: size * 0.04 }} />
-    <View style={{ width: size * 0.72, height: size * 0.36, borderBottomLeftRadius: size * 0.36, borderBottomRightRadius: size * 0.36, borderWidth: 1.5, borderColor: color, borderTopWidth: 0, overflow: 'hidden' }} />
-  </View>
-);
-
-// Logout: door with arrow
-const LogoutNavIcon = ({ color = '#fff', size = 16 }) => (
-  <View style={{ width: size, height: size, justifyContent: 'center', alignItems: 'center' }}>
-    <View style={{ position: 'absolute', left: 0, top: 0, width: size * 0.55, height: size, borderWidth: 1.5, borderColor: color, borderRadius: size * 0.08 }} />
-    <View style={{ position: 'absolute', right: size * 0.02, width: size * 0.52, height: 1.8, backgroundColor: color, borderRadius: 1 }} />
-    <View style={{ position: 'absolute', right: size * 0.02, width: size * 0.2, height: size * 0.2, borderTopWidth: 1.8, borderRightWidth: 1.8, borderColor: color, transform: [{ rotate: '45deg' }], marginTop: -size * 0.01 }} />
   </View>
 );
 
@@ -193,14 +93,69 @@ const UploadIcon = () => (
 );
 
 // ─── DOCUMENT CARD ────────────────────────────────────────────────────────────
-const DocumentCard = ({ item, onPress }) => (
+// Small helper so each action button gets a bigger invisible tap target
+// without changing its visual size (better usability, esp. on mobile).
+const BTN_HIT_SLOP = { top: 8, bottom: 8, left: 8, right: 8 };
+
+const DocCardActionBtn = ({ icon, label, color, bg, onPress }) => (
   <TouchableOpacity
-    style={styles.docCard}
-    onPress={() => onPress && onPress(item)}
-    activeOpacity={0.75}
+    style={[styles.docCardActionBtn, { backgroundColor: bg }, isMobile && styles.docCardActionBtnCompact]}
+    onPress={onPress}
+    activeOpacity={0.7}
+    hitSlop={BTN_HIT_SLOP}
+    accessibilityRole="button"
+    accessibilityLabel={label}
   >
-    <Text style={styles.docCardTitle} numberOfLines={2}>{item.title}</Text>
+    <Feather name={icon} size={14} color={color} />
+    {!isMobile && <Text style={[styles.docCardActionText, { color }]}>{label}</Text>}
   </TouchableOpacity>
+);
+
+const DocumentCard = ({ item, onView, onDownload, onUnpublish }) => (
+  <View style={styles.docCard}>
+    <View style={styles.docCardBody}>
+      <Text style={styles.docCardTitle} numberOfLines={2}>{item.title}</Text>
+
+      <View style={styles.docCardMetaRow}>
+        {!!item.category && item.category !== 'Unknown' && (
+          <View style={styles.docCardBadge}>
+            <Text style={styles.docCardBadgeText} numberOfLines={1}>{item.category}</Text>
+          </View>
+        )}
+        {!!item.year && <Text style={styles.docCardMetaText}>{item.year}</Text>}
+        {!!item.uploadedAt && (
+          <>
+            <Text style={styles.docCardMetaDot}>•</Text>
+            <Text style={styles.docCardMetaText}>Posted {item.uploadedAt}</Text>
+          </>
+        )}
+      </View>
+    </View>
+
+    <View style={styles.docCardActions}>
+      <DocCardActionBtn
+        icon="eye"
+        label="View"
+        color={COLORS.navy}
+        bg="#EAF0FB"
+        onPress={() => onView && onView(item)}
+      />
+      <DocCardActionBtn
+        icon="download"
+        label="Download"
+        color="#2E7D32"
+        bg="#EAFBEA"
+        onPress={() => onDownload && onDownload(item)}
+      />
+      <DocCardActionBtn
+        icon="x-circle"
+        label="Unpublish"
+        color="#B71C1C"
+        bg="#FFEBEE"
+        onPress={() => onUnpublish && onUnpublish(item)}
+      />
+    </View>
+  </View>
 );
 
 // ─── FEEDBACK ROW ─────────────────────────────────────────────────────────────
@@ -253,10 +208,11 @@ export default function SKPortalScreen() {
   const [docFilter, setDocFilter]             = useState('All Documents');
   const [yearFilter, setYearFilter]           = useState('All Years');
   const [searchText, setSearchText]           = useState('');
-  const [notifCount]                          = useState(2);
   const [sidebarVisible, setSidebarVisible]   = useState(false);
-  const [selectedDoc, setSelectedDoc]         = useState(null);
-  const [showDocModal, setShowDocModal]       = useState(false);
+
+  // ── Shared notification bell (returned/approved docs, templates, deadlines) ──
+  const notif = useNotificationCenter(barangayId);
+  const notifCount = notif.count;
   const [showDocDropdown, setShowDocDropdown] = useState(false);
   const [showYearDropdown, setShowYearDropdown] = useState(false);
   const [showUploadModal, setShowUploadModal]   = useState(false);
@@ -326,10 +282,11 @@ export default function SKPortalScreen() {
           return;
         }
 
+        const categoryMap = { 1: 'Planning', 2: 'Financial', 3: 'Governance', 4: 'Performance' };
         const formattedDocs = docs?.map(doc => ({
           id: doc.website_post_id,
           title: doc.title || 'Untitled',
-          category: doc.document_category || 'Unknown',
+          category: categoryMap[doc.category] || 'Unknown',
           year: doc.year?.toString() || toUtcDate(doc.published_at).toLocaleDateString('en-PH', { timeZone: 'Asia/Manila', year: 'numeric' }),
           uploadedAt: toPhilippineDate(doc.published_at, { month: 'long', day: 'numeric', year: 'numeric' }),
           fileUrl: doc.file_url,
@@ -412,7 +369,6 @@ export default function SKPortalScreen() {
 
   const handleLogout = () => { logout(); router.replace('/'); };
 
-  const handleDocPress = (doc) => { setSelectedDoc(doc); setShowDocModal(true); };
 
   // Filter published docs - use fetched data if available, fallback to mock data
   const activeDocs = publishedDocs;
@@ -422,53 +378,6 @@ export default function SKPortalScreen() {
     const matchesSearch = d.title.toLowerCase().includes(searchText.toLowerCase());
     return matchesDoc && matchesYear && matchesSearch;
   });
-
-  // ── Sidebar ──
-  const NAV_ITEMS = [
-    { tab: 'Dashboard', IconComponent: DashboardIcon },
-    { tab: 'Documents', IconComponent: DocumentsIcon },
-    { tab: 'Planning',  IconComponent: PlanningIcon  },
-    { tab: 'Portal',    IconComponent: PortalIcon    },
-    { tab: 'Logs',      IconComponent: LogsIcon      },
-    { tab: 'Account',   IconComponent: AccountIcon   },
-  ];
-
-  const renderSidebar = () => (
-    <View style={[styles.sidebar, isMobile && !sidebarVisible && styles.sidebarHidden]}>
-      <View style={styles.logoPill}>
-        <Image
-          source={require('./../../assets/images/sk-logo.png')}
-          style={styles.logoImage}
-          resizeMode="contain"
-        />
-      </View>
-      <View style={{ height: 28 }} />
-      {NAV_ITEMS.map(({ tab, IconComponent }) => {
-        const active = activeTab === tab;
-        const iconColor = active ? '#133E75' : 'rgba(255,255,255,0.85)';
-        return (
-          <TouchableOpacity
-            key={tab}
-            style={[styles.navItem, active && styles.navItemActive]}
-            onPress={() => tab === 'Portal' ? setActiveTab('Portal') : handleNavPress(tab)}
-            activeOpacity={0.8}
-          >
-            <View style={styles.navItemInner}>
-              <IconComponent color={iconColor} size={16} />
-              <Text style={[styles.navLabel, active && styles.navLabelActive]}>{tab}</Text>
-            </View>
-          </TouchableOpacity>
-        );
-      })}
-      <View style={{ flex: 1 }} />
-      <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout} activeOpacity={0.8}>
-        <View style={styles.navItemInner}>
-          <LogoutNavIcon color="rgba(255,255,255,0.85)" size={16} />
-          <Text style={styles.logoutText}>Logout</Text>
-        </View>
-      </TouchableOpacity>
-    </View>
-  );
 
   // -- View handler: opens full-screen Google Docs viewer modal --
   const handleView = (fileUrl, title) => {
@@ -527,10 +436,10 @@ export default function SKPortalScreen() {
   };
 
   // -- Unpublish handler --
-  const handleUnpublish = () => {
-    // Snapshot values now - selectedDoc may be cleared before the async callback runs
-    const docId = selectedDoc?.id;
-    const docTitle = selectedDoc?.title || 'Document';
+  const handleUnpublish = (doc) => {
+    // Snapshot values now - doc reference stays stable for the async callback
+    const docId = doc?.id;
+    const docTitle = doc?.title || 'Document';
     if (!docId) return;
 
     const doUnpublish = async () => {
@@ -541,97 +450,48 @@ export default function SKPortalScreen() {
       if (error) { Alert.alert('Error', error.message); return; }
       await logActivity('Unpublish document', `Unpublished "${docTitle}" from the transparency portal`);
       setPublishedDocs(prev => prev.filter(d => d.id !== docId));
-      setShowDocModal(false);
       openSuccess('unpublish', docTitle);
     };
 
     openAlert('unpublish', docTitle, () => { closeAlert(); doUnpublish(); });
   };
 
-  // ── Doc Detail Modal ──
-  const renderDocModal = () => (
-    <Modal
-      visible={showDocModal}
-      transparent
-      animationType="fade"
-      onRequestClose={() => setShowDocModal(false)}
-    >
-      <TouchableOpacity
-        style={styles.modalOverlay}
-        activeOpacity={1}
-        onPress={() => setShowDocModal(false)}
-      >
-        <View style={styles.modalCard} onStartShouldSetResponder={() => true}>
-          <Text style={styles.modalTitle}>Document</Text>
-          <Text style={styles.modalSubtitle} numberOfLines={3}>{selectedDoc?.title}</Text>
-          <View style={styles.modalDivider} />
-          <View style={styles.modalMeta}>
-            <Text style={styles.modalMetaLabel}>Category</Text>
-            <Text style={styles.modalMetaValue}>{selectedDoc?.category}</Text>
-          </View>
-          <View style={styles.modalMeta}>
-            <Text style={styles.modalMetaLabel}>Uploaded</Text>
-            <Text style={styles.modalMetaValue}>{selectedDoc?.uploadedAt}</Text>
-          </View>
-          <View style={styles.modalDivider} />
-          <View style={styles.modalActions}>
-            <TouchableOpacity
-              style={[styles.modalActionBtn, { backgroundColor: '#EAF0FB' }]}
-              onPress={() => handleView(selectedDoc?.fileUrl, selectedDoc?.title)}
-            >
-              <Text style={[styles.modalActionText, { color: COLORS.navy }]}>👁  View</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.modalActionBtn, { backgroundColor: '#EAFBEA' }]}
-              onPress={() => handleDownload(selectedDoc?.fileUrl, selectedDoc?.title)}
-            >
-              <Text style={[styles.modalActionText, { color: '#2E7D32' }]}>⬇  Download</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.modalActionBtn, { backgroundColor: '#FFEBEE' }]}
-              onPress={handleUnpublish}
-            >
-              <Text style={[styles.modalActionText, { color: '#B71C1C' }]}>✕  Unpublish</Text>
-            </TouchableOpacity>
-          </View>
-          <TouchableOpacity style={styles.modalCloseBtn} onPress={() => setShowDocModal(false)}>
-            <Text style={styles.modalCloseBtnText}>Close</Text>
-          </TouchableOpacity>
-        </View>
-      </TouchableOpacity>
-    </Modal>
-  );
-
   // ── Upload Modal ──
   const UPLOAD_FOLDER_CATEGORIES = ['Planning', 'Financial', 'Governance', 'Performance'];
 
-  const CATEGORY_DOC_TYPES = {
-    Planning: [
-      { label: 'ABYIP',             value: 'Annual Barangay Youth Investment Program (ABYIP)' },
-      { label: 'CBYDP',             value: 'Comprehensive Barangay Youth Development Plan (CBYDP)' },
-      { label: 'Work Plans',        value: 'Work Plans' },
-      { label: 'Project Proposals', value: 'Project Proposals' },
-    ],
-    Financial: [
-      { label: 'Monthly Itemized List',     value: 'Monthly Itemized List' },
-      { label: 'Quarterly Register of Bank', value: 'Quarterly Register of Bank' },
-      { label: 'Annual Budget',             value: 'Annual Budget' },
-      { label: 'Disbursement Vouchers',     value: 'Disbursement Vouchers' },
-      { label: 'Liquidation Reports',       value: 'Liquidation Reports' },
-    ],
-    Governance: [
-      { label: 'Resolutions', value: 'Resolutions' },
-      { label: 'Ordinances',  value: 'Ordinances' },
-    ],
-    Performance: [
-      { label: 'Accomplishment Reports',  value: 'Accomplishment Reports' },
-      { label: 'Activity Documentation', value: 'Activity Documentation' },
-      { label: 'Event Reports',          value: 'Event Reports' },
-      { label: 'Minutes of the meetings', value: 'Minutes of the meetings' },
-    ],
-  };
+  // Fetch folder_year for the year dropdown
+  const [folderYears, setFolderYears] = useState([]);
+  const [docTypes, setDocTypes] = useState([]);
+  useEffect(() => {
+    const fetchOptions = async () => {
+      const [yearsRes, typesRes] = await Promise.all([
+        supabase.from('folder_year').select('id, fiscal_year').order('fiscal_year', { ascending: false }),
+        supabase.from('document_types').select('id, document_type, category').order('document_type', { ascending: true })
+      ]);
+      if (yearsRes.data) setFolderYears(yearsRes.data);
+      if (typesRes.data) setDocTypes(typesRes.data);
+    };
+    fetchOptions();
+  }, []);
 
-  const UPLOAD_YEARS = ['2026', '2025', '2024', '2023'];
+  const UPLOAD_YEARS = folderYears.map(fy => String(fy.fiscal_year));
+  const yearOptions = folderYears.map(fy => ({ value: fy.id, label: String(fy.fiscal_year) }));
+
+  // Build doc types by category from database
+  const categoryIdMap = { 'Planning': 1, 'Financial': 2, 'Governance': 3, 'Performance': 4 };
+  const CATEGORY_DOC_TYPES = {};
+  UPLOAD_FOLDER_CATEGORIES.forEach(cat => {
+    const catId = categoryIdMap[cat];
+    CATEGORY_DOC_TYPES[cat] = docTypes
+      .filter(d => d.category === catId)
+      .map(d => {
+        const fullName = d.document_type.trim();
+        // Generate abbreviation from first letters of each word
+        const abbrev = fullName.split(' ').map(w => w[0]).join('').replace(/[^A-Z]/g, '');
+        const labelWithAbbr = fullName.includes('(') ? fullName : `${fullName} (${abbrev})`;
+        return { label: labelWithAbbr, value: d.id, fullName: fullName };
+      });
+  });
 
   const pickDocument = async () => {
     try {
@@ -883,15 +743,24 @@ export default function SKPortalScreen() {
                       fileUrl = urlData.publicUrl;
 
                       const now = new Date().toISOString();
+
+                      // Map category name to ID
+                      const categoryMap = { 'Planning': 1, 'Financial': 2, 'Governance': 3, 'Performance': 4 };
+                      const categoryId = categoryMap[uploadCategory] || 1;
+
+                      // Get folder_year fiscal_year value from selected year
+                      const selectedYearObj = folderYears.find(fy => String(fy.fiscal_year) === uploadYear);
+                      const yearValue = selectedYearObj?.fiscal_year || parseInt(uploadYear);
+
                       const { error: insertError } = await supabase
                         .from('website_posts')
                         .insert({
                           barangay_id: barangayId,
                           published_by: user.userId,
                           title: uploadTitle.trim(),
-                          document_category: uploadCategory,
-                          document_type: uploadDocType.value,
-                          year: parseInt(uploadYear) || new Date().getFullYear(),
+                          type: uploadDocType?.value || null,
+                          category: categoryId,
+                          year: yearValue,
                           file_url: fileUrl,
                           portal_status: 'published',
                           published_at: now,
@@ -913,10 +782,11 @@ export default function SKPortalScreen() {
                         .order('published_at', { ascending: false });
 
                       if (freshDocs) {
+                        const categoryMap = { 1: 'Planning', 2: 'Financial', 3: 'Governance', 4: 'Performance' };
                         setPublishedDocs(freshDocs.map(doc => ({
                           id: doc.website_post_id,
                           title: doc.title || 'Untitled',
-                          category: doc.document_category || 'Unknown',
+                          category: categoryMap[doc.category] || 'Unknown',
                           year: doc.year?.toString() || toUtcDate(doc.published_at).toLocaleDateString('en-PH', { timeZone: 'Asia/Manila', year: 'numeric' }),
                           uploadedAt: toPhilippineDate(doc.published_at, { month: 'long', day: 'numeric', year: 'numeric' }),
                           fileUrl: doc.file_url,
@@ -952,14 +822,23 @@ export default function SKPortalScreen() {
                     return;
                   }
                   try {
+                    // Map category name to ID
+                    const categoryMap = { 'Planning': 1, 'Financial': 2, 'Governance': 3, 'Performance': 4 };
+                    const categoryId = categoryMap[uploadCategory] || 1;
+
+                    // Get folder_year fiscal_year value from selected year
+                    const selectedYearObj = folderYears.find(fy => String(fy.fiscal_year) === uploadYear);
+                    const yearValue = selectedYearObj?.fiscal_year || parseInt(uploadYear);
+
                     const { error: insertError } = await supabase
                       .from('website_posts')
                       .insert({
                         barangay_id: barangayId,
                         published_by: user.userId,
                         title: uploadTitle.trim(),
-                        document_category: uploadCategory || null,
-                        year: parseInt(uploadYear) || new Date().getFullYear(),
+                        type: uploadDocType?.value || null,
+                        category: categoryId,
+                        year: yearValue,
                         file_url: null,
                         portal_status: 'draft',
                       });
@@ -1009,9 +888,9 @@ export default function SKPortalScreen() {
             <MenuIcon />
           </TouchableOpacity>
           <Text style={styles.mobileTitle}>Portal</Text>
-          <TouchableOpacity style={styles.bellBtn}>
-            <BellIcon hasNotif={notifCount > 0} />
-          </TouchableOpacity>
+<TouchableOpacity style={styles.bellBtn} onPress={notif.open} activeOpacity={0.7}>
+  <BellIcon count={notifCount} />
+</TouchableOpacity>
         </View>
       )}
 
@@ -1024,14 +903,9 @@ export default function SKPortalScreen() {
             <Text style={styles.headerDocLabel}>Portal and Post Managemnet</Text>
           </View>
           <View style={styles.headerRight}>
-            <TouchableOpacity style={styles.bellBtn} activeOpacity={0.7}>
-              <BellIcon hasNotif={notifCount > 0} />
-              {notifCount > 0 && (
-                <View style={styles.notifBadge}>
-                  <Text style={styles.notifBadgeText}>{notifCount}</Text>
-                </View>
-              )}
-            </TouchableOpacity>
+<TouchableOpacity style={styles.bellBtn} onPress={notif.open} activeOpacity={0.7}>
+  <BellIcon count={notifCount} />
+</TouchableOpacity>
           </View>
         </View>
       )}
@@ -1095,7 +969,7 @@ export default function SKPortalScreen() {
 
             {/* Search */}
             <View style={styles.searchBox}>
-              <Text style={{ fontSize: 12, color: COLORS.midGray, marginRight: 4 }}>🔍</Text>
+              <MagnifyingGlassIcon size={14} color={COLORS.midGray} strokeWidth={2} style={{ marginRight: 4 }} />
               <TextInput
                 style={styles.searchInput}
                 placeholder="Search"
@@ -1124,23 +998,40 @@ export default function SKPortalScreen() {
           </View>
 
           {/* Posted in Public Portal label */}
-          <Text style={styles.postedLabel}>Posted in Public Portal</Text>
+          <View style={styles.postedLabelRow}>
+            <View style={styles.postedLabelLeft}>
+              <Feather name="globe" size={13} color={COLORS.navy} style={{ marginRight: 6 }} />
+              <Text style={styles.postedLabel}>Posted in Public Portal</Text>
+            </View>
+            <View style={styles.postedCountBadge}>
+              <Text style={styles.postedCountBadgeText}>
+                {filteredDocs.length} {filteredDocs.length === 1 ? 'document' : 'documents'}
+              </Text>
+            </View>
+          </View>
 
           {/* Full Disclosure Policy Board section */}
           <View style={styles.disclosureCard}>
             <View style={styles.disclosureHeader}>
+              <Feather name="shield" size={13} color={COLORS.gold} style={{ marginRight: 7 }} />
               <Text style={styles.disclosureHeaderText}>Full Disclosure Policy Board</Text>
             </View>
 
             {filteredDocs.length > 0 ? (
               filteredDocs.map((doc, idx) => (
                 <React.Fragment key={doc.id}>
-                  <DocumentCard item={doc} onPress={handleDocPress} />
+                  <DocumentCard
+                    item={doc}
+                    onView={(d) => handleView(d.fileUrl, d.title)}
+                    onDownload={(d) => handleDownload(d.fileUrl, d.title)}
+                    onUnpublish={(d) => handleUnpublish(d)}
+                  />
                   {idx < filteredDocs.length - 1 && <View style={styles.cardDivider} />}
                 </React.Fragment>
               ))
             ) : (
               <View style={styles.emptyState}>
+                <Feather name="inbox" size={22} color={COLORS.midGray} style={{ marginBottom: 8 }} />
                 <Text style={styles.emptyText}>No documents found</Text>
               </View>
             )}
@@ -1155,7 +1046,7 @@ export default function SKPortalScreen() {
           <View style={styles.feedbackHeaderRow}>
             <Text style={styles.feedbackCount}>{feedbackItems.length} feedback received</Text>
             <View style={styles.searchBox}>
-              <Text style={{ fontSize: 12, color: COLORS.midGray, marginRight: 4 }}>🔍</Text>
+              <MagnifyingGlassIcon size={14} color={COLORS.midGray} strokeWidth={2} style={{ marginRight: 4 }} />
               <TextInput
                 style={styles.searchInput}
                 placeholder="Search feedback"
@@ -1370,10 +1261,17 @@ export default function SKPortalScreen() {
     <SafeAreaView style={styles.safe}>
       <StatusBar barStyle="light-content" backgroundColor={COLORS.navy} />
 
-      {renderDocModal()}
       {renderUploadModal()}
       {renderAlertModal()}
       {renderSuccessModal()}
+
+      <NotificationModal
+        {...notif.modalProps}
+        onOpenRoute={(route) => {
+          notif.close();
+          setTimeout(() => router.push(route), 120);
+        }}
+      />
 
       {/* ── Document Viewer Modal ── */}
       <Modal
@@ -1501,7 +1399,13 @@ export default function SKPortalScreen() {
             onPress={() => setSidebarVisible(false)}
           />
         )}
-        {renderSidebar()}
+        <Sidebar
+          activeTab={activeTab}
+          onNavPress={(tab) => tab === 'Portal' ? setActiveTab('Portal') : handleNavPress(tab)}
+          onLogout={handleLogout}
+          isMobile={isMobile}
+          sidebarVisible={sidebarVisible}
+        />
         {renderContent()}
       </View>
     </SafeAreaView>
@@ -1513,45 +1417,11 @@ const styles = StyleSheet.create({
   safe:   { flex: 1, backgroundColor: COLORS.navy },
   layout: { flex: 1, flexDirection: 'row' },
 
-  // ── Sidebar (identical to sk-planning) ──
-  sidebar: {
-    width: 250, backgroundColor: COLORS.navy,
-    alignItems: 'center', paddingTop: 20, paddingBottom: 24,
-    paddingHorizontal: 10, zIndex: 20,
-    ...(isMobile ? {
-      position: 'absolute', top: 0, left: 0, bottom: 0, zIndex: 20,
-    } : {}),
-  },
-  sidebarHidden: {
-    display: 'none',
-  },
+  // ── Sidebar ──
   sidebarOverlay: {
     position: 'absolute', left: 0, top: 0, bottom: 0, right: 0,
     backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 15,
   },
-  logoPill: {
-    marginTop: 20, width: 70, height: 70, borderRadius: 35,
-    backgroundColor: 'rgba(255,255,255,0.15)',
-    alignItems: 'center', justifyContent: 'center',
-    marginBottom: 8, borderWidth: 2, borderColor: 'rgba(255,255,255,0.3)',
-  },
-  logoImage: { width: 100, height: 100 },
-  navItem: {
-    width: '100%', paddingVertical: 12, paddingHorizontal: 12,
-    borderRadius: 24, marginBottom: 8, alignItems: 'center',
-    borderWidth: 1.5, borderColor: COLORS.white,
-    backgroundColor: COLORS.navy,
-  },
-  navItemInner: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  navItemActive: { backgroundColor: COLORS.white, borderColor: COLORS.white },
-  navLabel:      { fontSize: 13, fontWeight: '600', color: 'rgba(255,255,255,0.85)', letterSpacing: 0.3 },
-  navLabelActive:{ color: '#000', fontWeight: '800' },
-  logoutBtn: {
-    width: '100%', paddingVertical: 12, paddingHorizontal: 12, borderRadius: 24,
-    marginTop: 8, alignItems: 'center', borderWidth: 1.5, borderColor: COLORS.white,
-    backgroundColor: 'rgba(255,255,255,0.1)',
-  },
-  logoutText: { fontSize: 13, fontWeight: '600', color: '#fff', letterSpacing: 0.3 },
 
   // ── Main ──
   main:        { flex: 1, backgroundColor: COLORS.offWhite, borderTopLeftRadius: 20 },
@@ -1595,10 +1465,6 @@ const styles = StyleSheet.create({
     shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.08, shadowRadius: 6, elevation: 3,
   },
-  bellWrapper: { width: 20, height: 22, alignItems: 'center' },
-  bellBody:    { width: 14, height: 12, borderRadius: 7, borderWidth: 2, borderColor: '#8B0000', marginTop: 4 },
-  bellBottom:  { width: 8, height: 4, borderBottomLeftRadius: 4, borderBottomRightRadius: 4, backgroundColor: '#8B0000', marginTop: -1 },
-  bellDot:     { position: 'absolute', top: 0, right: 1, width: 7, height: 7, borderRadius: 4, backgroundColor: COLORS.gold, borderWidth: 1.5, borderColor: COLORS.cardBg },
   notifBadge:  { position: 'absolute', top: -2, right: -2, width: 16, height: 16, borderRadius: 8, backgroundColor: COLORS.gold, alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: COLORS.white },
   notifBadgeText: { fontSize: 8, fontWeight: '900', color: COLORS.navy },
 
@@ -1704,9 +1570,24 @@ const styles = StyleSheet.create({
   uploadBtnText: { fontSize: 13, fontWeight: '600', color: COLORS.navy },
 
   // Posted label
-  postedLabel: {
-    fontSize: 13, fontWeight: '700', color: COLORS.navy,
+  postedLabelRow: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     marginBottom: 10,
+  },
+  postedLabelLeft: {
+    flexDirection: 'row', alignItems: 'center',
+  },
+  postedLabel: {
+    fontSize: 13, fontWeight: '700', color: COLORS.navy, letterSpacing: 0.2,
+  },
+  postedCountBadge: {
+    backgroundColor: COLORS.offWhite,
+    borderWidth: 1, borderColor: COLORS.lightGray,
+    borderRadius: 20,
+    paddingHorizontal: 10, paddingVertical: 4,
+  },
+  postedCountBadgeText: {
+    fontSize: 11, fontWeight: '700', color: COLORS.subText,
   },
 
   // Full Disclosure Card
@@ -1715,27 +1596,69 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     borderWidth: 1, borderColor: COLORS.lightGray,
     overflow: 'hidden',
-    shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05, shadowRadius: 4, elevation: 1,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06, shadowRadius: 6, elevation: 2,
     marginBottom: 16,
   },
   disclosureHeader: {
-    paddingHorizontal: 18, paddingVertical: 13,
-    alignItems: 'center',
-    borderBottomWidth: 1, borderBottomColor: COLORS.lightGray,
-    backgroundColor: COLORS.white,
+    flexDirection: 'row',
+    paddingHorizontal: 18, paddingVertical: 14,
+    alignItems: 'center', justifyContent: 'center',
+    backgroundColor: COLORS.navy,
+    borderBottomWidth: 3, borderBottomColor: COLORS.gold,
   },
   disclosureHeaderText: {
-    fontSize: 14, fontWeight: '800', color: COLORS.navy, textAlign: 'center',
+    fontSize: 14, fontWeight: '800', color: COLORS.white,
+    textAlign: 'center', letterSpacing: 0.3,
   },
   docCard: {
-    paddingHorizontal: 18, paddingVertical: 16,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    gap: 12,
+    paddingHorizontal: 18, paddingVertical: 15,
   },
+  docCardBody: { flex: 1, minWidth: 0, paddingRight: 4 },
   docCardTitle: {
-    fontSize: 13, color: COLORS.darkText, fontWeight: '400', lineHeight: 19,
+    fontSize: 13, color: COLORS.darkText, fontWeight: '600', lineHeight: 18,
+  },
+  docCardMetaRow: {
+    flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap',
+    marginTop: 5, gap: 2,
+  },
+  docCardBadge: {
+    backgroundColor: '#EAF0FA',
+    borderRadius: 6,
+    paddingHorizontal: 7, paddingVertical: 2,
+    marginRight: 6,
+  },
+  docCardBadgeText: {
+    fontSize: 10, fontWeight: '700', color: COLORS.navy,
+  },
+  docCardMetaText: {
+    fontSize: 11, color: COLORS.subText,
+  },
+  docCardMetaDot: {
+    fontSize: 11, color: COLORS.midGray, marginHorizontal: 5,
   },
   cardDivider: {
     height: 1, backgroundColor: COLORS.lightGray, marginHorizontal: 18,
+  },
+  // Right-aligned action cluster — sits at the end of the row instead of
+  // stretching full-width beneath the title.
+  docCardActions: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    flexShrink: 0,
+  },
+  docCardActionBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: 5, paddingHorizontal: 10, paddingVertical: 8, borderRadius: 8,
+  },
+  // Compact, icon-only variant used on narrow (mobile) screens so the three
+  // actions fit comfortably on the right without crowding the title.
+  docCardActionBtnCompact: {
+    width: 32, height: 32, paddingHorizontal: 0, paddingVertical: 0,
+  },
+  docCardActionText: {
+    fontSize: 11.5, fontWeight: '700',
   },
 
   // Empty state
