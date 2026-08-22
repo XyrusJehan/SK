@@ -1,4 +1,5 @@
 import { useFocusEffect, useRouter } from 'expo-router';
+import Head from 'expo-router/head';
 import React, { useEffect, useState } from 'react';
 import { useNav } from './navContext';
 import { useAuth } from './authContext';
@@ -958,7 +959,11 @@ export default function LYDOHomeScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.safe}>
+    <>
+      <Head>
+        <title>LYDO Dashboard · SK Monitoring</title>
+      </Head>
+      <SafeAreaView style={styles.safe}>
       <StatusBar barStyle="light-content" backgroundColor={COLORS.navy} />
       <CalendarModal visible={calendarVisible} onClose={() => setCalendarVisible(false)} />
 
@@ -1301,6 +1306,7 @@ export default function LYDOHomeScreen() {
         </ScrollView>
       </View>
     </SafeAreaView>
+    </>
   );
 }
 

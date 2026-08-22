@@ -8,7 +8,12 @@
       "Bash(node -e \"try { require\\('./app/\\(tabs\\)/sk-document-list.js'\\); console.log\\('sk-document-list.js: OK'\\); } catch\\(e\\) { console.log\\('sk-document-list.js: Error -', e.message\\); }\")",
       "Bash(dir C:\\\\xampp\\\\htdocs\\\\SK *)",
       "Bash(dir C:\\\\xampp\\\\htdocs\\\\SK\\\\app *)",
-      "Bash(dir C:\\\\xampp\\\\htdocs\\\\SK\\\\app\\\\\\(tabs\\) *)"
+      "Bash(dir C:\\\\xampp\\\\htdocs\\\\SK\\\\app\\\\\\(tabs\\) *)",
+      "Bash(xargs grep -l \"expo-router/head\")",
+      "Bash(node -e \"require\\('./app/index.js'\\)\")",
+      "Bash(powershell -Command \"\\(Get-Content 'C:\\\\xampp\\\\htdocs\\\\SK\\\\app\\\\\\(tabs\\)\\\\lydo-monitor.js'\\).Count\")",
+      "Bash(powershell -Command \"\\(Get-Content 'C:\\\\xampp\\\\htdocs\\\\SK\\\\app\\\\\\(tabs\\)\\\\lydo-document-templates.js'\\).Count\")",
+      "Bash(node *)"
     ]
   }
 }

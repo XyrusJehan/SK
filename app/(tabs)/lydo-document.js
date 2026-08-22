@@ -1,5 +1,6 @@
 import * as FileSystem from 'expo-file-system';
 import { useRouter } from 'expo-router';
+import Head from 'expo-router/head';
 import * as Sharing from 'expo-sharing';
 import * as WebBrowser from 'expo-web-browser';
 import { useEffect, useState } from 'react';
@@ -1333,7 +1334,11 @@ export default function LYDODocumentsScreen({ navigation }) {
   );
 
   return (
-    <SafeAreaView style={styles.safe}>
+    <>
+      <Head>
+        <title>LYDO Document · SK Monitoring</title>
+      </Head>
+      <SafeAreaView style={styles.safe}>
       <StatusBar barStyle="light-content" backgroundColor={COLORS.navy} />
 
       {/* Notification Modal — lists documents sent by SK officials */}
@@ -1458,6 +1463,7 @@ export default function LYDODocumentsScreen({ navigation }) {
         </Modal>
       </View>
     </SafeAreaView>
+    </>
   );
 }
 

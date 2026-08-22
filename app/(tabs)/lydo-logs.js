@@ -1,4 +1,5 @@
 import { useFocusEffect } from 'expo-router';
+import Head from 'expo-router/head';
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import {
   View, Text, TextInput, ScrollView, TouchableOpacity,
@@ -316,6 +317,9 @@ export default function LYDOLogsScreen() {
 
   return (
     <>
+      <Head>
+        <title>LYDO Logs · SK Monitoring</title>
+      </Head>
       <StatusBar barStyle="light-content" backgroundColor={COLORS.navy} />
 
       <SafeAreaView ref={safeAreaRef} style={styles.safe}>

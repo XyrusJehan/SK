@@ -1,5 +1,6 @@
 
 import React, { useEffect, useRef, useState } from 'react';
+import Head from 'expo-router/head';
 import {
   ActivityIndicator,
   Alert,
@@ -1791,7 +1792,11 @@ export default function LYDODocumentTemplatesScreen() {
   );
 
   return (
-    <SafeAreaView style={styles.safe}>
+    <>
+      <Head>
+        <title>LYDO Document Templates · SK Monitoring</title>
+      </Head>
+      <SafeAreaView style={styles.safe}>
       <StatusBar barStyle="light-content" backgroundColor={COLORS.navy} />
 
       {renderCategoryDropdown()}
@@ -1837,6 +1842,7 @@ export default function LYDODocumentTemplatesScreen() {
         {renderContent()}
       </View>
     </SafeAreaView>
+    </>
   );
 }
 

@@ -1,5 +1,6 @@
 import { Feather } from '@expo/vector-icons';
 import { useFocusEffect, useRouter, useLocalSearchParams } from 'expo-router';
+import Head from 'expo-router/head';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -1398,7 +1399,11 @@ export default function LYDOMonitorScreen() {
   );
 
   return (
-    <SafeAreaView style={styles.safe}>
+    <>
+      <Head>
+        <title>LYDO Monitor · SK Monitoring</title>
+      </Head>
+      <SafeAreaView style={styles.safe}>
       <StatusBar barStyle="light-content" backgroundColor={COLORS.navy} />
 
       {/* Notification Modal — lists documents sent by SK officials */}
@@ -1436,6 +1441,7 @@ export default function LYDOMonitorScreen() {
         />
       )}
     </SafeAreaView>
+    </>
   );
 }
 

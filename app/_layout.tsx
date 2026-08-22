@@ -5,6 +5,7 @@ import 'react-native-reanimated';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { AuthProvider } from './(tabs)/authContext';
+import Head from 'expo-router/head';
 
 export const unstable_settings = {
   anchor: '(tabs)',
@@ -15,11 +16,16 @@ export default function RootLayout() {
 
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+      <Head>
+        <title>SK Monitoring</title>
+        <meta name="description" content="SK Monitoring System for the Sangguniang Kabataan" />
+        <meta name="theme-color" content="#1E3A6E" />
+      </Head>
       <AuthProvider>
-        <Stack screenOptions={{ headerShown: false, title: 'SK' }}>
-          <Stack.Screen name="index" options={{ title: 'SK' }} />
-          <Stack.Screen name="signup" options={{ title: 'SK' }} />
-          <Stack.Screen name="(tabs)" options={{ title: 'SK' }} />
+        <Stack screenOptions={{ headerShown: false, title: 'SK Monitoring' }}>
+          <Stack.Screen name="index" options={{ title: 'SK Monitoring' }} />
+          <Stack.Screen name="signup" options={{ title: 'SK Monitoring' }} />
+          <Stack.Screen name="(tabs)" options={{ title: 'SK Monitoring' }} />
           <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
         </Stack>
         <StatusBar style="auto" />

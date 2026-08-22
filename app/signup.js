@@ -6,6 +6,7 @@ import {
   Dimensions, Image, ImageBackground, Modal,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import Head from 'expo-router/head';
 import { useAuth } from './(tabs)/authContext';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -100,6 +101,9 @@ export default function SignUpScreen() {
 
   return (
     <>
+      <Head>
+        <title>Sign Up · SK Monitoring</title>
+      </Head>
       <SafeAreaView style={styles.safe}>
         <StatusBar barStyle="light-content" backgroundColor={COLORS.navyDark} />
 

@@ -5,6 +5,7 @@ import {
   Alert,
 } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
+import Head from 'expo-router/head';
 import { useNav } from './navContext';
 import { useAuth } from './authContext';
 import { supabase } from '../../utils/supabase';
@@ -428,7 +429,11 @@ export default function SKDocumentScreen() {
   );
 
   return (
-    <SafeAreaView style={styles.safe}>
+    <>
+      <Head>
+        <title>Document · SK Monitoring</title>
+      </Head>
+      <SafeAreaView style={styles.safe}>
       <StatusBar barStyle="light-content" backgroundColor={COLORS.navy} />
 
       <NotificationModal
@@ -451,6 +456,7 @@ export default function SKDocumentScreen() {
         {renderContent()}
       </View>
     </SafeAreaView>
+    </>
   );
 }
 

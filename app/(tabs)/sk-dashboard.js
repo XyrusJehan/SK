@@ -1,5 +1,6 @@
 import { useFocusEffect } from '@react-navigation/native';
 import { useRouter } from 'expo-router';
+import Head from 'expo-router/head';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { useCallback, useEffect, useState } from 'react';
 import {
@@ -1347,7 +1348,11 @@ const seenReady = seenLoaded ? 1 : 0;
   );
 
   return (
-    <SafeAreaView style={styles.safe}>
+    <>
+      <Head>
+        <title>Dashboard · SK Monitoring</title>
+      </Head>
+      <SafeAreaView style={styles.safe}>
       <StatusBar barStyle="light-content" backgroundColor={COLORS.navy} />
 
       {/* ── Calendar Modal ── */}
@@ -1598,6 +1603,7 @@ const seenReady = seenLoaded ? 1 : 0;
         </ScrollView>
       </View>
     </SafeAreaView>
+    </>
   );
 }
 

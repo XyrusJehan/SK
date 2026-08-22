@@ -5,6 +5,7 @@ import {
   Alert, Image, ActivityIndicator,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import Head from 'expo-router/head';
 import { useNav } from './navContext';
 import Sidebar, { LYDO_NAV_ITEMS } from './../components/Sidebar';
 import { useAuth } from './authContext';
@@ -581,7 +582,11 @@ export default function LYDOBarangayScreen() {
   );
 
   return (
-    <GlobalDropdownProvider>
+    <>
+      <Head>
+        <title>LYDO Barangay · SK Monitoring</title>
+      </Head>
+      <GlobalDropdownProvider>
       <SafeAreaView style={styles.safe}>
         <StatusBar barStyle="light-content" backgroundColor={COLORS.navy} />
 
@@ -626,6 +631,7 @@ export default function LYDOBarangayScreen() {
         )}
       </SafeAreaView>
     </GlobalDropdownProvider>
+    </>
   );
 }
 

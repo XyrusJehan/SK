@@ -9,7 +9,7 @@ import { useAuth } from './authContext';
 import { supabase } from '../../utils/supabase';
 import { NotificationModal, useNotificationCenter, BellIcon } from './notificationCenter';
 import Sidebar from './../components/Sidebar';
-
+import Head from 'expo-router/head';
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const isMobile = SCREEN_WIDTH < 768;
 
@@ -419,9 +419,11 @@ export default function LogsScreen() {
 
   return (
     <>
+      <Head>
+        <title>Logs · SK Monitoring</title>
+      </Head>
+      <SafeAreaView style={styles.safe}>
       <StatusBar barStyle="light-content" backgroundColor={COLORS.navy} />
-
-      <SafeAreaView ref={safeAreaRef} style={styles.safe}>
       {/* Dropdown overlays — rendered above everything, measured to anchor under their buttons */}
       <AnchoredDropdown
         visible={posDropVisible}

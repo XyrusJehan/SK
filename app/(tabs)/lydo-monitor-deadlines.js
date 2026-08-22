@@ -5,6 +5,7 @@ import {
   Modal, Alert, Image, ActivityIndicator,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import Head from 'expo-router/head';
 import { useNav } from './navContext';
 import Sidebar, { LYDO_NAV_ITEMS } from './../components/Sidebar';
 import { useAuth } from './authContext';
@@ -871,52 +872,57 @@ export default function LYDOMonitorDeadlinesScreen() {
 
   // ── Root ────────────────────────────────────────────────────────────────────
   return (
-    <SafeAreaView style={styles.safe}>
-      <StatusBar barStyle="light-content" backgroundColor={COLORS.navy} />
+    <>
+      <Head>
+        <title>LYDO Deadlines · SK Monitoring</title>
+      </Head>
+      <SafeAreaView style={styles.safe}>
+        <StatusBar barStyle="light-content" backgroundColor={COLORS.navy} />
 
-      {/* Notification Modal — lists documents sent by SK officials */}
-      <LydoNotificationModal
-        {...notif.modalProps}
-        onReview={(doc) => {
-          notif.close();
-          router.push({
-            pathname: '/(tabs)/lydo-monitor',
-            params: { viewFilter: 'submitted' },
-          });
-        }}
-      />
-
-      <View style={styles.layout}>
-        {isMobile && sidebarVisible && (
-          <TouchableOpacity
-            style={styles.sidebarOverlay}
-            activeOpacity={1}
-            onPress={() => setSidebarVisible(false)}
-          />
-        )}
-
-        <Sidebar
-          activeTab={activeTab}
-          onNavPress={handleNav}
-          onLogout={handleLogout}
-          isMobile={isMobile}
-          sidebarVisible={sidebarVisible}
-          navItems={LYDO_NAV_ITEMS}
-          logoSource={require('./../../assets/images/lydo-logo.png')}
+        {/* Notification Modal — lists documents sent by SK officials */}
+        <LydoNotificationModal
+          {...notif.modalProps}
+          onReview={(doc) => {
+            notif.close();
+            router.push({
+              pathname: '/(tabs)/lydo-monitor',
+              params: { viewFilter: 'submitted' },
+            });
+          }}
         />
 
-        {renderContent()}
-      </View>
+        <View style={styles.layout}>
+          {isMobile && sidebarVisible && (
+            <TouchableOpacity
+              style={styles.sidebarOverlay}
+              activeOpacity={1}
+              onPress={() => setSidebarVisible(false)}
+            />
+          )}
 
-      <AddDeadlineModal
-        visible={addModalVisible}
-        onClose={() => setAddModalVisible(false)}
-        onSave={handleSaveDeadline}
-        barangays={barangays}
-        deadlines={deadlines}
-        saving={saving}
-      />
-    </SafeAreaView>
+          <Sidebar
+            activeTab={activeTab}
+            onNavPress={handleNav}
+            onLogout={handleLogout}
+            isMobile={isMobile}
+            sidebarVisible={sidebarVisible}
+            navItems={LYDO_NAV_ITEMS}
+            logoSource={require('./../../assets/images/lydo-logo.png')}
+          />
+
+          {renderContent()}
+        </View>
+
+        <AddDeadlineModal
+          visible={addModalVisible}
+          onClose={() => setAddModalVisible(false)}
+          onSave={handleSaveDeadline}
+          barangays={barangays}
+          deadlines={deadlines}
+          saving={saving}
+        />
+      </SafeAreaView>
+    </>
   );
 }
 

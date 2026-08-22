@@ -5,6 +5,7 @@ import {
   Platform, Alert, ActivityIndicator,
 } from 'react-native';
 import { useRouter, useLocalSearchParams, useFocusEffect, useNavigation } from 'expo-router';
+import Head from 'expo-router/head';
 import { useNav } from './navContext';
 import { useAuth } from './authContext';
 import { supabase } from '../../utils/supabase';
@@ -763,7 +764,11 @@ export default function SKDocumentListScreen() {
   );
 
   return (
-    <SafeAreaView style={styles.safe}>
+    <>
+      <Head>
+        <title>Document List · SK Monitoring</title>
+      </Head>
+      <SafeAreaView style={styles.safe}>
       <StatusBar barStyle="light-content" backgroundColor={COLORS.navy} />
       <NotificationModal
         {...notif.modalProps}
@@ -981,6 +986,7 @@ export default function SKDocumentListScreen() {
       </Modal>
     </View>
   </SafeAreaView>
+    </>
   );
 }
 

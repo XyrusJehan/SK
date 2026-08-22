@@ -1,6 +1,7 @@
 import { Feather } from '@expo/vector-icons';
 import * as DocumentPicker from 'expo-document-picker';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
+import Head from 'expo-router/head';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator, Alert,
@@ -1310,7 +1311,11 @@ export default function SKDocumentManagementScreen() {
   );
 
   return (
-    <SafeAreaView style={styles.safe}>
+    <>
+      <Head>
+        <title>Document Management · SK Monitoring</title>
+      </Head>
+      <SafeAreaView style={styles.safe}>
       <StatusBar barStyle="light-content" backgroundColor={COLORS.navy} />
       <NotificationModal
         {...notif.modalProps}
@@ -1705,7 +1710,7 @@ export default function SKDocumentManagementScreen() {
       )}
 
     </SafeAreaView>
-    
+    </>
   );
 }
 

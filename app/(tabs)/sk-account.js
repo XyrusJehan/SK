@@ -5,6 +5,7 @@ import {
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
+import Head from 'expo-router/head';
 import { useNav } from './navContext';
 import { useAuth, encryptPassword, decryptPassword, validatePassword } from './authContext';
 import { supabase } from '../../utils/supabase';
@@ -298,7 +299,11 @@ export default function AccountScreen() {
   const barangayName = user?.barangay?.barangay_name || 'Unknown Barangay';
 
   return (
-    <SafeAreaView style={styles.safe}>
+    <>
+      <Head>
+        <title>My Account · SK Monitoring</title>
+      </Head>
+      <SafeAreaView style={styles.safe}>
       <StatusBar barStyle="light-content" backgroundColor={COLORS.navy} />
 
       <NotificationModal
@@ -769,6 +774,7 @@ export default function AccountScreen() {
         </View>
       )}
     </SafeAreaView>
+    </>
   );
 }
 

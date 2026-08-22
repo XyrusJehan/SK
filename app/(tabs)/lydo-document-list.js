@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import Head from 'expo-router/head';
 import {
   View,
   Text,
@@ -766,7 +767,11 @@ export default function LYDODocumentListScreen({ navigation }) {
 
   // ─── RENDER ───────────────────────────────────────────────────────────────────
   return (
-    <SafeAreaView style={styles.safe}>
+    <>
+      <Head>
+        <title>LYDO Document List · SK Monitoring</title>
+      </Head>
+      <SafeAreaView style={styles.safe}>
       <StatusBar barStyle="light-content" backgroundColor={COLORS.navy} />
 
       {/* Notification Modal — lists documents sent by SK officials */}
@@ -814,6 +819,7 @@ export default function LYDODocumentListScreen({ navigation }) {
         onClose={() => setDropdownVisible(false)}
       />
     </SafeAreaView>
+    </>
   );
 }
 

@@ -5,6 +5,7 @@ import {
   Modal, Alert, KeyboardAvoidingView, Platform, Image,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import Head from 'expo-router/head';
 import { useNav } from './navContext';
 import Sidebar, { LYDO_NAV_ITEMS } from './../components/Sidebar';
 import { useAuth } from './authContext';
@@ -531,52 +532,57 @@ export default function LYDOMonitorBudgetScreen() {
   );
 
   return (
-    <SafeAreaView style={S.safe}>
-      <StatusBar barStyle="light-content" backgroundColor={COLORS.navy} />
+    <>
+      <Head>
+        <title>LYDO Budget Monitor · SK Monitoring</title>
+      </Head>
+      <SafeAreaView style={S.safe}>
+        <StatusBar barStyle="light-content" backgroundColor={COLORS.navy} />
 
-      {/* Notification Modal — lists documents sent by SK officials */}
-      <LydoNotificationModal
-        {...notif.modalProps}
-        onReview={(doc) => {
-          notif.close();
-          router.push({
-            pathname: '/(tabs)/lydo-monitor',
-            params: { viewFilter: 'submitted' },
-          });
-        }}
-      />
+        {/* Notification Modal — lists documents sent by SK officials */}
+        <LydoNotificationModal
+          {...notif.modalProps}
+          onReview={(doc) => {
+            notif.close();
+            router.push({
+              pathname: '/(tabs)/lydo-monitor',
+              params: { viewFilter: 'submitted' },
+            });
+          }}
+        />
 
-      <View style={S.layout}>
-        {/* Mobile: Sidebar as overlay */}
-        {isMobile && sidebarVisible && (
-          <TouchableOpacity
-            style={S.sidebarOverlay}
-            activeOpacity={1}
-            onPress={() => setSidebarVisible(false)}
+        <View style={S.layout}>
+          {/* Mobile: Sidebar as overlay */}
+          {isMobile && sidebarVisible && (
+            <TouchableOpacity
+              style={S.sidebarOverlay}
+              activeOpacity={1}
+              onPress={() => setSidebarVisible(false)}
+            />
+          )}
+
+          <Sidebar
+            activeTab={activeTab}
+            onNavPress={handleNav}
+            onLogout={handleLogout}
+            isMobile={isMobile}
+            sidebarVisible={sidebarVisible}
+            navItems={LYDO_NAV_ITEMS}
+            logoSource={require('./../../assets/images/lydo-logo.png')}
+          />
+
+          {renderContent()}
+        </View>
+
+        {/* Document Viewer Modal */}
+        {viewingItem && (
+          <BudgetDocumentViewer
+            item={viewingItem}
+            onClose={() => setViewingItem(null)}
           />
         )}
-
-        <Sidebar
-          activeTab={activeTab}
-          onNavPress={handleNav}
-          onLogout={handleLogout}
-          isMobile={isMobile}
-          sidebarVisible={sidebarVisible}
-          navItems={LYDO_NAV_ITEMS}
-          logoSource={require('./../../assets/images/lydo-logo.png')}
-        />
-
-        {renderContent()}
-      </View>
-
-      {/* Document Viewer Modal */}
-      {viewingItem && (
-        <BudgetDocumentViewer
-          item={viewingItem}
-          onClose={() => setViewingItem(null)}
-        />
-      )}
-    </SafeAreaView>
+      </SafeAreaView>
+    </>
   );
 }
 
