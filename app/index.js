@@ -7,6 +7,7 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuth } from './(tabs)/authContext';
+import { Head } from 'expo-router';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const isMobile = SCREEN_WIDTH < 400;
@@ -70,7 +71,11 @@ export default function LoginScreen() {
     }
   };
 
-  return (
+  <Head>
+    <title>SK Monitoring</title>
+  </Head>
+  return ( 
+    
     <SafeAreaView style={styles.safe}>
       <StatusBar barStyle="light-content" backgroundColor={COLORS.navyDark} />
 
