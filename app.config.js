@@ -29,7 +29,7 @@ export default ({ config }) => {
     },
     plugins: [
       ...(config.plugins || []),
-      ["./app/plugins/with-android-apk-name", apkNameOptions],
+      ["./plugins/with-android-apk-name", apkNameOptions],
     ],
   };
 };
