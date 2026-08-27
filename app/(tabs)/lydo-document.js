@@ -25,6 +25,7 @@ import { supabase } from '../../utils/supabase';
 import { useAuth } from './authContext';
 import { useNav } from './navContext';
 import Sidebar, { LYDO_NAV_ITEMS } from './../components/Sidebar';
+import MobileHeader, { MobileHeaderSpacer } from './mobileHeader';
 import { useLydoNotificationCenter, LydoNotificationModal, LydoBellIcon } from './notificationCenter';
 // WebView: use react-native-webview on native, iframe on web
 let WebView = null;
@@ -136,14 +137,6 @@ const NAV_TABS = ['Dashboard', 'Documents', 'Monitor', 'Barangay', 'Logs'];
 const DOCUMENT_TABS = ['Barangay Folders', 'Reports', 'Templates'];
 
 
-
-const MenuIcon = () => (
-  <View style={styles.menuIconContainer}>
-    <View style={styles.menuLine} />
-    <View style={styles.menuLine} />
-    <View style={styles.menuLine} />
-  </View>
-);
 
 // ─── macOS-STYLE FOLDER ICON ──────────────────────────────────────────────────
 const FolderIcon = ({ size = 68 }) => {
@@ -695,23 +688,21 @@ export default function LYDODocumentsScreen({ navigation }) {
 
   // ── Content body (shared between mobile/desktop) ──
   const renderContent = () => (
-    <ScrollView
-      style={[styles.main, isMobile && styles.mainMobile]}
-      contentContainerStyle={styles.mainContent}
-      showsVerticalScrollIndicator={false}
-    >
-      {/* Mobile Header */}
-      {isMobile && (
-        <View style={styles.mobileHeader}>
-          <TouchableOpacity style={styles.menuBtn} onPress={() => setSidebarVisible(true)}>
-            <MenuIcon />
-          </TouchableOpacity>
-          <Text style={styles.mobileTitle}>Documents</Text>
-              <TouchableOpacity style={styles.bellBtn} activeOpacity={0.7} onPress={notif.open}>
-                <LydoBellIcon count={notif.count} />
-              </TouchableOpacity>
-        </View>
-      )}
+    <View style={[styles.main, isMobile && styles.mainMobile]}>
+      <MobileHeader
+        title="Documents"
+        onMenuPress={() => setSidebarVisible(true)}
+        onBellPress={notif.open}
+        bellCount={notif.count}
+        BellIcon={LydoBellIcon}
+        colors={COLORS}
+      />
+      <ScrollView
+        style={{ flex: 1 }}
+        contentContainerStyle={styles.mainContent}
+        showsVerticalScrollIndicator={false}
+      >
+      <MobileHeaderSpacer />
 
       {/* Desktop Header */}
       {!isMobile && (
@@ -1331,6 +1322,7 @@ export default function LYDODocumentsScreen({ navigation }) {
         </>
       )}
     </ScrollView>
+    </View>
   );
 
   return (
@@ -1484,20 +1476,6 @@ const styles = StyleSheet.create({
   main: { flex: 1, backgroundColor: COLORS.offWhite, borderTopLeftRadius: 20 },
   mainMobile: { borderTopLeftRadius: 0 },
   mainContent: { padding: 20, paddingBottom: 40 },
-
-  // Mobile Header
-  mobileHeader: {
-    flexDirection: 'row', alignItems: 'center',
-    justifyContent: 'space-between', marginBottom: 16,
-    paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: COLORS.lightGray,
-  },
-  menuBtn: {
-    width: 40, height: 40, borderRadius: 20,
-    backgroundColor: COLORS.cardBg, alignItems: 'center', justifyContent: 'center',
-  },
-  menuIconContainer: { width: 20, height: 16, justifyContent: 'space-between' },
-  menuLine: { width: 20, height: 2, backgroundColor: '#133E75', borderRadius: 1 },
-  mobileTitle: { fontSize: 18, fontWeight: '800', color: COLORS.darkText },
 
   // Desktop Header
   header: {

@@ -11,7 +11,7 @@ import Sidebar, { LYDO_NAV_ITEMS } from './../components/Sidebar';
 import { useAuth } from './authContext';
 import { supabase } from '../../utils/supabase';
 import { useLydoNotificationCenter, LydoNotificationModal, LydoBellIcon } from './notificationCenter';
-
+import MobileHeader, { MobileHeaderSpacer } from './mobileHeader';
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const isMobile = SCREEN_WIDTH < 768;
 
@@ -65,11 +65,7 @@ const formatDateLong = (isoDateString) => {
 const isValidIsoDate = (value) => /^\d{4}-\d{2}-\d{2}$/.test(value);
 
 // ─── ICONS ────────────────────────────────────────────────────────────────────
-const MenuIcon = () => (
-  <View style={styles.menuIconContainer}>
-    {[0, 1, 2].map(i => <View key={i} style={styles.menuLine} />)}
-  </View>
-);
+
 
 const PlusIcon = ({ color = COLORS.navy, size = 16 }) => (
   <View style={{ width: size, height: size, justifyContent: 'center', alignItems: 'center' }}>
@@ -737,23 +733,21 @@ export default function LYDOMonitorDeadlinesScreen() {
 
   // ── Main Content ─────────────────────────────────────────────────────────────
   const renderContent = () => (
-    <ScrollView
-      style={[styles.main, isMobile && styles.mainMobile]}
-      contentContainerStyle={styles.mainContent}
-      showsVerticalScrollIndicator={false}
-    >
-      {/* Mobile Header */}
-      {isMobile && (
-        <View style={styles.mobileHeader}>
-          <TouchableOpacity style={styles.menuBtn} onPress={() => setSidebarVisible(true)}>
-            <MenuIcon />
-          </TouchableOpacity>
-          <Text style={styles.mobileTitle}>Deadlines Monitor</Text>
-              <TouchableOpacity style={styles.bellBtn} activeOpacity={0.7} onPress={notif.open}>
-                <LydoBellIcon count={notif.count} />
-              </TouchableOpacity>
-        </View>
-      )}
+    <View style={[styles.main, isMobile && styles.mainMobile]}>
+      <MobileHeader
+        title="Monitor Deadlines"
+        onMenuPress={() => setSidebarVisible(true)}
+        onBellPress={notif.open}
+        bellCount={notif.count}
+        BellIcon={LydoBellIcon}
+        colors={COLORS}
+      />
+      <ScrollView
+        style={{ flex: 1 }}
+        contentContainerStyle={styles.mainContent}
+        showsVerticalScrollIndicator={false}
+      >
+      <MobileHeaderSpacer />
 
       {/* Desktop Header */}
       {!isMobile && (
@@ -868,6 +862,7 @@ export default function LYDOMonitorDeadlinesScreen() {
         </View>
       </View>
     </ScrollView>
+    </View>
   );
 
   // ── Root ────────────────────────────────────────────────────────────────────
@@ -938,11 +933,6 @@ const styles = StyleSheet.create({
   mainMobile:  { borderTopLeftRadius: 0 },
   mainContent: { padding: 20, paddingBottom: 40 },
 
-  mobileHeader:       { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: COLORS.lightGray },
-  menuBtn:            { width: 40, height: 40, borderRadius: 20, backgroundColor: COLORS.cardBg, alignItems: 'center', justifyContent: 'center' },
-  menuIconContainer:  { width: 20, height: 16, justifyContent: 'space-between' },
-  menuLine:           { width: 20, height: 2, backgroundColor: COLORS.navy, borderRadius: 1 },
-  mobileTitle:        { fontSize: 18, fontWeight: '800', color: COLORS.darkText },
 
   header:      { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 20 },
   headerSub:   { fontSize: 10, fontWeight: '600', color: COLORS.subText, letterSpacing: 2, textTransform: 'uppercase', marginBottom: 2 },

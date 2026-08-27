@@ -22,7 +22,7 @@ import { useAuth } from './authContext';
 import { supabase } from '../../utils/supabase';
 import { NotificationModal, useNotificationCenter, BellIcon } from './notificationCenter';
 import Sidebar from './../components/Sidebar';
-
+import MobileHeader, { MobileHeaderSpacer } from './mobileHeader';
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const isMobile = SCREEN_WIDTH < 768;
 
@@ -83,11 +83,6 @@ const YEAR_FILTERS = ['All Years', '2026', '2025', '2024'];
 // BellIcon now lives in notificationCenter.js and is imported above — shared
 // across every screen (SK + LYDO, desktop + mobile) instead of being redrawn here.
 
-const MenuIcon = () => (
-  <View style={styles.menuIconContainer}>
-    {[0, 1, 2].map(i => <View key={i} style={styles.menuLine} />)}
-  </View>
-);
 
 const UploadIcon = () => (
   <Text style={{ fontSize: 14, color: COLORS.navy }}>⬆</Text>
@@ -876,24 +871,21 @@ export default function SKPortalScreen() {
 
   // ── Main Content ──
   const renderContent = () => (
-    <ScrollView
-      style={[styles.main, isMobile && styles.mainMobile]}
-      contentContainerStyle={styles.mainContent}
-      showsVerticalScrollIndicator={false}
-      keyboardShouldPersistTaps="handled"
-    >
-      {/* Mobile Header */}
-      {isMobile && (
-        <View style={styles.mobileHeader}>
-          <TouchableOpacity style={styles.menuBtn} onPress={() => setSidebarVisible(true)}>
-            <MenuIcon />
-          </TouchableOpacity>
-          <Text style={styles.mobileTitle}>Portal</Text>
-<TouchableOpacity style={styles.bellBtn} onPress={notif.open} activeOpacity={0.7}>
-  <BellIcon count={notifCount} />
-</TouchableOpacity>
-        </View>
-      )}
+    <View style={[styles.main, isMobile && styles.mainMobile]}>
+      <MobileHeader
+        title="Planning"
+        onMenuPress={() => setSidebarVisible(true)}
+        onBellPress={notif.open}
+        bellCount={notifCount}
+        BellIcon={BellIcon}
+        colors={COLORS}
+      />
+      <ScrollView
+        style={{ flex: 1 }}
+        contentContainerStyle={styles.mainContent}
+        showsVerticalScrollIndicator={false}
+      >
+      <MobileHeaderSpacer />
 
       {/* Desktop Header */}
       {!isMobile && (
@@ -1071,6 +1063,7 @@ export default function SKPortalScreen() {
         </>
       )}
     </ScrollView>
+    </View>
   );
 
     // -- Success Modal --
@@ -1434,19 +1427,7 @@ const styles = StyleSheet.create({
   mainMobile:  { borderTopLeftRadius: 0 },
   mainContent: { padding: 20, paddingBottom: 40 },
 
-  // Mobile header
-  mobileHeader: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    marginBottom: 16, paddingBottom: 12,
-    borderBottomWidth: 1, borderBottomColor: COLORS.lightGray,
-  },
-  menuBtn: {
-    width: 40, height: 40, borderRadius: 20,
-    backgroundColor: COLORS.cardBg, alignItems: 'center', justifyContent: 'center',
-  },
-  menuIconContainer: { width: 20, height: 16, justifyContent: 'space-between' },
-  menuLine:    { width: 20, height: 2, backgroundColor: COLORS.navy, borderRadius: 1 },
-  mobileTitle: { fontSize: 18, fontWeight: '800', color: COLORS.darkText },
+
 
   // Desktop header
   header: {

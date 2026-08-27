@@ -25,6 +25,7 @@ import { useAuth } from './authContext';
 import { useNav } from './navContext';
 import Sidebar, { LYDO_NAV_ITEMS } from './../components/Sidebar';
 import { useLydoNotificationCenter, LydoNotificationModal, LydoBellIcon } from './notificationCenter';
+import MobileHeader, { MobileHeaderSpacer } from './mobileHeader';
 
 // ─── Mark matching deadline(s) as met when a document is approved ─────────────
 // `documents.document_type` is a full title like
@@ -136,13 +137,6 @@ const TABLE_DATA = {
     { id: '3', barangay: 'Barangay Apasan',   document: 'Minutes of the Meeting — January Session',     time: '1:00 PM',  feedbackDate: '1/12/2026', approvedDate: null },
   ],
 };
-
-// ─── ICONS ────────────────────────────────────────────────────────────────────
-const MenuIcon = () => (
-  <View style={styles.menuIconContainer}>
-    {[0, 1, 2].map(i => <View key={i} style={styles.menuLine} />)}
-  </View>
-);
 
 // ─── 3-DOT MENU ───────────────────────────────────────────────────────────────
 const ThreeDotMenu = ({ onSave, onEdit, onReturn }) => {
@@ -1252,20 +1246,23 @@ export default function LYDOMonitorScreen() {
   const rows = getRows();
 
   const renderContent = () => (
-    <ScrollView style={[styles.main, isMobile && styles.mainMobile]}
-      contentContainerStyle={styles.mainContent} showsVerticalScrollIndicator={false}>
+    <View style={[styles.main, isMobile && styles.mainMobile]}>
+      {/* Pinned mobile header (no-op on desktop) — floats above the
+          ScrollView below; MobileHeaderSpacer reserves the matching space
+          at the top of the scroll content so nothing is hidden under it. */}
+      <MobileHeader
+        title="Monitor"
+        onMenuPress={() => setSidebarVisible(true)}
+        onBellPress={notif.open}
+        bellCount={notif.count}
+        BellIcon={LydoBellIcon}
+        colors={COLORS}
+      />
 
-      {isMobile && (
-        <View style={styles.mobileHeader}>
-          <TouchableOpacity style={styles.menuBtn} onPress={() => setSidebarVisible(true)}>
-            <MenuIcon />
-          </TouchableOpacity>
-          <Text style={styles.mobileTitle}>Monitor</Text>
-              <TouchableOpacity style={styles.bellBtn} activeOpacity={0.7} onPress={notif.open}>
-                <LydoBellIcon count={notif.count} />
-              </TouchableOpacity>
-        </View>
-      )}
+      <ScrollView
+        contentContainerStyle={styles.mainContent} showsVerticalScrollIndicator={false}>
+
+      <MobileHeaderSpacer />
 
       {!isMobile && (
         <View style={styles.header}>
@@ -1396,6 +1393,7 @@ export default function LYDOMonitorScreen() {
         )}
       </View>
     </ScrollView>
+    </View>
   );
 
   return (
@@ -1453,11 +1451,6 @@ const styles = StyleSheet.create({
   main: { flex: 1, backgroundColor: COLORS.offWhite, borderTopLeftRadius: 20 },
   mainMobile: { borderTopLeftRadius: 0 },
   mainContent: { padding: 20, paddingBottom: 40 },
-  mobileHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: COLORS.lightGray },
-  menuBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: COLORS.cardBg, alignItems: 'center', justifyContent: 'center' },
-  menuIconContainer: { width: 20, height: 16, justifyContent: 'space-between' },
-  menuLine: { width: 20, height: 2, backgroundColor: COLORS.navy, borderRadius: 1 },
-  mobileTitle: { fontSize: 18, fontWeight: '800', color: COLORS.darkText },
   header: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 20 },
   headerSub: { fontSize: 10, fontWeight: '600', color: COLORS.subText, letterSpacing: 2, textTransform: 'uppercase', marginBottom: 2 },
   headerTitle: { fontSize: 20, fontWeight: '900', color: COLORS.darkText, letterSpacing: 0.5 },

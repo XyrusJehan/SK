@@ -11,6 +11,7 @@ import { useAuth } from './authContext';
 import { supabase } from '../../utils/supabase';
 import { NotificationModal, useNotificationCenter, BellIcon } from './notificationCenter';
 import Sidebar from './../components/Sidebar';
+import MobileHeader, { MobileHeaderSpacer } from './mobileHeader';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const isMobile = SCREEN_WIDTH < 768;
@@ -109,12 +110,8 @@ const getCategoryMeta = (name) => {
 // ─── ICONS ────────────────────────────────────────────────────────────────────
 // BellIcon now lives in notificationCenter.js and is imported above — shared
 // across every screen (SK + LYDO, desktop + mobile) instead of being redrawn here.
-
-const MenuIcon = () => (
-  <View style={styles.menuIconContainer}>
-    {[0, 1, 2].map(i => <View key={i} style={styles.menuLine} />)}
-  </View>
-);
+// MenuIcon now lives in the shared mobileHeader module (see import above) so the
+// sticky mobile bar is identical on every SK + LYDO screen.
 
 // Nav icons + NAV_ITEMS now live in the shared Sidebar module (see import above).
 
@@ -324,27 +321,21 @@ export default function SKDocumentScreen() {
 
   // ── Main Content ──
   const renderContent = () => (
-    <ScrollView
-      style={[styles.main, isMobile && styles.mainMobile]}
-      contentContainerStyle={styles.mainContent}
-      showsVerticalScrollIndicator={false}
-    >
-      {/* Mobile Header */}
-      {isMobile && (
-        <View style={styles.mobileHeader}>
-          <TouchableOpacity style={styles.menuBtn} onPress={() => setSidebarVisible(true)}>
-            <MenuIcon />
-          </TouchableOpacity>
-          <Text style={styles.mobileTitle}>Documents</Text>
-          <TouchableOpacity
-            style={[styles.bellBtn, styles.bellBtnMobile]}
-            onPress={notif.open}
-            activeOpacity={0.7}
-          >
-            <BellIcon count={notifCount} />
-          </TouchableOpacity>
-        </View>
-      )}
+    <View style={[styles.main, isMobile && styles.mainMobile]}>
+      <MobileHeader
+        title="Documents"
+        onMenuPress={() => setSidebarVisible(true)}
+        onBellPress={notif.open}
+        bellCount={notifCount}
+        BellIcon={BellIcon}
+        colors={COLORS}
+      />
+      <ScrollView
+        style={styles.mainScroll}
+        contentContainerStyle={styles.mainContent}
+        showsVerticalScrollIndicator={false}
+      >
+        <MobileHeaderSpacer />
 
       {/* Desktop Header */}
       {!isMobile && (
@@ -363,7 +354,7 @@ export default function SKDocumentScreen() {
         </View>
       )}
 
-  
+
 
       <View style={styles.filterRow}>
         {/* Folder / Document Management tab bar */}
@@ -425,7 +416,8 @@ export default function SKDocumentScreen() {
           </View>
         )}
       </View>
-    </ScrollView>
+      </ScrollView>
+    </View>
   );
 
   return (
@@ -474,6 +466,7 @@ const styles = StyleSheet.create({
   // ── Main ──
   main:        { flex: 1, backgroundColor: COLORS.offWhite, borderTopLeftRadius: 20 },
   mainMobile:  { borderTopLeftRadius: 0 },
+  mainScroll:  { flex: 1 },
   mainContent: { padding: 20, paddingBottom: 40 },
 
   // Mobile header

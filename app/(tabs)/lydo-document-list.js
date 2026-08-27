@@ -16,6 +16,7 @@ import {
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useNav } from './navContext';
 import Sidebar, { LYDO_NAV_ITEMS } from './../components/Sidebar';
+import MobileHeader, { MobileHeaderSpacer } from './mobileHeader';
 import { useAuth } from './authContext';
 import { supabase } from '../../utils/supabase';
 import { useLydoNotificationCenter, LydoNotificationModal, LydoBellIcon } from './notificationCenter';
@@ -161,11 +162,6 @@ const DOCUMENT_TABS = ['Barangay Document', 'Reports', 'Templates'];
 // ─── ICONS ────────────────────────────────────────────────────────────────────
 // BellIcon now lives in notificationCenter.js and is imported above (as
 // LydoBellIcon) — shared across every screen instead of being redrawn here.
-const MenuIcon = () => (
-  <View style={styles.menuIconContainer}>
-    {[0,1,2].map(i => <View key={i} style={styles.menuLine} />)}
-  </View>
-);
 const SearchIcon = () => (
   <View style={styles.searchIconWrap}>
     <View style={styles.searchCircle} />
@@ -509,22 +505,21 @@ export default function LYDODocumentListScreen({ navigation }) {
 
   // ─── CARDS VIEW ───────────────────────────────────────────────────────────────
   const renderCardsView = () => (
-    <ScrollView
-      style={[styles.main, isMobile && styles.mainMobile]}
-      contentContainerStyle={styles.mainContent}
-      showsVerticalScrollIndicator={false}
-    >
-      {isMobile && (
-        <View style={styles.mobileHeader}>
-          <TouchableOpacity style={styles.menuBtn} onPress={() => setSidebarVisible(true)}>
-            <MenuIcon />
-          </TouchableOpacity>
-          <Text style={styles.mobileTitle}>Documents</Text>
-          <TouchableOpacity style={styles.bellBtn} onPress={notif.open} activeOpacity={0.7}>
-            <LydoBellIcon count={notif.count} />
-          </TouchableOpacity>
-        </View>
-      )}
+    <View style={[styles.main, isMobile && styles.mainMobile]}>
+      <MobileHeader
+        title="Documents"
+        onMenuPress={() => setSidebarVisible(true)}
+        onBellPress={notif.open}
+        bellCount={notif.count}
+        BellIcon={LydoBellIcon}
+        colors={COLORS}
+      />
+      <ScrollView
+        style={{ flex: 1 }}
+        contentContainerStyle={styles.mainContent}
+        showsVerticalScrollIndicator={false}
+      >
+      <MobileHeaderSpacer />
       {!isMobile && (
         <View style={styles.header}>
           <View>
@@ -581,26 +576,26 @@ export default function LYDODocumentListScreen({ navigation }) {
         ))}
       </View>
     </ScrollView>
+    </View>
   );
 
   // ─── LIST VIEW ────────────────────────────────────────────────────────────────
   const renderListView = () => (
-    <ScrollView
-      style={[styles.main, isMobile && styles.mainMobile]}
-      contentContainerStyle={styles.mainContent}
-      showsVerticalScrollIndicator={false}
-    >
-      {isMobile && (
-        <View style={styles.mobileHeader}>
-          <TouchableOpacity style={styles.menuBtn} onPress={() => setSidebarVisible(true)}>
-            <MenuIcon />
-          </TouchableOpacity>
-          <Text style={styles.mobileTitle}>Documents</Text>
-          <TouchableOpacity style={styles.bellBtn} onPress={notif.open} activeOpacity={0.7}>
-            <LydoBellIcon count={notif.count} />
-          </TouchableOpacity>
-        </View>
-      )}
+    <View style={[styles.main, isMobile && styles.mainMobile]}>
+      <MobileHeader
+        title="Documents"
+        onMenuPress={() => setSidebarVisible(true)}
+        onBellPress={notif.open}
+        bellCount={notif.count}
+        BellIcon={LydoBellIcon}
+        colors={COLORS}
+      />
+      <ScrollView
+        style={{ flex: 1 }}
+        contentContainerStyle={styles.mainContent}
+        showsVerticalScrollIndicator={false}
+      >
+      <MobileHeaderSpacer />
       {!isMobile && (
         <View style={styles.header}>
           <View>
@@ -763,6 +758,7 @@ export default function LYDODocumentListScreen({ navigation }) {
         )}
       </View>
     </ScrollView>
+    </View>
   );
 
   // ─── RENDER ───────────────────────────────────────────────────────────────────
@@ -839,20 +835,6 @@ const styles = StyleSheet.create({
   main: { flex: 1, backgroundColor: COLORS.offWhite, borderTopLeftRadius: 20 },
   mainMobile: { borderTopLeftRadius: 0 },
   mainContent: { padding: 20, paddingBottom: 40 },
-
-  // Mobile Header
-  mobileHeader: {
-    flexDirection: 'row', alignItems: 'center',
-    justifyContent: 'space-between', marginBottom: 16,
-    paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: COLORS.lightGray,
-  },
-  menuBtn: {
-    width: 40, height: 40, borderRadius: 20,
-    backgroundColor: COLORS.cardBg, alignItems: 'center', justifyContent: 'center',
-  },
-  menuIconContainer: { width: 20, height: 16, justifyContent: 'space-between' },
-  menuLine: { width: 20, height: 2, backgroundColor: COLORS.navy, borderRadius: 1 },
-  mobileTitle: { fontSize: 18, fontWeight: '800', color: COLORS.darkText },
 
   // Desktop Header
   header: {

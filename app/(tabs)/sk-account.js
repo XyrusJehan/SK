@@ -11,6 +11,7 @@ import { useAuth, encryptPassword, decryptPassword, validatePassword } from './a
 import { supabase } from '../../utils/supabase';
 import { NotificationModal, useNotificationCenter, BellIcon } from './notificationCenter';
 import Sidebar from './../components/Sidebar';
+import MobileHeader, { MobileHeaderSpacer } from './mobileHeader';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const isMobile = SCREEN_WIDTH < 768;
@@ -42,16 +43,6 @@ function formatPosition(position) {
 }
 
 // ─── ICON COMPONENTS ──────────────────────────────────────────────────────────
-const MenuIcon = () => (
-  <View style={styles.menuIconContainer}>
-    <View style={styles.menuLine} />
-    <View style={styles.menuLine} />
-    <View style={styles.menuLine} />
-  </View>
-);
-
-
-
 const EyeIcon = ({ visible, onPress }) => (
   <TouchableOpacity onPress={onPress} style={styles.eyeBtn} activeOpacity={0.7}>
     <Text style={styles.eyeIconText}>{visible ? '👁' : '⌣'}</Text>
@@ -330,23 +321,21 @@ export default function AccountScreen() {
           sidebarVisible={sidebarVisible}
         />
 
-        <ScrollView
-          style={[styles.main, isMobile && styles.mainMobile]}
-          contentContainerStyle={styles.mainContent}
-          showsVerticalScrollIndicator={false}
-        >
-          {/* Mobile Header */}
-          {isMobile && (
-            <View style={styles.mobileHeader}>
-              <TouchableOpacity style={styles.menuBtn} onPress={() => setSidebarVisible(!sidebarVisible)}>
-                <MenuIcon />
-              </TouchableOpacity>
-              <Text style={styles.mobileTitle}>Account</Text>
-              <TouchableOpacity style={styles.bellBtn} onPress={notif.open} activeOpacity={0.7}>
-              <BellIcon count={notifCount} />
-              </TouchableOpacity>
-            </View>
-          )}
+        <View style={[styles.main, isMobile && styles.mainMobile]}>
+          <MobileHeader
+            title="Account"
+            onMenuPress={() => setSidebarVisible(!sidebarVisible)}
+            onBellPress={notif.open}
+            bellCount={notifCount}
+            BellIcon={BellIcon}
+            colors={COLORS}
+          />
+          <ScrollView
+            style={{ flex: 1 }}
+            contentContainerStyle={styles.mainContent}
+            showsVerticalScrollIndicator={false}
+          >
+          <MobileHeaderSpacer />
 
           {/* Desktop Header */}
           {!isMobile && (
@@ -662,6 +651,7 @@ export default function AccountScreen() {
           </View>
 
         </ScrollView>
+        </View>
       </View>
 
       {/* Password Change Confirmation Modal */}
@@ -793,16 +783,6 @@ const styles = StyleSheet.create({
   main: { flex: 1, backgroundColor: COLORS.offWhite, borderTopLeftRadius: 20 },
   mainMobile: { borderTopLeftRadius: 0 },
   mainContent: { padding: isMobile ? 12 : 20, paddingBottom: isMobile ? 24 : 40 },
-
-  // ── Mobile header ──
-  mobileHeader: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    marginBottom: 12, paddingBottom: 10, borderBottomWidth: 1, borderBottomColor: COLORS.lightGray,
-  },
-  menuBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: COLORS.cardBg, alignItems: 'center', justifyContent: 'center' },
-  menuIconContainer: { width: 20, height: 16, justifyContent: 'space-between' },
-  menuLine: { width: 20, height: 2, backgroundColor: COLORS.navy, borderRadius: 1 },
-  mobileTitle: { fontSize: 18, fontWeight: '800', color: COLORS.darkText },
 
   // Desktop header
   header: {

@@ -22,7 +22,7 @@ import {
   PlusCircleIcon,
   ArrowLeftIcon,
 } from 'react-native-heroicons/outline';
-
+import MobileHeader, { MobileHeaderSpacer } from './mobileHeader';
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const isMobile = SCREEN_WIDTH < 768;
 
@@ -56,9 +56,7 @@ const CATEGORY_CONFIG = {
 // (Data fetched via useEffect)
 
 
-const MenuIcon = () => (
-  <Bars3Icon size={22} color={COLORS.navy} strokeWidth={2} />
-);
+
 
 // Edit icon (pencil box) — tinted per category
 const EditIcon = ({ color }) => (
@@ -430,23 +428,21 @@ export default function SKPlanningScreen() {
 
   // ── Main Content ──
   const renderContent = () => (
-    <ScrollView
-      style={[styles.main, isMobile && styles.mainMobile]}
-      contentContainerStyle={styles.mainContent}
-      showsVerticalScrollIndicator={false}
-    >
-      {/* Mobile Header */}
-      {isMobile && (
-        <View style={styles.mobileHeader}>
-          <TouchableOpacity style={styles.menuBtn} onPress={() => setSidebarVisible(true)}>
-            <MenuIcon />
-          </TouchableOpacity>
-          <Text style={styles.mobileTitle}>Planning</Text>
-<TouchableOpacity style={styles.bellBtn} onPress={notif.open} activeOpacity={0.7}>
-  <BellIcon count={notifCount} />
-</TouchableOpacity>
-        </View>
-      )}
+    <View style={[styles.main, isMobile && styles.mainMobile]}>
+      <MobileHeader
+        title="Planning"
+        onMenuPress={() => setSidebarVisible(true)}
+        onBellPress={notif.open}
+        bellCount={notifCount}
+        BellIcon={BellIcon}
+        colors={COLORS}
+      />
+      <ScrollView
+        style={{ flex: 1 }}
+        contentContainerStyle={styles.mainContent}
+        showsVerticalScrollIndicator={false}
+      >
+      <MobileHeaderSpacer />
 
       {/* Desktop Header */}
       {!isMobile && (
@@ -584,6 +580,7 @@ export default function SKPlanningScreen() {
         </View>
       )}
     </ScrollView>
+    </View>
   );
 
   return (
@@ -643,17 +640,9 @@ const styles = StyleSheet.create({
   mainMobile:  { borderTopLeftRadius: 0 },
   mainContent: { padding: 20, paddingBottom: 40 },
 
-  // Mobile header
-  mobileHeader: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    marginBottom: 16, paddingBottom: 12,
-    borderBottomWidth: 1, borderBottomColor: COLORS.lightGray,
-  },
-  menuBtn: {
-    width: 40, height: 40, borderRadius: 20,
-    backgroundColor: COLORS.cardBg, alignItems: 'center', justifyContent: 'center',
-  },
-  mobileTitle: { fontSize: 18, fontWeight: '800', color: COLORS.darkText },
+
+
+
 
   // Desktop header
   header: {
