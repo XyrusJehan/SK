@@ -1040,6 +1040,7 @@ export default function LYDOHomeScreen() {
             onBellPress={notif.open}
             bellCount={notif.count}
             BellIcon={LydoBellIcon}
+            hidden={sidebarVisible}
             colors={COLORS}
           />
           <ScrollView

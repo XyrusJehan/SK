@@ -1403,6 +1403,7 @@ const seenReady = seenLoaded ? 1 : 0;
             onBellPress={() => setNotificationModalVisible(true)}
             bellCount={notifCount}
             BellIcon={BellIcon}
+            hidden={sidebarVisible}
             colors={COLORS}
           />
           <ScrollView style={styles.mainScroll} contentContainerStyle={styles.mainContent} showsVerticalScrollIndicator={false}>

@@ -38,9 +38,10 @@
 
 import React from 'react';
 import { Dimensions, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const HEADER_HEIGHT = 64;   // total height of the pinned bar
+const HEADER_BAR_HEIGHT = 64; // height of the bar itself (below the status bar)
 const isMobile = SCREEN_WIDTH < 768;
 
 const MenuIcon = () => (
@@ -55,6 +56,7 @@ const MobileHeader = ({
   onBellPress,
   bellCount = 0,
   BellIcon = null,
+  hidden = false,
   colors = {
     navy:      '#133E75',
     cardBg:    '#FFFFFF',
@@ -62,10 +64,20 @@ const MobileHeader = ({
     darkText:  '#1A1A1A',
   },
 }) => {
+  const insets = useSafeAreaInsets();
   if (!isMobile) return null;
 
+  // Reserve room at the top of the bar for the device status bar
+  // (notch, clock, battery). On devices without a notch this is 0.
+  const statusBarPad = insets?.top ?? 0;
+  const totalHeight = HEADER_BAR_HEIGHT + statusBarPad;
+
   return (
-    <View pointerEvents="box-none" style={styles.wrapper}>
+    <View
+      pointerEvents="box-none"
+      style={[styles.wrapper, hidden && styles.wrapperHidden, { height: totalHeight }]}
+    >
+      <View style={[styles.statusBarPad, { height: statusBarPad, backgroundColor: colors.cardBg }]} />
       <View style={[styles.bar, { backgroundColor: colors.cardBg, borderBottomColor: colors.lightGray }]}>
         <TouchableOpacity
           style={styles.menuBtn}
@@ -104,11 +116,18 @@ const MobileHeader = ({
 // screen's ScrollView so the first row of content is not hidden behind the
 // pinned header. It is intentionally a sibling — not part of the header —
 // because the scroll container owns its own content offset.
-export const MobileHeaderSpacer = ({ height = HEADER_HEIGHT }) => (
-  isMobile ? <View style={{ height }} /> : null
-);
+//
+// We use the same `useSafeAreaInsets` hook as the header itself so the
+// spacer always matches the header's total height (bar + status bar pad),
+// no matter which device the app is running on.
+export const MobileHeaderSpacer = () => {
+  const insets = useSafeAreaInsets();
+  if (!isMobile) return null;
+  const totalHeight = HEADER_BAR_HEIGHT + (insets?.top ?? 0);
+  return <View style={{ height: totalHeight }} />;
+};
 
-export const MOBILE_HEADER_HEIGHT = HEADER_HEIGHT;
+export const MOBILE_HEADER_HEIGHT = HEADER_BAR_HEIGHT;
 
 const styles = StyleSheet.create({
   wrapper: {
@@ -120,8 +139,17 @@ const styles = StyleSheet.create({
     zIndex: 50,
     elevation: 8,
   },
+  // When the drawer (sidebar) is open on mobile, lift the header out of
+  // the way entirely — `display: none` removes it from the layout AND
+  // the hit-testing region, so the bell button can't accidentally
+  // intercept taps meant for the sidebar.
+  wrapperHidden: { display: 'none' },
+  // Transparent gap above the bar reserved for the device status bar
+  // (notch, clock, battery). Its backgroundColor is set inline so the
+  // status-bar area picks up the same surface color as the bar.
+  statusBarPad: { width: '100%' },
   bar: {
-    height: HEADER_HEIGHT,
+    height: HEADER_BAR_HEIGHT,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
