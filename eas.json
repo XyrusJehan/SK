@@ -18,15 +18,13 @@
       "distribution": "internal",
       "android": {
         "buildType": "apk"
-      },
-      "artifactPath": "android/app/build/outputs/apk/release/app-release.apk:SK-RIZAL-0.1-preview.apk"
+      }
     },
     "production": {
       "distribution": "store",
       "android": {
         "buildType": "apk"
-      },
-      "artifactPath": "android/app/build/outputs/apk/release/app-release.apk:SK-RIZAL-0.1.apk"
+      }
     }
   }
 }

@@ -15,7 +15,8 @@
       "Bash(powershell -Command \"\\(Get-Content 'C:\\\\xampp\\\\htdocs\\\\SK\\\\app\\\\\\(tabs\\)\\\\lydo-document-templates.js'\\).Count\")",
       "Bash(node *)",
       "WebFetch(domain:docs.expo.dev)",
-      "WebSearch"
+      "WebSearch",
+      "Bash(npx expo *)"
     ]
   }
 }
