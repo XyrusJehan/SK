@@ -4,6 +4,7 @@ import { useFocusEffect } from 'expo-router';
 import {
   ActivityIndicator, Dimensions, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View,
 } from 'react-native';
+import { BellIcon as HeroBellIcon } from 'react-native-heroicons/outline';
 import { supabase } from '../../utils/supabase';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -927,25 +928,65 @@ export function useLydoNotificationCenter() {
   };
 }
 
-// ─── LYDO BELL ICON ───────────────────────────────────────────────────────────
-// The bell glyph used in every LYDO screen's header. Pair with
-// `hasNotif={count > 0}` from useLydoNotificationCenter().
-const LYDO_MAROON = '#8B0000';
-const LYDO_GOLD = '#E8C547';
+// ─── SHARED BELL ICON ─────────────────────────────────────────────────────────
+// The bell glyph used in every screen's header (SK and LYDO alike) — Heroicons'
+// outline bell, maroon-tinted, with the SK-dashboard's red unread-count badge
+// overlaid. Import this instead of redefining a bell + badge in each screen
+// file — it replaces the notifBadge/notifBadgeMobile View+Text+styles that
+// used to be duplicated (with drifting colors/sizes) in every screen.
+//
+// Usage:
+//   const notif = useNotificationCenter(barangayId); // or useLydoNotificationCenter()
+//   <BellIcon count={notif.count} />
+//
+// `count` is the exact unread number and drives the numbered badge (hidden
+// when 0). `hasNotif` is kept only for old call sites that haven't switched
+// to `count` yet — it falls back to a plain dot with no number.
+const BELL_MAROON = '#8B0000';
+const BELL_GOLD = '#E8C547';
+const BADGE_RED = '#EF4444';
 
-export const LydoBellIcon = ({ hasNotif }) => (
-  <View style={lydoBellStyles.bellWrapper}>
-    <View style={lydoBellStyles.bellBody} />
-    <View style={lydoBellStyles.bellBottom} />
-    {hasNotif && <View style={lydoBellStyles.bellDot} />}
-  </View>
-);
+export const BellIcon = ({ count = 0, hasNotif, size = 22, color = BELL_MAROON }) => {
+  const showCount = count > 0;
+  const showDot = !showCount && hasNotif;
 
-const lydoBellStyles = StyleSheet.create({
-  bellWrapper: { width: 20, height: 22, alignItems: 'center' },
-  bellBody: { width: 14, height: 12, borderRadius: 7, borderWidth: 2, borderColor: LYDO_MAROON, marginTop: 4 },
-  bellBottom: { width: 8, height: 4, borderBottomLeftRadius: 4, borderBottomRightRadius: 4, backgroundColor: LYDO_MAROON, marginTop: -1 },
-  bellDot: { position: 'absolute', top: 0, right: 1, width: 7, height: 7, borderRadius: 4, backgroundColor: LYDO_GOLD, borderWidth: 1.5, borderColor: WHITE },
+  return (
+    <View style={bellStyles.bellWrapper}>
+      <HeroBellIcon size={size} color={color} strokeWidth={2} />
+      {showCount && (
+        <View style={bellStyles.notifBadge}>
+          <Text style={bellStyles.notifBadgeText} numberOfLines={1}>
+            {count > 99 ? '99+' : count}
+          </Text>
+        </View>
+      )}
+      {showDot && <View style={bellStyles.bellDot} />}
+    </View>
+  );
+};
+
+// Back-compat alias in case other files still import the old LYDO-specific name.
+export const LydoBellIcon = BellIcon;
+
+const bellStyles = StyleSheet.create({
+  bellWrapper: { width: 24, height: 24, alignItems: 'center', justifyContent: 'center' },
+  bellDot: { position: 'absolute', top: -1, right: -1, width: 8, height: 8, borderRadius: 4, backgroundColor: BELL_GOLD, borderWidth: 1.5, borderColor: WHITE },
+  // Numbered badge — matches the SK dashboard's red-circle unread-count design.
+  notifBadge: {
+    position: 'absolute',
+    top: -6, right: -6,
+    minWidth: 18, height: 18,
+    borderRadius: 9,
+    backgroundColor: BADGE_RED,
+    alignItems: 'center', justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: WHITE,
+    paddingHorizontal: 4,
+  },
+  notifBadgeText: {
+    fontSize: 10, fontWeight: '800',
+    color: WHITE,
+  },
 });
 
 // ─── LYDO NOTIFICATION MODAL ──────────────────────────────────────────────────

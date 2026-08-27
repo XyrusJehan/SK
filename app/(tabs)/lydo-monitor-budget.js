@@ -5,9 +5,11 @@ import {
   Modal, Alert, KeyboardAvoidingView, Platform, Image,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import Head from 'expo-router/head';
 import { useNav } from './navContext';
 import Sidebar, { LYDO_NAV_ITEMS } from './../components/Sidebar';
 import { useAuth } from './authContext';
+import { useLydoNotificationCenter, LydoNotificationModal, LydoBellIcon } from './notificationCenter';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const isMobile = SCREEN_WIDTH < 768;
@@ -62,14 +64,6 @@ const BUDGET_ROWS = [
 ];
 
 // ─── ICONS ────────────────────────────────────────────────────────────────────
-const BellIcon = ({ hasNotif }) => (
-  <View style={S.bellWrapper}>
-    <View style={S.bellBody} />
-    <View style={S.bellBottom} />
-    {hasNotif && <View style={S.bellDot} />}
-  </View>
-);
-
 const MenuIcon = () => (
   <View style={S.menuIconContainer}>
     {[0, 1, 2].map(i => <View key={i} style={S.menuLine} />)}
@@ -278,7 +272,7 @@ export default function LYDOMonitorBudgetScreen() {
   const [activeMonitorTab, setActiveMonitorTab] = useState('Budget');
   const [currentStep, setCurrentStep]           = useState(1);   // 1 | 2 | 3
   const [searchText, setSearchText]             = useState('');
-  const [notifCount]                            = useState(2);
+  const notif = useLydoNotificationCenter();
   const [sidebarVisible, setSidebarVisible]     = useState(false);
   const [currentTime, setCurrentTime]           = useState('');
 
@@ -411,9 +405,9 @@ export default function LYDOMonitorBudgetScreen() {
             <MenuIcon />
           </TouchableOpacity>
           <Text style={S.mobileTitle}>Budget Monitor</Text>
-          <TouchableOpacity style={S.bellBtn}>
-            <BellIcon hasNotif={notifCount > 0} />
-          </TouchableOpacity>
+              <TouchableOpacity style={styles.bellBtn} activeOpacity={0.7} onPress={notif.open}>
+                <LydoBellIcon count={notif.count} />
+              </TouchableOpacity>
         </View>
       )}
 
@@ -443,14 +437,9 @@ export default function LYDOMonitorBudgetScreen() {
                 </View>
               </View>
             </View>
-            <TouchableOpacity style={S.bellBtn} activeOpacity={0.7}>
-              <BellIcon hasNotif={notifCount > 0} />
-              {notifCount > 0 && (
-                <View style={S.notifBadge}>
-                  <Text style={S.notifBadgeText}>{notifCount}</Text>
-                </View>
-              )}
-            </TouchableOpacity>
+              <TouchableOpacity style={styles.bellBtn} activeOpacity={0.7} onPress={notif.open}>
+                <LydoBellIcon count={notif.count} />
+              </TouchableOpacity>
           </View>
         </View>
       )}
@@ -543,40 +532,57 @@ export default function LYDOMonitorBudgetScreen() {
   );
 
   return (
-    <SafeAreaView style={S.safe}>
-      <StatusBar barStyle="light-content" backgroundColor={COLORS.navy} />
+    <>
+      <Head>
+        <title>LYDO Budget Monitor · SK Monitoring</title>
+      </Head>
+      <SafeAreaView style={S.safe}>
+        <StatusBar barStyle="light-content" backgroundColor={COLORS.navy} />
 
-      <View style={S.layout}>
-        {/* Mobile: Sidebar as overlay */}
-        {isMobile && sidebarVisible && (
-          <TouchableOpacity
-            style={S.sidebarOverlay}
-            activeOpacity={1}
-            onPress={() => setSidebarVisible(false)}
+        {/* Notification Modal — lists documents sent by SK officials */}
+        <LydoNotificationModal
+          {...notif.modalProps}
+          onReview={(doc) => {
+            notif.close();
+            router.push({
+              pathname: '/(tabs)/lydo-monitor',
+              params: { viewFilter: 'submitted' },
+            });
+          }}
+        />
+
+        <View style={S.layout}>
+          {/* Mobile: Sidebar as overlay */}
+          {isMobile && sidebarVisible && (
+            <TouchableOpacity
+              style={S.sidebarOverlay}
+              activeOpacity={1}
+              onPress={() => setSidebarVisible(false)}
+            />
+          )}
+
+          <Sidebar
+            activeTab={activeTab}
+            onNavPress={handleNav}
+            onLogout={handleLogout}
+            isMobile={isMobile}
+            sidebarVisible={sidebarVisible}
+            navItems={LYDO_NAV_ITEMS}
+            logoSource={require('./../../assets/images/lydo-logo.png')}
+          />
+
+          {renderContent()}
+        </View>
+
+        {/* Document Viewer Modal */}
+        {viewingItem && (
+          <BudgetDocumentViewer
+            item={viewingItem}
+            onClose={() => setViewingItem(null)}
           />
         )}
-
-        <Sidebar
-          activeTab={activeTab}
-          onNavPress={handleNav}
-          onLogout={handleLogout}
-          isMobile={isMobile}
-          sidebarVisible={sidebarVisible}
-          navItems={LYDO_NAV_ITEMS}
-          logoSource={require('./../../assets/images/lydo-logo.png')}
-        />
-
-        {renderContent()}
-      </View>
-
-      {/* Document Viewer Modal */}
-      {viewingItem && (
-        <BudgetDocumentViewer
-          item={viewingItem}
-          onClose={() => setViewingItem(null)}
-        />
-      )}
-    </SafeAreaView>
+      </SafeAreaView>
+    </>
   );
 }
 
@@ -620,10 +626,6 @@ const S = StyleSheet.create({
 
   // Bell
   bellBtn:   { width: 40, height: 40, borderRadius: 20, backgroundColor: COLORS.cardBg, alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 6, elevation: 3 },
-  bellWrapper: { width: 20, height: 22, alignItems: 'center' },
-  bellBody:  { width: 14, height: 12, borderRadius: 7, borderWidth: 2, borderColor: COLORS.maroon, marginTop: 4 },
-  bellBottom:{ width: 8, height: 4, borderBottomLeftRadius: 4, borderBottomRightRadius: 4, backgroundColor: COLORS.maroon, marginTop: -1 },
-  bellDot:   { position: 'absolute', top: 0, right: 1, width: 7, height: 7, borderRadius: 4, backgroundColor: COLORS.gold, borderWidth: 1.5, borderColor: COLORS.cardBg },
   notifBadge:    { position: 'absolute', top: -2, right: -2, width: 16, height: 16, borderRadius: 8, backgroundColor: COLORS.gold, alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: COLORS.white },
   notifBadgeText:{ fontSize: 8, fontWeight: '900', color: COLORS.navy },
 

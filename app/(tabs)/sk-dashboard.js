@@ -1,5 +1,6 @@
 import { useFocusEffect } from '@react-navigation/native';
 import { useRouter } from 'expo-router';
+import Head from 'expo-router/head';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { useCallback, useEffect, useState } from 'react';
 import {
@@ -17,6 +18,7 @@ import { supabase } from '../../utils/supabase';
 import { useAuth } from './authContext';
 import { useNav } from './navContext';
 import Sidebar from './../components/Sidebar';
+import { BellIcon } from './notificationCenter';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const isMobile = SCREEN_WIDTH < 768;
@@ -104,20 +106,9 @@ const CAL_DOWS = ['SUN','MON','TUE','WED','THU','FRI','SAT'];
 // Nav icons + NAV_ITEMS now live in the shared Sidebar module (see import above).
 
 // ─── ICON COMPONENTS ──────────────────────────────────────────────────────────
-const BellIcon = ({ hasNotif }) => (
-  <View style={ic.bellWrapper}>
-    <View style={ic.bellBody} />
-    <View style={ic.bellBottom} />
-    {hasNotif && <View style={ic.bellDot} />}
-  </View>
-);
-
-const ic = StyleSheet.create({
- bellWrapper: { width: 20, height: 22, alignItems: 'center' },
-  bellBody:    { width: 14, height: 12, borderRadius: 7, borderWidth: 2, borderColor: '#8B0000', marginTop: 4 },
-  bellBottom:  { width: 8, height: 4, borderBottomLeftRadius: 4, borderBottomRightRadius: 4, backgroundColor: '#8B0000', marginTop: -1 },
-  bellDot:     { position: 'absolute', top: 0, right: 1, width: 7, height: 7, borderRadius: 4, backgroundColor: COLORS.gold, borderWidth: 1.5, borderColor: COLORS.cardBg },
-});
+// BellIcon now lives in notificationCenter.js and is imported above — kept
+// there so every screen (SK + LYDO) shares one definition instead of each
+// file redrawing its own bell.
 
 const SearchIcon = () => (
   <View style={styles.searchIcon}>
@@ -845,7 +836,6 @@ export default function HomeScreen({ navigation }) {
   const { activeTab, setActiveTab } = useNav();
   const { logout, user } = useAuth();
   const [notifCount, setNotifCount] = useState(0);
-  const [hasUnviewedNotif, setHasUnviewedNotif] = useState(false);
   const [seenApprovedCount, setSeenApprovedCount] = useState(0);
   const [seenTemplatesCount, setSeenTemplatesCount] = useState(0);
   const [seenReturnedCount, setSeenReturnedCount] = useState(0);
@@ -1302,15 +1292,11 @@ const seenReady = seenLoaded ? 1 : 0;
 
   const totalUnviewed = unviewedApproved + unviewedTemplates + unviewedReturned + unviewedDeadlines;
 
-  // Update notification count when unviewed counts change.
+  // Update notification count when unviewed counts change. BellIcon's own
+  // numbered badge (count > 0) now handles showing "there's something new" —
+  // no separate boolean needed.
   useEffect(() => {
     setNotifCount(totalUnviewed);
-  }, [totalUnviewed]);
-
-  // Show red dot whenever there is anything unviewed. Bell badge shows the
-  // total unviewed count.
-  useEffect(() => {
-    setHasUnviewedNotif(totalUnviewed > 0);
   }, [totalUnviewed]);
 
   const handleNavPress = (tab) => {
@@ -1362,7 +1348,11 @@ const seenReady = seenLoaded ? 1 : 0;
   );
 
   return (
-    <SafeAreaView style={styles.safe}>
+    <>
+      <Head>
+        <title>Dashboard · SK Monitoring</title>
+      </Head>
+      <SafeAreaView style={styles.safe}>
       <StatusBar barStyle="light-content" backgroundColor={COLORS.navy} />
 
       {/* ── Calendar Modal ── */}
@@ -1426,42 +1416,28 @@ const seenReady = seenLoaded ? 1 : 0;
                 <TouchableOpacity style={styles.bellBtnMobile} activeOpacity={0.7} onPress={() => {
                   setNotificationModalVisible(true);
                 }}>
-                  <BellIcon hasNotif={hasUnviewedNotif} />
-                  {notifCount > 0 && (
-                    <View style={styles.notifBadgeMobile}>
-                      <Text style={styles.notifBadgeTextMobile}>
-                        {notifCount > 99 ? '99+' : notifCount}
-                      </Text>
-                    </View>
-                  )}
+                  <BellIcon count={notifCount} />
                 </TouchableOpacity>
               </View>
             </View>
           )}
 
           {/* Desktop Header */}
-          <View style={styles.header}>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.headerSub}>SANGGUNIANG KABATAAN</Text>
-              <Text style={styles.headerTitle}>{barangayName.toUpperCase()}</Text>
-            </View>
-            {!isMobile && (
+          {!isMobile && (
+            <View style={styles.header}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.headerSub}>SANGGUNIANG KABATAAN</Text>
+                <Text style={styles.headerTitle}>{barangayName.toUpperCase()}</Text>
+              </View>
               <View style={styles.headerActions}>
                 <TouchableOpacity style={styles.bellBtn} activeOpacity={0.7} onPress={() => {
                   setNotificationModalVisible(true);
                 }}>
-                  <BellIcon hasNotif={hasUnviewedNotif} />
-                  {notifCount > 0 && (
-                    <View style={styles.notifBadge}>
-                      <Text style={styles.notifBadgeText}>
-                        {notifCount > 99 ? '99+' : notifCount}
-                      </Text>
-                    </View>
-                  )}
+                  <BellIcon count={notifCount} />
                 </TouchableOpacity>
               </View>
-            )}
-          </View>
+            </View>
+          )}
 
           {/* ── STAT CARDS ROW ── */}
           <View style={isMobile ? styles.statsCol : styles.statsRow}>
@@ -1627,6 +1603,7 @@ const seenReady = seenLoaded ? 1 : 0;
         </ScrollView>
       </View>
     </SafeAreaView>
+    </>
   );
 }
 
@@ -1943,14 +1920,14 @@ const styles = StyleSheet.create({
   // ── Main area ──
   main: { flex: 1, backgroundColor: COLORS.offWhite, borderTopLeftRadius: 20 },
   mainMobile: { borderTopLeftRadius: 0 },
-  mainContent: { padding: isMobile ? 12 : 20, paddingBottom: isMobile ? 24 : 40 },
+  mainContent: { padding: 20, paddingBottom: 40 },
 
   // ── Mobile header ──
   mobileHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, paddingBottom: 10, borderBottomWidth: 1, borderBottomColor: COLORS.lightGray },
   menuBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: COLORS.cardBg, alignItems: 'center', justifyContent: 'center' },
   menuIconContainer: { width: 20, height: 16, justifyContent: 'space-between' },
   menuLine: { width: 20, height: 2, backgroundColor: COLORS.navy, borderRadius: 1 },
-  mobileTitle: { fontSize: 16, fontWeight: '800', color: COLORS.darkText },
+  mobileTitle: { fontSize: 18, fontWeight: '800', color: COLORS.darkText },
   mobileHeaderActions: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   mobileActionBtn: { width: 32, height: 32, borderRadius: 16, backgroundColor: COLORS.cardBg, alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.1, shadowRadius: 2, elevation: 2 },
   mobileArchivesBtn: { backgroundColor: '#133E75' },
@@ -1987,39 +1964,13 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.08, shadowRadius: 6, elevation: 3,
   },
 
-  // ── Bell icons ──
-  notifBadge: {
-    position: 'absolute',
-    top: 2, right: 2,
-    minWidth: 18, height: 18,
-    borderRadius: 9,
-    backgroundColor: '#EF4444',
-    alignItems: 'center', justifyContent: 'center',
-    borderWidth: 2,
-    borderColor: COLORS.white,
-    paddingHorizontal: 4,
-  },
-  notifBadgeText: {
-    fontSize: 10, fontWeight: '800',
-    color: COLORS.white,
-  },
+  // ── Bell icon — the unread-count badge itself now lives in BellIcon
+  // (notificationCenter.js), so only the button container is styled here.
   bellBtnMobile: {
     width: 40, height: 40, borderRadius: 20,
     backgroundColor: COLORS.white, alignItems: 'center', justifyContent: 'center',
     shadowColor: COLORS.navy, shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.15, shadowRadius: 6, elevation: 4,
-    borderWidth: 1.5, borderColor: COLORS.navy + '30',
-  },
-  notifBadgeMobile: {
-    position: 'absolute', top: 2, right: 2,
-    minWidth: 16, height: 16, borderRadius: 8,
-    backgroundColor: '#EF4444', alignItems: 'center', justifyContent: 'center',
-    borderWidth: 1.5, borderColor: COLORS.white,
-    paddingHorizontal: 3,
-  },
-  notifBadgeTextMobile: {
-    fontSize: 9, fontWeight: '800',
-    color: COLORS.white,
   },
 
   // ── Stat Cards ──

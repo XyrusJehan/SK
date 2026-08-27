@@ -5,10 +5,11 @@ import {
   Alert,
 } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
+import Head from 'expo-router/head';
 import { useNav } from './navContext';
 import { useAuth } from './authContext';
 import { supabase } from '../../utils/supabase';
-import { NotificationModal, useNotificationCenter } from './notificationCenter';
+import { NotificationModal, useNotificationCenter, BellIcon } from './notificationCenter';
 import Sidebar from './../components/Sidebar';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -106,13 +107,8 @@ const getCategoryMeta = (name) => {
 };
 
 // ─── ICONS ────────────────────────────────────────────────────────────────────
-const BellIcon = ({ hasNotif }) => (
-  <View style={styles.bellWrapper}>
-    <View style={styles.bellBody} />
-    <View style={styles.bellBottom} />
-    {hasNotif && <View style={styles.bellDot} />}
-  </View>
-);
+// BellIcon now lives in notificationCenter.js and is imported above — shared
+// across every screen (SK + LYDO, desktop + mobile) instead of being redrawn here.
 
 const MenuIcon = () => (
   <View style={styles.menuIconContainer}>
@@ -345,12 +341,7 @@ export default function SKDocumentScreen() {
             onPress={notif.open}
             activeOpacity={0.7}
           >
-            <BellIcon hasNotif={notif.hasUnviewed} />
-            {notifCount > 0 && (
-              <View style={styles.notifBadge}>
-                <Text style={styles.notifBadgeText}>{notifCount > 99 ? '99+' : notifCount}</Text>
-              </View>
-            )}
+            <BellIcon count={notifCount} />
           </TouchableOpacity>
         </View>
       )}
@@ -367,12 +358,7 @@ export default function SKDocumentScreen() {
             onPress={notif.open}
             activeOpacity={0.7}
           >
-            <BellIcon hasNotif={notif.hasUnviewed} />
-            {notifCount > 0 && (
-              <View style={styles.notifBadge}>
-                <Text style={styles.notifBadgeText}>{notifCount > 99 ? '99+' : notifCount}</Text>
-              </View>
-            )}
+            <BellIcon count={notifCount} />
           </TouchableOpacity>
         </View>
       )}
@@ -443,7 +429,11 @@ export default function SKDocumentScreen() {
   );
 
   return (
-    <SafeAreaView style={styles.safe}>
+    <>
+      <Head>
+        <title>Document · SK Monitoring</title>
+      </Head>
+      <SafeAreaView style={styles.safe}>
       <StatusBar barStyle="light-content" backgroundColor={COLORS.navy} />
 
       <NotificationModal
@@ -466,6 +456,7 @@ export default function SKDocumentScreen() {
         {renderContent()}
       </View>
     </SafeAreaView>
+    </>
   );
 }
 
@@ -524,12 +515,9 @@ const styles = StyleSheet.create({
   bellBtnMobile: {
     position: 'relative',
   },
-  bellWrapper: { width: 20, height: 22, alignItems: 'center' },
-  bellBody:    { width: 14, height: 12, borderRadius: 7, borderWidth: 2, borderColor: '#8B0000', marginTop: 4 },
-  bellBottom:  { width: 8, height: 4, borderBottomLeftRadius: 4, borderBottomRightRadius: 4, backgroundColor: '#8B0000', marginTop: -1 },
-  bellDot:     { position: 'absolute', top: 0, right: 1, width: 7, height: 7, borderRadius: 4, backgroundColor: COLORS.gold, borderWidth: 1.5, borderColor: COLORS.cardBg },
-  notifBadge:  { position: 'absolute', top: -2, right: -2, width: 16, height: 16, borderRadius: 8, backgroundColor: COLORS.gold, alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: COLORS.white },
-  notifBadgeText: { fontSize: 8, fontWeight: '900', color: COLORS.navy },
+  // Unread-count badge now lives in BellIcon (notificationCenter.js) — it
+  // used to be redefined here in gold/navy, out of sync with SK dashboard's
+  // red/white design. Removed in favor of the shared component.
 
   // Search + Scan
   searchRow: {

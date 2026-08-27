@@ -5,10 +5,11 @@ import {
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
+import Head from 'expo-router/head';
 import { useNav } from './navContext';
 import { useAuth, encryptPassword, decryptPassword, validatePassword } from './authContext';
 import { supabase } from '../../utils/supabase';
-import { NotificationModal, useNotificationCenter } from './notificationCenter';
+import { NotificationModal, useNotificationCenter, BellIcon } from './notificationCenter';
 import Sidebar from './../components/Sidebar';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -49,13 +50,7 @@ const MenuIcon = () => (
   </View>
 );
 
-const BellIcon = ({ hasNotif }) => (
-  <View style={styles.bellWrapper}>
-    <View style={styles.bellBody} />
-    <View style={styles.bellBottom} />
-    {hasNotif && <View style={styles.bellDot} />}
-  </View>
-);
+
 
 const EyeIcon = ({ visible, onPress }) => (
   <TouchableOpacity onPress={onPress} style={styles.eyeBtn} activeOpacity={0.7}>
@@ -304,7 +299,11 @@ export default function AccountScreen() {
   const barangayName = user?.barangay?.barangay_name || 'Unknown Barangay';
 
   return (
-    <SafeAreaView style={styles.safe}>
+    <>
+      <Head>
+        <title>My Account · SK Monitoring</title>
+      </Head>
+      <SafeAreaView style={styles.safe}>
       <StatusBar barStyle="light-content" backgroundColor={COLORS.navy} />
 
       <NotificationModal
@@ -344,12 +343,7 @@ export default function AccountScreen() {
               </TouchableOpacity>
               <Text style={styles.mobileTitle}>Account</Text>
               <TouchableOpacity style={styles.bellBtn} onPress={notif.open} activeOpacity={0.7}>
-                <BellIcon hasNotif={notif.hasUnviewed} />
-                {notifCount > 0 && (
-                  <View style={styles.notifBadge}>
-                    <Text style={styles.notifBadgeText}>{notifCount > 99 ? '99+' : notifCount}</Text>
-                  </View>
-                )}
+              <BellIcon count={notifCount} />
               </TouchableOpacity>
             </View>
           )}
@@ -362,14 +356,9 @@ export default function AccountScreen() {
                 <Text style={styles.headerTitle}>{barangayName.toUpperCase()}</Text>
               </View>
               <View style={styles.headerRight}>
-                <TouchableOpacity style={styles.bellBtn} onPress={notif.open} activeOpacity={0.7}>
-                  <BellIcon hasNotif={notif.hasUnviewed} />
-                  {notifCount > 0 && (
-                    <View style={styles.notifBadge}>
-                      <Text style={styles.notifBadgeText}>{notifCount > 99 ? '99+' : notifCount}</Text>
-                    </View>
-                  )}
-                </TouchableOpacity>
+              <TouchableOpacity style={styles.bellBtn} onPress={notif.open} activeOpacity={0.7}>
+                <BellIcon count={notifCount} />
+              </TouchableOpacity>
               </View>
             </View>
           )}
@@ -785,6 +774,7 @@ export default function AccountScreen() {
         </View>
       )}
     </SafeAreaView>
+    </>
   );
 }
 

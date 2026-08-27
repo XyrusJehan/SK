@@ -1,6 +1,7 @@
 import { Feather } from '@expo/vector-icons';
 import * as DocumentPicker from 'expo-document-picker';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
+import Head from 'expo-router/head';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator, Alert,
@@ -20,7 +21,7 @@ import {
 import { supabase } from '../../utils/supabase';
 import { useAuth } from './authContext';
 import { useNav } from './navContext';
-import { NotificationModal, useNotificationCenter } from './notificationCenter';
+import { NotificationModal, useNotificationCenter, BellIcon } from './notificationCenter';
 import Sidebar from './../components/Sidebar';
 // WebView: use react-native-webview on native, iframe on web
 let WebView = null;
@@ -69,14 +70,6 @@ const MenuIcon = () => (
 );
 
 // Nav icons + NAV_ITEMS now live in the shared Sidebar module (see import above).
-
-const BellIcon = ({ hasNotif }) => (
-  <View style={styles.bellWrapper}>
-    <View style={styles.bellBody} />
-    <View style={styles.bellBottom} />
-    {hasNotif && <View style={styles.bellDot} />}
-  </View>
-);
 
 // Edit icon
 const EditIcon = () => (
@@ -1021,12 +1014,7 @@ export default function SKDocumentManagementScreen() {
           </TouchableOpacity>
           <Text style={styles.mobileTitle}>Document Management</Text>
           <TouchableOpacity style={styles.bellBtn} onPress={notif.open} activeOpacity={0.7}>
-            <BellIcon hasNotif={notif.hasUnviewed} />
-            {notifCount > 0 && (
-              <View style={styles.notifBadge}>
-                <Text style={styles.notifBadgeText}>{notifCount > 99 ? '99+' : notifCount}</Text>
-              </View>
-            )}
+            <BellIcon count={notifCount} />
           </TouchableOpacity>
         </View>
       )}
@@ -1040,12 +1028,7 @@ export default function SKDocumentManagementScreen() {
           </View>
           <View style={styles.headerRight}>
             <TouchableOpacity style={styles.bellBtn} onPress={notif.open} activeOpacity={0.7}>
-              <BellIcon hasNotif={notif.hasUnviewed} />
-              {notifCount > 0 && (
-                <View style={styles.notifBadge}>
-                  <Text style={styles.notifBadgeText}>{notifCount > 99 ? '99+' : notifCount}</Text>
-                </View>
-              )}
+              <BellIcon count={notifCount} />
             </TouchableOpacity>
           </View>
         </View>
@@ -1328,7 +1311,11 @@ export default function SKDocumentManagementScreen() {
   );
 
   return (
-    <SafeAreaView style={styles.safe}>
+    <>
+      <Head>
+        <title>Document Management · SK Monitoring</title>
+      </Head>
+      <SafeAreaView style={styles.safe}>
       <StatusBar barStyle="light-content" backgroundColor={COLORS.navy} />
       <NotificationModal
         {...notif.modalProps}
@@ -1723,7 +1710,7 @@ export default function SKDocumentManagementScreen() {
       )}
 
     </SafeAreaView>
-    
+    </>
   );
 }
 
@@ -1766,19 +1753,15 @@ const styles = StyleSheet.create({
   },
   headerRight: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
 
-  // Bell
+  // Bell — unread-count badge lives in BellIcon (notificationCenter.js);
+  // only the button container is styled here.
   bellBtn: {
     width: 40, height: 40, borderRadius: 20,
     backgroundColor: COLORS.cardBg, alignItems: 'center', justifyContent: 'center',
     shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.08, shadowRadius: 6, elevation: 3,
   },
-  bellWrapper: { width: 20, height: 22, alignItems: 'center' },
-  bellBody:    { width: 14, height: 12, borderRadius: 7, borderWidth: 2, borderColor: '#8B0000', marginTop: 4 },
-  bellBottom:  { width: 8, height: 4, borderBottomLeftRadius: 4, borderBottomRightRadius: 4, backgroundColor: '#8B0000', marginTop: -1 },
-  bellDot:     { position: 'absolute', top: 0, right: 1, width: 7, height: 7, borderRadius: 4, backgroundColor: COLORS.gold, borderWidth: 1.5, borderColor: COLORS.cardBg },
-  notifBadge:  { position: 'absolute', top: -2, right: -2, width: 16, height: 16, borderRadius: 8, backgroundColor: COLORS.gold, alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: COLORS.white },
-  notifBadgeText: { fontSize: 8, fontWeight: '900', color: COLORS.navy },
+
 
   // ── DOCUMENT TAB BAR (4 tabs only) ──
   docTabBar: {

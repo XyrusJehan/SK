@@ -7,6 +7,7 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuth } from './(tabs)/authContext';
+import Head from 'expo-router/head';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const isMobile = SCREEN_WIDTH < 400;
@@ -71,7 +72,11 @@ export default function LoginScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.safe}>
+    <>
+      <Head>
+        <title>Login · SK Monitoring</title>
+      </Head>
+      <SafeAreaView style={styles.safe}>
       <StatusBar barStyle="light-content" backgroundColor={COLORS.navyDark} />
 
       {/* Full-screen background image */}
@@ -165,7 +170,8 @@ export default function LoginScreen() {
           </ScrollView>
         </KeyboardAvoidingView>
       </ImageBackground>
-    </SafeAreaView>
+      </SafeAreaView>
+    </>
   );
 }
 
