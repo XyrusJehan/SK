@@ -12,7 +12,6 @@ import {
   Linking,
   Modal,
   Platform,
-  SafeAreaView,
   ScrollView,
   StatusBar,
   StyleSheet,
@@ -20,6 +19,9 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+// SafeAreaView from core 'react-native' is a no-op on Android. Use the
+// context-aware version so insets work on both platforms.
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { supabase } from '../../utils/supabase';
 import { useAuth } from './authContext';
 import { useNav } from './navContext';
@@ -1257,6 +1259,7 @@ export default function LYDOMonitorScreen() {
         bellCount={notif.count}
         BellIcon={LydoBellIcon}
         colors={COLORS}
+        hidden={isMobile && sidebarVisible}
       />
 
       <ScrollView
@@ -1401,7 +1404,7 @@ export default function LYDOMonitorScreen() {
       <Head>
         <title>LYDO Monitor · SK Monitoring</title>
       </Head>
-      <SafeAreaView style={styles.safe}>
+      <SafeAreaView style={styles.safe} edges={isMobile ? ['left', 'right', 'bottom'] : ['top', 'left', 'right', 'bottom']}>
       <StatusBar barStyle="light-content" backgroundColor={COLORS.navy} />
 
       {/* Notification Modal — lists documents sent by SK officials */}

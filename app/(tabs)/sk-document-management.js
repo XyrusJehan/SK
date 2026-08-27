@@ -10,7 +10,6 @@ import {
   Linking,
   Modal,
   Platform,
-  SafeAreaView,
   ScrollView,
   StatusBar,
   StyleSheet,
@@ -18,6 +17,9 @@ import {
   TouchableOpacity,
   View
 } from 'react-native';
+// SafeAreaView from core 'react-native' is a no-op on Android. Use the
+// context-aware version so insets work on both platforms.
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { supabase } from '../../utils/supabase';
 import { useAuth } from './authContext';
 import { useNav } from './navContext';
@@ -1006,6 +1008,7 @@ export default function SKDocumentManagementScreen() {
         bellCount={notifCount}
         BellIcon={BellIcon}
         colors={COLORS}
+        hidden={isMobile && sidebarVisible}
       />
       <ScrollView
         style={styles.mainScroll}
@@ -1312,7 +1315,7 @@ export default function SKDocumentManagementScreen() {
       <Head>
         <title>Document Management · SK Monitoring</title>
       </Head>
-      <SafeAreaView style={styles.safe}>
+      <SafeAreaView style={styles.safe} edges={isMobile ? ['left', 'right', 'bottom'] : ['top', 'left', 'right', 'bottom']}>
       <StatusBar barStyle="light-content" backgroundColor={COLORS.navy} />
       <NotificationModal
         {...notif.modalProps}
@@ -1489,7 +1492,7 @@ export default function SKDocumentManagementScreen() {
           transparent={false}
           onRequestClose={() => setViewerModal({ visible: false, fileUrl: null, title: '' })}
         >
-          <SafeAreaView style={{ flex: 1, backgroundColor: COLORS.navy }}>
+          <SafeAreaView style={styles.safe} edges={isMobile ? ['left', 'right', 'bottom'] : ['top', 'left', 'right', 'bottom']}>
             {/* Viewer Header */}
             <View style={styles.viewerHeader}>
               <TouchableOpacity

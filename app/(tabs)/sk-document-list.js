@@ -1,9 +1,12 @@
 import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import {
   View, Text, TextInput, ScrollView, TouchableOpacity,
-  StyleSheet, SafeAreaView, StatusBar, Dimensions, Image, Modal,
+  StyleSheet, StatusBar, Dimensions, Image, Modal,
   Platform, Alert, ActivityIndicator,
 } from 'react-native';
+// SafeAreaView from core 'react-native' is a no-op on Android. Use the
+// context-aware version so insets work on both platforms.
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams, useFocusEffect, useNavigation } from 'expo-router';
 import Head from 'expo-router/head';
 import { useNav } from './navContext';
@@ -590,6 +593,7 @@ export default function SKDocumentListScreen() {
         bellCount={notifCount}
         BellIcon={BellIcon}
         colors={COLORS}
+        hidden={isMobile && sidebarVisible}
       />
       <ScrollView
         style={styles.mainScroll}
@@ -763,7 +767,7 @@ export default function SKDocumentListScreen() {
       <Head>
         <title>Document List · SK Monitoring</title>
       </Head>
-      <SafeAreaView style={styles.safe}>
+      <SafeAreaView style={styles.safe} edges={isMobile ? ['left', 'right', 'bottom'] : ['top', 'left', 'right', 'bottom']}>
       <StatusBar barStyle="light-content" backgroundColor={COLORS.navy} />
       <NotificationModal
         {...notif.modalProps}

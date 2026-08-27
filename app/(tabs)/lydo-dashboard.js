@@ -8,7 +8,6 @@ import {
   Alert,
   Dimensions,
   Modal,
-  SafeAreaView,
   ScrollView,
   StatusBar,
   StyleSheet,
@@ -16,6 +15,11 @@ import {
   TouchableOpacity,
   View
 } from 'react-native';
+// NOTE: SafeAreaView from core 'react-native' only applies inset padding on
+// iOS — it's a documented no-op on Android, which is why content (and the
+// mobile sidebar drawer) rendered underneath the status bar there. The
+// context-aware version below works correctly on both platforms.
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { supabase } from '../../utils/supabase';
 import { useLydoNotificationCenter, LydoNotificationModal, LydoBellIcon } from './notificationCenter';
 import Sidebar, { LYDO_NAV_ITEMS } from './../components/Sidebar';
@@ -950,7 +954,7 @@ export default function LYDOHomeScreen() {
       <Head>
         <title>LYDO Dashboard · SK Monitoring</title>
       </Head>
-      <SafeAreaView style={styles.safe}>
+      <SafeAreaView style={styles.safe} edges={isMobile ? ['left', 'right', 'bottom'] : ['top', 'left', 'right', 'bottom']}>
       <StatusBar barStyle="light-content" backgroundColor={COLORS.navy} />
       <CalendarModal visible={calendarVisible} onClose={() => setCalendarVisible(false)} />
 
@@ -1040,8 +1044,9 @@ export default function LYDOHomeScreen() {
             onBellPress={notif.open}
             bellCount={notif.count}
             BellIcon={LydoBellIcon}
-            hidden={sidebarVisible}
+            
             colors={COLORS}
+            hidden={isMobile && sidebarVisible}
           />
           <ScrollView
             style={{ flex: 1 }}

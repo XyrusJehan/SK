@@ -25,6 +25,7 @@
 //         bellCount={notif.count}
 //         BellIcon={BellIcon}
 //         colors={COLORS}
+//         hidden={isMobile && sidebarVisible}
 //       />
 //       <ScrollView contentContainerStyle={styles.mainContent}>
 //         ... rest of the screen ...

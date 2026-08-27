@@ -54,6 +54,7 @@
 
 import React from 'react';
 import { View, Text, TouchableOpacity, Image, StyleSheet, Dimensions } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -218,12 +219,21 @@ export default function Sidebar({
   logoSource = require('./../../assets/images/sk-logo.png'),
 }) {
   const isMobile = isMobileProp ?? SCREEN_WIDTH < 768;
+  const insets = useSafeAreaInsets();
+
+  // On mobile the drawer is an absolutely-positioned overlay that starts at
+  // top:0, so it sits *behind* the status bar (notch, clock, battery) unless
+  // we manually pad it with the device's safe-area inset. Desktop/tablet
+  // layout doesn't need this since the sidebar there is a normal in-flow
+  // column, not an overlay drawn under the OS status bar.
+  const mobileTopPad = isMobile ? { paddingTop: 20 + (insets?.top ?? 0) } : null;
 
   return (
     <View
       style={[
         styles.sidebar,
         isMobile && styles.sidebarMobile,
+        mobileTopPad,
         isMobile && !sidebarVisible && styles.sidebarHidden,
       ]}
     >
@@ -287,8 +297,12 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     height: '100%',
-    zIndex: 30,
-    elevation: 20, // keep above Android's overlay backdrop too
+    // Must outrank MobileHeader's wrapper (zIndex: 50, elevation: 8) on
+    // BOTH platforms — iOS/web resolve stacking via zIndex, Android via
+    // elevation — otherwise the header bar (and its tappable bell/menu
+    // area) can paint on top of the open drawer instead of behind it.
+    zIndex: 100,
+    elevation: 24,
     shadowColor: '#000',
     shadowOffset: { width: 2, height: 0 },
     shadowOpacity: 0.15,

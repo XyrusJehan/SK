@@ -1,9 +1,12 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, TextInput, ScrollView, TouchableOpacity,
-  StyleSheet, SafeAreaView, StatusBar, Dimensions,
+  StyleSheet, StatusBar, Dimensions,
   Alert,
 } from 'react-native';
+// SafeAreaView from core 'react-native' is a no-op on Android. Use the
+// context-aware version so insets work on both platforms.
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
 import Head from 'expo-router/head';
 import { useNav } from './navContext';
@@ -119,7 +122,13 @@ const getCategoryMeta = (name) => {
 const DocumentCard = ({ group, onItemPress, submittedSet }) => {
   const { colors, title, icon, items } = group;
   return (
-    <View style={[styles.card, { backgroundColor: colors.bg, borderColor: colors.border || '#E5E5E5' }]}>
+    <View
+      style={[
+        styles.card,
+        !isMobile && styles.cardFillHeight,
+        { backgroundColor: colors.bg, borderColor: colors.border || '#E5E5E5' },
+      ]}
+    >
       <View style={[styles.cardHeader, { backgroundColor: colors.header }]}>
         <Text style={styles.cardHeaderIcon}>{icon}</Text>
         <Text style={styles.cardHeaderTitle}>{title}</Text>
@@ -329,6 +338,7 @@ export default function SKDocumentScreen() {
         bellCount={notifCount}
         BellIcon={BellIcon}
         colors={COLORS}
+        hidden={isMobile && sidebarVisible}
       />
       <ScrollView
         style={styles.mainScroll}
@@ -425,7 +435,7 @@ export default function SKDocumentScreen() {
       <Head>
         <title>Document · SK Monitoring</title>
       </Head>
-      <SafeAreaView style={styles.safe}>
+      <SafeAreaView style={styles.safe} edges={isMobile ? ['left', 'right', 'bottom'] : ['top', 'left', 'right', 'bottom']}>
       <StatusBar barStyle="light-content" backgroundColor={COLORS.navy} />
 
       <NotificationModal
@@ -580,6 +590,13 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.06, shadowRadius: 6,
+  },
+  // Only used on the desktop row-wrap grid, to make cards in the same row
+  // match height. On mobile (column stack) each card wrapper has no fixed
+  // height, and a bare `height: '100%'` there resolves against the nearest
+  // ancestor with a defined height on Android — stretching the first card
+  // to fill the whole scroll view and pushing every other card off-screen.
+  cardFillHeight: {
     height: '100%',
   },
   cardHeader: {

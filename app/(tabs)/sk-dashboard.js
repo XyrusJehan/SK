@@ -6,7 +6,6 @@ import React, { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Dimensions, Image, Modal,
-  SafeAreaView,
   ScrollView,
   StatusBar,
   StyleSheet,
@@ -14,6 +13,11 @@ import {
   TouchableOpacity,
   View
 } from 'react-native';
+// NOTE: SafeAreaView from core 'react-native' only applies inset padding on
+// iOS — it's a documented no-op on Android, which is why content (and the
+// mobile sidebar drawer) rendered underneath the status bar there. The
+// context-aware version below works correctly on both platforms.
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { supabase } from '../../utils/supabase';
 import { useAuth } from './authContext';
 import { useNav } from './navContext';
@@ -1345,7 +1349,7 @@ const seenReady = seenLoaded ? 1 : 0;
       <Head>
         <title>Dashboard · SK Monitoring</title>
       </Head>
-      <SafeAreaView style={styles.safe}>
+      <SafeAreaView style={styles.safe} edges={isMobile ? ['left', 'right', 'bottom'] : ['top', 'left', 'right', 'bottom']}>
       <StatusBar barStyle="light-content" backgroundColor={COLORS.navy} />
 
       {/* ── Calendar Modal ── */}
@@ -1405,6 +1409,7 @@ const seenReady = seenLoaded ? 1 : 0;
             BellIcon={BellIcon}
             hidden={sidebarVisible}
             colors={COLORS}
+            
           />
           <ScrollView style={styles.mainScroll} contentContainerStyle={styles.mainContent} showsVerticalScrollIndicator={false}>
             <MobileHeaderSpacer />

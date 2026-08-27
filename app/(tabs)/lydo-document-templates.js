@@ -6,7 +6,6 @@ import {
   Dimensions,
   Linking,
   Modal,
-  SafeAreaView,
   ScrollView,
   StatusBar,
   StyleSheet,
@@ -15,6 +14,9 @@ import {
   TouchableOpacity,
   View
 } from 'react-native';
+// SafeAreaView from core 'react-native' is a no-op on Android. Use the
+// context-aware version so insets work on both platforms.
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useNav } from './navContext';
 import Sidebar, { LYDO_NAV_ITEMS } from './../components/Sidebar';
@@ -1520,6 +1522,7 @@ export default function LYDODocumentTemplatesScreen() {
         bellCount={notif.count}
         BellIcon={LydoBellIcon}
         colors={COLORS}
+        hidden={isMobile && sidebarVisible}
       />
       <ScrollView
         style={{ flex: 1 }}
@@ -1787,7 +1790,7 @@ export default function LYDODocumentTemplatesScreen() {
       <Head>
         <title>LYDO Document Templates · SK Monitoring</title>
       </Head>
-      <SafeAreaView style={styles.safe}>
+      <SafeAreaView style={styles.safe} edges={isMobile ? ['left', 'right', 'bottom'] : ['top', 'left', 'right', 'bottom']}>
       <StatusBar barStyle="light-content" backgroundColor={COLORS.navy} />
 
       {renderCategoryDropdown()}
