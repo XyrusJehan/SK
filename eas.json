@@ -19,14 +19,14 @@
       "android": {
         "buildType": "apk"
       },
-      "postBuild": "mv app-release.apk SK-RIZAL-0.1-preview.apk 2>/dev/null || mv app.apk SK-RIZAL-0.1-preview.apk 2>/dev/null || true"
+      "artifactPath": "android/app/build/outputs/apk/release/app-release.apk:SK-RIZAL-0.1-preview.apk"
     },
     "production": {
       "distribution": "store",
       "android": {
         "buildType": "apk"
       },
-      "postBuild": "mv app-release.apk SK-RIZAL-0.1.apk 2>/dev/null || mv app.apk SK-RIZAL-0.1.apk 2>/dev/null || true"
+      "artifactPath": "android/app/build/outputs/apk/release/app-release.apk:SK-RIZAL-0.1.apk"
     }
   }
 }
