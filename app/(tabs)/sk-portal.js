@@ -2319,6 +2319,7 @@ const successStyles = StyleSheet.create({
     borderRadius: 3,
     marginTop: 4,
     flexShrink: 0,
+    
   },
   docChipText: {
     flex: 1,
