@@ -3,9 +3,9 @@ import {
   ActivityIndicator,
   Alert,
   Dimensions,
+  Linking,
   Modal,
   Platform,
-  SafeAreaView,
   ScrollView,
   StatusBar,
   StyleSheet,
@@ -19,13 +19,20 @@ import { Feather } from '@expo/vector-icons';
 import * as DocumentPicker from 'expo-document-picker';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import Head from 'expo-router/head';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { supabase } from '../../utils/supabase';
 import Sidebar from './../components/Sidebar';
 import { useAuth } from './authContext';
+import MobileHeader, { MobileHeaderSpacer } from './mobileHeader';
 import { useNav } from './navContext';
 import { BellIcon, NotificationModal, useNotificationCenter } from './notificationCenter';
 import { DocumentScannerButton } from './scanner/DocumentScannerButton';
 import { useDocumentScanner } from './scanner/useDocumentScanner';
+// WebView: use react-native-webview on native, iframe on web (matches management screen)
+let WebView = null;
+if (Platform.OS !== 'web') {
+  WebView = require('react-native-webview').WebView;
+}
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const isMobile = SCREEN_WIDTH < 768;
 
@@ -72,10 +79,6 @@ const DEFAULT_DOCUMENT_TABS = ['Financial', 'Planning', 'Governance', 'Activitie
 const DOCUMENTS_DATA = {};
 
 // ─── ICONS ────────────────────────────────────────────────────────────────────
-// MenuIcon now lives in the shared mobileHeader module (see import above) so the
-// sticky mobile bar is identical on every SK + LYDO screen.
-
-
 // ─── FILE ICON ────────────────────────────────────────────────────────────────
 const FileIcon = ({ name }) => {
   const ext = name?.split('.').pop()?.toLowerCase();
@@ -666,9 +669,21 @@ export default function SKDocumentListScreen() {
 
 
   
+  // ── Sidebar (rendered by the shared Sidebar module) ──
+  const renderSidebar = () => (
+    <Sidebar
+      activeTab={activeTab}
+      onNavPress={handleNavPress}
+      onLogout={handleLogout}
+      isMobile={isMobile}
+      sidebarVisible={sidebarVisible}
+    />
+  );
+
   // ── Main Content ──
   const renderContent = () => (
     <View style={[styles.main, isMobile && styles.mainMobile]}>
+      {/* Pinned mobile header — sits above the ScrollView, never scrolls away */}
       <MobileHeader
         title="Documents"
         onMenuPress={() => setSidebarVisible(true)}
@@ -683,24 +698,25 @@ export default function SKDocumentListScreen() {
         contentContainerStyle={styles.mainContent}
         showsVerticalScrollIndicator={false}
       >
+        {/* Spacer so the first row of content isn't hidden under the pinned header */}
         <MobileHeaderSpacer />
 
-      {/* Desktop Header */}
-      {!isMobile && (
-        <View style={styles.header}>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.headerSub}>SANGGUNIANG KABATAAN</Text>
-            <Text style={styles.headerTitle}>{barangayName.toUpperCase()}</Text>
+        {/* Desktop Header */}
+        {!isMobile && (
+          <View style={styles.header}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.headerSub}>SANGGUNIANG KABATAAN</Text>
+              <Text style={styles.headerTitle}>{barangayName.toUpperCase()}</Text>
+            </View>
+            <View style={styles.headerRight}>
+              <TouchableOpacity style={styles.bellBtn} onPress={notif.open} activeOpacity={0.7}>
+                <BellIcon count={notifCount} />
+              </TouchableOpacity>
+            </View>
           </View>
-          <View style={styles.headerRight}>
-            <TouchableOpacity style={styles.bellBtn} onPress={notif.open} activeOpacity={0.7}>
-              <BellIcon count={notifCount} />
-            </TouchableOpacity>
-          </View>
-        </View>
-      )}
+        )}
 
-      {/* Category label + All dropdown + Tab bar */}
+        {/* Category label + All dropdown + Tab bar */}
       <View style={styles.categoryRow}>
         <Text style={styles.categoryLabel}>Category:</Text>
       </View>
@@ -854,7 +870,7 @@ export default function SKDocumentListScreen() {
           </View>
         )}
       </View>
-    </ScrollView>
+      </ScrollView>
     </View>
   );
 
@@ -880,13 +896,7 @@ export default function SKDocumentListScreen() {
             onPress={() => setSidebarVisible(false)}
           />
         )}
-        <Sidebar
-          activeTab={activeTab}
-          onNavPress={handleNavPress}
-          onLogout={handleLogout}
-          isMobile={isMobile}
-          sidebarVisible={sidebarVisible}
-        />
+        {renderSidebar()}
         {renderContent()}
       <Modal
         visible={uploadModalVisible}
@@ -1209,6 +1219,8 @@ const styles = StyleSheet.create({
   },
 
   // ── Main ──
+  // `main` is the flex container that MobileHeader (pinned, absolute) and the
+  // ScrollView sit inside as siblings. `mainScroll` is the ScrollView itself.
   main:        { flex: 1, backgroundColor: COLORS.offWhite, borderTopLeftRadius: 20 },
   mainMobile:  { borderTopLeftRadius: 0 },
   mainScroll:  { flex: 1 },
