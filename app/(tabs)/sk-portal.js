@@ -318,13 +318,13 @@ export default function SKPortalScreen() {
 
         // Then get comments for these posts
         const { data: comments, error } = await supabase
-          .from('resident_comments')
+          .from('comments')
           .select(`
             comment_id,
             content,
             created_at,
             is_read,
-            resident_id,
+            author_id,
             users (
               first_name,
               last_name
