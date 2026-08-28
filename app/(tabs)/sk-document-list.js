@@ -1,23 +1,38 @@
-import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  View, Text, TextInput, ScrollView, TouchableOpacity,
-  StyleSheet, StatusBar, Dimensions, Image, Modal,
-  Platform, Alert, ActivityIndicator,
+  ActivityIndicator,
+  Alert,
+  Dimensions,
+  Linking,
+  Modal,
+  Platform,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text, TextInput,
+  TouchableOpacity,
+  View
 } from 'react-native';
 // SafeAreaView from core 'react-native' is a no-op on Android. Use the
 // context-aware version so insets work on both platforms.
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter, useLocalSearchParams, useFocusEffect, useNavigation } from 'expo-router';
-import Head from 'expo-router/head';
-import { useNav } from './navContext';
-import { useAuth } from './authContext';
-import { supabase } from '../../utils/supabase';
-import { NotificationModal, useNotificationCenter, BellIcon } from './notificationCenter';
+import { Feather } from '@expo/vector-icons';
 import * as DocumentPicker from 'expo-document-picker';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
+import Head from 'expo-router/head';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { supabase } from '../../utils/supabase';
+import Sidebar from './../components/Sidebar';
+import { useAuth } from './authContext';
+import MobileHeader, { MobileHeaderSpacer } from './mobileHeader';
+import { useNav } from './navContext';
+import { BellIcon, NotificationModal, useNotificationCenter } from './notificationCenter';
 import { DocumentScannerButton } from './scanner/DocumentScannerButton';
 import { useDocumentScanner } from './scanner/useDocumentScanner';
-import Sidebar from './../components/Sidebar';
-import MobileHeader, { MobileHeaderSpacer } from './mobileHeader';
+// WebView: use react-native-webview on native, iframe on web (matches management screen)
+let WebView = null;
+if (Platform.OS !== 'web') {
+  WebView = require('react-native-webview').WebView;
+}
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const isMobile = SCREEN_WIDTH < 768;
 
@@ -45,6 +60,9 @@ const COLORS = {
   darkText:  '#1A1A1A',
   subText:   '#666666',
   cardBg:    '#FFFFFF',
+  red:       '#D32F2F',
+  blue:      '#1565C0',
+  teal:      '#00796B',
   planning:   { header: '#7B9FD4', bg: '#EEF3FB', accent: '#2A4E8A' },
   financial:  { header: '#4CAF50', bg: '#EDF7EE', accent: '#1A6B38' },
   governance: { header: '#7C5CBF', bg: '#F2EEF9', accent: '#5A2EA0' },
@@ -61,10 +79,6 @@ const DEFAULT_DOCUMENT_TABS = ['Financial', 'Planning', 'Governance', 'Activitie
 const DOCUMENTS_DATA = {};
 
 // ─── ICONS ────────────────────────────────────────────────────────────────────
-// MenuIcon now lives in the shared mobileHeader module (see import above) so the
-// sticky mobile bar is identical on every SK + LYDO screen.
-
-
 // ─── FILE ICON ────────────────────────────────────────────────────────────────
 const FileIcon = ({ name }) => {
   const ext = name?.split('.').pop()?.toLowerCase();
@@ -76,6 +90,20 @@ const FileIcon = ({ name }) => {
     </View>
   );
 };
+
+// View icon — matches sk-document-management
+const ViewIcon = () => (
+  <View style={styles.actionIconWrap}>
+    <Feather name="eye" size={isMobile ? 13 : 15} color={COLORS.teal} />
+  </View>
+);
+
+// Save / download icon — matches sk-document-management
+const SaveIcon = () => (
+  <View style={styles.actionIconWrap}>
+    <Feather name="download" size={isMobile ? 13 : 15} color={COLORS.navy} />
+  </View>
+);
 
 
 // ─── MAIN SCREEN ──────────────────────────────────────────────────────────────
@@ -317,7 +345,7 @@ export default function SKDocumentListScreen() {
 
       const query = supabase
         .from('documents')
-        .select('document_id, title, folder_category, document_type, status, year, created_at')
+        .select('document_id, title, folder_category, document_type, status, year, created_at, file_url')
         .eq('barangay_id', barangayId);
 
       // Filter by category ID (stored as string in folder_category)
@@ -332,6 +360,26 @@ export default function SKDocumentListScreen() {
         return;
       }
 
+      // For docs without a file_url on the parent row, fall back to the latest
+      // version's file_url from document_versions.
+      const docsNeedingVersion = (docs || []).filter(d => !d.file_url);
+      let latestVersionByDoc = {};
+      if (docsNeedingVersion.length > 0) {
+        const ids = docsNeedingVersion.map(d => d.document_id);
+        const { data: versions, error: verErr } = await supabase
+          .from('document_versions')
+          .select('document_id, file_url, version_number')
+          .in('document_id', ids)
+          .order('version_number', { ascending: false });
+        if (!verErr && versions) {
+          versions.forEach(v => {
+            if (!latestVersionByDoc[v.document_id]) {
+              latestVersionByDoc[v.document_id] = v.file_url;
+            }
+          });
+        }
+      }
+
       // Transform the data to include readable category and document type names
       const formattedDocs = docs?.map(doc => ({
         id: doc.document_id,
@@ -339,7 +387,8 @@ export default function SKDocumentListScreen() {
         date: doc.created_at ? new Date(doc.created_at).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
         category_name: documentCategories.find(c => c.id === Number(doc.folder_category))?.document_category || doc.folder_category || '',
         doc_type_name: documentTypes.find(t => t.id === Number(doc.document_type))?.document_type || doc.document_type || '',
-        year_value: folderYears.find(y => y.id === Number(doc.year))?.fiscal_year || doc.year
+        year_value: folderYears.find(y => y.id === Number(doc.year))?.fiscal_year || doc.year,
+        file_url: doc.file_url || latestVersionByDoc[doc.document_id] || null,
       })) || [];
 
       setDocuments(formattedDocs);
@@ -414,6 +463,43 @@ export default function SKDocumentListScreen() {
 
   const formatDate = (dateStr) => {
     return toPhilippineDate(dateStr, { year: 'numeric', month: 'short', day: 'numeric' });
+  };
+
+  // In-app viewer (matches sk-document-management): full-screen modal with
+  // a WebView/iframe rendering the file through the Google Docs viewer.
+  const [viewerModal, setViewerModal] = useState({ visible: false, fileUrl: null, title: '' });
+  const [webViewLoading, setWebViewLoading] = useState(false);
+  const [downloadModalVisible, setDownloadModalVisible] = useState(false);
+  const [documentToDownload, setDocumentToDownload] = useState(null);
+
+  const handleViewDocument = (doc) => {
+    if (!doc?.file_url) {
+      Alert.alert('No File', 'This document does not have a file attached.');
+      return;
+    }
+    setViewerModal({ visible: true, fileUrl: doc.file_url, title: doc.name });
+    setWebViewLoading(true);
+  };
+
+  const handleDownloadDocument = (doc) => {
+    if (!doc?.file_url) {
+      Alert.alert('No File', 'This document does not have a file attached.');
+      return;
+    }
+    setDocumentToDownload({ fileUrl: doc.file_url, title: doc.name });
+    setDownloadModalVisible(true);
+  };
+
+  const handleDownloadConfirm = async () => {
+    if (!documentToDownload?.fileUrl) return;
+    setDownloadModalVisible(false);
+    setDocumentToDownload(null);
+    try {
+      await Linking.openURL(documentToDownload.fileUrl);
+    } catch (err) {
+      console.error('Download error:', err);
+      Alert.alert('Download Failed', `Could not open the file: ${err.message}`);
+    }
   };
 
   const handleNavPress = (tab) => {
@@ -583,9 +669,21 @@ export default function SKDocumentListScreen() {
 
 
   
+  // ── Sidebar (rendered by the shared Sidebar module) ──
+  const renderSidebar = () => (
+    <Sidebar
+      activeTab={activeTab}
+      onNavPress={handleNavPress}
+      onLogout={handleLogout}
+      isMobile={isMobile}
+      sidebarVisible={sidebarVisible}
+    />
+  );
+
   // ── Main Content ──
   const renderContent = () => (
     <View style={[styles.main, isMobile && styles.mainMobile]}>
+      {/* Pinned mobile header — sits above the ScrollView, never scrolls away */}
       <MobileHeader
         title="Documents"
         onMenuPress={() => setSidebarVisible(true)}
@@ -600,24 +698,25 @@ export default function SKDocumentListScreen() {
         contentContainerStyle={styles.mainContent}
         showsVerticalScrollIndicator={false}
       >
+        {/* Spacer so the first row of content isn't hidden under the pinned header */}
         <MobileHeaderSpacer />
 
-      {/* Desktop Header */}
-      {!isMobile && (
-        <View style={styles.header}>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.headerSub}>SANGGUNIANG KABATAAN</Text>
-            <Text style={styles.headerTitle}>{barangayName.toUpperCase()}</Text>
+        {/* Desktop Header */}
+        {!isMobile && (
+          <View style={styles.header}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.headerSub}>SANGGUNIANG KABATAAN</Text>
+              <Text style={styles.headerTitle}>{barangayName.toUpperCase()}</Text>
+            </View>
+            <View style={styles.headerRight}>
+              <TouchableOpacity style={styles.bellBtn} onPress={notif.open} activeOpacity={0.7}>
+                <BellIcon count={notifCount} />
+              </TouchableOpacity>
+            </View>
           </View>
-          <View style={styles.headerRight}>
-            <TouchableOpacity style={styles.bellBtn} onPress={notif.open} activeOpacity={0.7}>
-              <BellIcon count={notifCount} />
-            </TouchableOpacity>
-          </View>
-        </View>
-      )}
+        )}
 
-      {/* Category label + All dropdown + Tab bar */}
+        {/* Category label + All dropdown + Tab bar */}
       <View style={styles.categoryRow}>
         <Text style={styles.categoryLabel}>Category:</Text>
       </View>
@@ -733,22 +832,35 @@ export default function SKDocumentListScreen() {
         <View style={[styles.tableHeader, { backgroundColor: tabColor.bg }]}>
           <Text style={[styles.tableHeaderText, { flex: 3 }]}>Document Name</Text>
           <Text style={[styles.tableHeaderText, { flex: 1, textAlign: 'right' }]}>Date</Text>
+          <Text style={[styles.tableHeaderText, { width: 90, textAlign: 'center' }]}>Action</Text>
         </View>
 
         {/* Table Rows */}
         {visibleDocs.length > 0 ? (
           visibleDocs.map((doc, idx) => (
-            <TouchableOpacity
+            <View
               key={doc.id}
               style={[styles.tableRow, idx % 2 === 1 && { backgroundColor: tabColor.bg + '55' }]}
-              activeOpacity={0.7}
             >
               <View style={styles.tableRowLeft}>
-                <FileIcon name={doc.name} />
                 <Text style={styles.docName} numberOfLines={1}>{doc.name}</Text>
               </View>
               <Text style={styles.docDate}>{formatDate(doc.date)}</Text>
-            </TouchableOpacity>
+              <View style={styles.rowActions}>
+                <TouchableOpacity
+                  activeOpacity={0.7}
+                  onPress={() => handleDownloadDocument(doc)}
+                >
+                  <SaveIcon />
+                </TouchableOpacity>
+                <TouchableOpacity
+                  activeOpacity={0.7}
+                  onPress={() => handleViewDocument(doc)}
+                >
+                  <ViewIcon />
+                </TouchableOpacity>
+              </View>
+            </View>
           ))
         ) : (
           <View style={styles.emptyState}>
@@ -758,7 +870,7 @@ export default function SKDocumentListScreen() {
           </View>
         )}
       </View>
-    </ScrollView>
+      </ScrollView>
     </View>
   );
 
@@ -784,13 +896,7 @@ export default function SKDocumentListScreen() {
             onPress={() => setSidebarVisible(false)}
           />
         )}
-        <Sidebar
-          activeTab={activeTab}
-          onNavPress={handleNavPress}
-          onLogout={handleLogout}
-          isMobile={isMobile}
-          sidebarVisible={sidebarVisible}
-        />
+        {renderSidebar()}
         {renderContent()}
       <Modal
         visible={uploadModalVisible}
@@ -983,6 +1089,118 @@ export default function SKDocumentListScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* ── Document Viewer (matches sk-document-management) ── */}
+      <Modal
+        visible={viewerModal.visible}
+        animationType="slide"
+        transparent={false}
+        onRequestClose={() => setViewerModal({ visible: false, fileUrl: null, title: '' })}
+      >
+        <SafeAreaView style={{ flex: 1, backgroundColor: COLORS.navy }}>
+          <View style={styles.viewerHeader}>
+            <TouchableOpacity
+              style={styles.viewerBackBtn}
+              onPress={() => setViewerModal({ visible: false, fileUrl: null, title: '' })}
+              activeOpacity={0.8}
+            >
+              <Feather name="arrow-left" size={20} color={COLORS.white} />
+            </TouchableOpacity>
+            <Text style={styles.viewerTitle} numberOfLines={1}>
+              {viewerModal.title}
+            </Text>
+            {viewerModal.fileUrl && (
+              <TouchableOpacity
+                style={styles.viewerOpenBtn}
+                onPress={() => {
+                  setViewerModal({ visible: false, fileUrl: null, title: '' });
+                  setDocumentToDownload({ fileUrl: viewerModal.fileUrl, title: viewerModal.title });
+                  setDownloadModalVisible(true);
+                }}
+                activeOpacity={0.8}
+              >
+                <Feather name="download" size={18} color={COLORS.gold} />
+              </TouchableOpacity>
+            )}
+          </View>
+
+          <View style={{ flex: 1, backgroundColor: COLORS.offWhite, overflow: 'hidden' }}>
+            {viewerModal.fileUrl && (
+              Platform.OS === 'web' ? (
+                <iframe
+                  src={`https://docs.google.com/gview?embedded=true&url=${encodeURIComponent(viewerModal.fileUrl)}`}
+                  style={{ flex: 1, width: '100%', height: '100%', border: 'none' }}
+                  title={viewerModal.title}
+                />
+              ) : (
+                <WebView
+                  source={{
+                    uri: `https://docs.google.com/gview?embedded=true&url=${encodeURIComponent(viewerModal.fileUrl)}`,
+                  }}
+                  style={{ flex: 1 }}
+                  onLoadStart={() => setWebViewLoading(true)}
+                  onLoadEnd={() => setWebViewLoading(false)}
+                  onError={() => {
+                    setWebViewLoading(false);
+                    Alert.alert('Load Failed', 'Could not load the document. Try opening it externally.');
+                    setViewerModal({ visible: false, fileUrl: null, title: '' });
+                  }}
+                  startInLoadingState={true}
+                  renderLoading={() => (
+                    <View style={styles.viewerLoading}>
+                      <ActivityIndicator size="large" color={COLORS.navy} />
+                      <Text style={styles.viewerLoadingText}>Loading document…</Text>
+                    </View>
+                  )}
+                />
+              )
+            )}
+          </View>
+        </SafeAreaView>
+      </Modal>
+
+      {/* ── Download Confirmation Modal (matches sk-document-management) ── */}
+      <Modal
+        visible={downloadModalVisible}
+        animationType="fade"
+        transparent={true}
+        onRequestClose={() => { setDownloadModalVisible(false); setDocumentToDownload(null); }}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.dlModalContent}>
+            <View style={styles.modalIconStrip}>
+              <View style={[styles.modalIconCircle, { backgroundColor: '#DBEAFE' }]}>
+                <Feather name="download" size={26} color={COLORS.blue} />
+              </View>
+            </View>
+            <View style={styles.dlModalBody}>
+              <Text style={styles.dlModalTitle}>Download Document</Text>
+              <Text style={styles.dlModalBodyText}>
+                Do you want to download{' '}
+                <Text style={styles.modalHighlight}>"{documentToDownload?.title}"</Text>?
+              </Text>
+            </View>
+            <View style={styles.modalDivider} />
+            <View style={styles.dlModalFooter}>
+              <TouchableOpacity
+                style={styles.dlModalCancelBtn}
+                onPress={() => { setDownloadModalVisible(false); setDocumentToDownload(null); }}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.dlModalCancelBtnText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalActionBtn, { backgroundColor: COLORS.blue }]}
+                onPress={handleDownloadConfirm}
+                activeOpacity={0.8}
+              >
+                <Feather name="download" size={14} color={COLORS.white} style={{ marginRight: 6 }} />
+                <Text style={styles.modalActionBtnText}>Download</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   </SafeAreaView>
     </>
@@ -1001,6 +1219,8 @@ const styles = StyleSheet.create({
   },
 
   // ── Main ──
+  // `main` is the flex container that MobileHeader (pinned, absolute) and the
+  // ScrollView sit inside as siblings. `mainScroll` is the ScrollView itself.
   main:        { flex: 1, backgroundColor: COLORS.offWhite, borderTopLeftRadius: 20 },
   mainMobile:  { borderTopLeftRadius: 0 },
   mainScroll:  { flex: 1 },
@@ -1165,6 +1385,12 @@ const styles = StyleSheet.create({
   fileIconText: { fontSize: 7, fontWeight: '900', color: COLORS.white, letterSpacing: 0.5 },
   docName:      { flex: 1, fontSize: 12, color: COLORS.darkText, fontWeight: '500' },
   docDate:      { flex: 1, fontSize: 11, color: COLORS.subText, textAlign: 'right' },
+  rowActions: {
+    width: 90, flexDirection: 'row', alignItems: 'center',
+    justifyContent: 'center', gap: isMobile ? 2 : 4,
+  },
+  actionIconWrap: { padding: 4 },
+  actionIconText: { fontSize: isMobile ? 14 : 16 },
 
   // Empty state
   emptyState:   { alignItems: 'center', paddingVertical: 60 },
@@ -1261,4 +1487,101 @@ const styles = StyleSheet.create({
   },
   modalUploadBtnDisabled: { backgroundColor: COLORS.midGray },
   modalUploadBtnText: { fontSize: 14, fontWeight: '700', color: COLORS.white },
+
+  // ── Download / Viewer Modals (matches sk-document-management) ──
+  dlModalContent: {
+    width: '88%', maxWidth: 380,
+    backgroundColor: COLORS.white,
+    borderRadius: 20,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.25,
+    shadowRadius: 20,
+    elevation: 20,
+  },
+  dlModalBody: {
+    paddingHorizontal: 24, paddingTop: 14, paddingBottom: 20, alignItems: 'center',
+  },
+  dlModalTitle: {
+    fontSize: 17, fontWeight: '800', color: COLORS.darkText,
+    textAlign: 'center', marginBottom: 10, letterSpacing: 0.2,
+  },
+  dlModalBodyText: {
+    fontSize: 13.5, color: COLORS.subText, lineHeight: 20,
+    textAlign: 'center',
+  },
+  dlModalFooter: {
+    flexDirection: 'row', gap: 10,
+    paddingHorizontal: 20, paddingVertical: 16,
+    backgroundColor: COLORS.offWhite,
+  },
+  dlModalCancelBtn: {
+    flex: 1, paddingVertical: 13, borderRadius: 10,
+    borderWidth: 1.5, borderColor: COLORS.lightGray,
+    alignItems: 'center', backgroundColor: COLORS.white,
+  },
+  dlModalCancelBtnText: {
+    fontSize: 14, fontWeight: '700', color: COLORS.subText,
+  },
+  modalIconStrip: {
+    alignItems: 'center',
+    paddingTop: 28,
+    paddingBottom: 4,
+    backgroundColor: COLORS.white,
+  },
+  modalIconCircle: {
+    width: 64, height: 64, borderRadius: 32,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  modalDivider: {
+    height: 1, backgroundColor: COLORS.lightGray,
+  },
+  modalHighlight: {
+    fontWeight: '700', color: COLORS.darkText,
+  },
+  modalActionBtn: {
+    flex: 1, flexDirection: 'row', paddingVertical: 13, borderRadius: 10,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  modalActionBtnText: {
+    fontSize: 14, fontWeight: '700', color: COLORS.white,
+  },
+
+  // ── Document Viewer ──
+  viewerHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.navy,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    gap: 10,
+  },
+  viewerBackBtn: {
+    padding: 6,
+    borderRadius: 8,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+  },
+  viewerTitle: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: '700',
+    color: COLORS.white,
+  },
+  viewerOpenBtn: {
+    padding: 6,
+    borderRadius: 8,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+  },
+  viewerLoading: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.offWhite,
+    gap: 12,
+  },
+  viewerLoadingText: {
+    fontSize: 13,
+    color: COLORS.subText,
+  },
 });
