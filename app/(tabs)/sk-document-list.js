@@ -1,26 +1,31 @@
-import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  View, Text, TextInput, ScrollView, TouchableOpacity,
-  StyleSheet, SafeAreaView, StatusBar, Dimensions, Image, Modal,
-  Platform, Alert, ActivityIndicator, Linking,
+  ActivityIndicator,
+  Alert,
+  Dimensions,
+  Modal,
+  Platform,
+  SafeAreaView,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text, TextInput,
+  TouchableOpacity,
+  View
 } from 'react-native';
-import { useRouter, useLocalSearchParams, useFocusEffect, useNavigation } from 'expo-router';
-import Head from 'expo-router/head';
+// SafeAreaView from core 'react-native' is a no-op on Android. Use the
+// context-aware version so insets work on both platforms.
 import { Feather } from '@expo/vector-icons';
-import { useNav } from './navContext';
-import { useAuth } from './authContext';
-import { supabase } from '../../utils/supabase';
-import { NotificationModal, useNotificationCenter, BellIcon } from './notificationCenter';
 import * as DocumentPicker from 'expo-document-picker';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
+import Head from 'expo-router/head';
+import { supabase } from '../../utils/supabase';
+import Sidebar from './../components/Sidebar';
+import { useAuth } from './authContext';
+import { useNav } from './navContext';
+import { BellIcon, NotificationModal, useNotificationCenter } from './notificationCenter';
 import { DocumentScannerButton } from './scanner/DocumentScannerButton';
 import { useDocumentScanner } from './scanner/useDocumentScanner';
-import * as Sharing from 'expo-sharing';
-import Sidebar from './../components/Sidebar';
-// WebView: use react-native-webview on native, iframe on web (matches management screen)
-let WebView = null;
-if (Platform.OS !== 'web') {
-  WebView = require('react-native-webview').WebView;
-}
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const isMobile = SCREEN_WIDTH < 768;
 
@@ -67,12 +72,8 @@ const DEFAULT_DOCUMENT_TABS = ['Financial', 'Planning', 'Governance', 'Activitie
 const DOCUMENTS_DATA = {};
 
 // ─── ICONS ────────────────────────────────────────────────────────────────────
-const MenuIcon = () => (
-  <View style={styles.menuIconContainer}>
-    {[0, 1, 2].map(i => <View key={i} style={styles.menuLine} />)}
-  </View>
-);
-
+// MenuIcon now lives in the shared mobileHeader module (see import above) so the
+// sticky mobile bar is identical on every SK + LYDO screen.
 
 
 // ─── FILE ICON ────────────────────────────────────────────────────────────────
@@ -667,24 +668,22 @@ export default function SKDocumentListScreen() {
   
   // ── Main Content ──
   const renderContent = () => (
-    <ScrollView
-      style={[styles.main, isMobile && styles.mainMobile]}
-      contentContainerStyle={styles.mainContent}
-      showsVerticalScrollIndicator={false}
-    >
-      {/* Mobile Header */}
-      {isMobile && (
-        <View style={styles.mobileHeader}>
-          <TouchableOpacity style={styles.menuBtn} onPress={() => setSidebarVisible(true)}>
-            <MenuIcon />
-          </TouchableOpacity>
-          <Text style={styles.mobileTitle}>Documents</Text>
-          <TouchableOpacity style={styles.bellBtn} onPress={notif.open} activeOpacity={0.7}>
-            <BellIcon count={notifCount} />
-          </TouchableOpacity>
-
-        </View>
-      )}
+    <View style={[styles.main, isMobile && styles.mainMobile]}>
+      <MobileHeader
+        title="Documents"
+        onMenuPress={() => setSidebarVisible(true)}
+        onBellPress={notif.open}
+        bellCount={notifCount}
+        BellIcon={BellIcon}
+        colors={COLORS}
+        hidden={isMobile && sidebarVisible}
+      />
+      <ScrollView
+        style={styles.mainScroll}
+        contentContainerStyle={styles.mainContent}
+        showsVerticalScrollIndicator={false}
+      >
+        <MobileHeaderSpacer />
 
       {/* Desktop Header */}
       {!isMobile && (
@@ -856,6 +855,7 @@ export default function SKDocumentListScreen() {
         )}
       </View>
     </ScrollView>
+    </View>
   );
 
   return (
@@ -863,7 +863,7 @@ export default function SKDocumentListScreen() {
       <Head>
         <title>Document List · SK Monitoring</title>
       </Head>
-      <SafeAreaView style={styles.safe}>
+      <SafeAreaView style={styles.safe} edges={isMobile ? ['left', 'right', 'bottom'] : ['top', 'left', 'right', 'bottom']}>
       <StatusBar barStyle="light-content" backgroundColor={COLORS.navy} />
       <NotificationModal
         {...notif.modalProps}
@@ -1211,21 +1211,8 @@ const styles = StyleSheet.create({
   // ── Main ──
   main:        { flex: 1, backgroundColor: COLORS.offWhite, borderTopLeftRadius: 20 },
   mainMobile:  { borderTopLeftRadius: 0 },
+  mainScroll:  { flex: 1 },
   mainContent: { padding: 20, paddingBottom: 40 },
-
-  // Mobile header
-  mobileHeader: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    marginBottom: 16, paddingBottom: 12,
-    borderBottomWidth: 1, borderBottomColor: COLORS.lightGray,
-  },
-  menuBtn: {
-    width: 40, height: 40, borderRadius: 20,
-    backgroundColor: COLORS.cardBg, alignItems: 'center', justifyContent: 'center',
-  },
-  menuIconContainer: { width: 20, height: 16, justifyContent: 'space-between' },
-  menuLine:          { width: 20, height: 2, backgroundColor: COLORS.navy, borderRadius: 1 },
-  mobileTitle:       { fontSize: 18, fontWeight: '800', color: COLORS.darkText },
 
   // Desktop header
   header: {

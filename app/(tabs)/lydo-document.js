@@ -9,7 +9,6 @@ import {
   Image,
   Linking,
   Modal,
-  SafeAreaView,
   ScrollView,
   StatusBar,
   StyleSheet,
@@ -20,11 +19,15 @@ import {
   ActivityIndicator,
   Platform,
 } from 'react-native';
+// SafeAreaView from 'react-native' is a no-op on Android. Use the
+// context-aware version so insets work on both platforms.
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { supabase } from '../../utils/supabase';
 import { useAuth } from './authContext';
 import { useNav } from './navContext';
 import Sidebar, { LYDO_NAV_ITEMS } from './../components/Sidebar';
+import MobileHeader, { MobileHeaderSpacer } from './mobileHeader';
 import { useLydoNotificationCenter, LydoNotificationModal, LydoBellIcon } from './notificationCenter';
 // WebView: use react-native-webview on native, iframe on web
 let WebView = null;
@@ -136,14 +139,6 @@ const NAV_TABS = ['Dashboard', 'Documents', 'Monitor', 'Barangay', 'Logs'];
 const DOCUMENT_TABS = ['Barangay Folders', 'Reports', 'Templates'];
 
 
-
-const MenuIcon = () => (
-  <View style={styles.menuIconContainer}>
-    <View style={styles.menuLine} />
-    <View style={styles.menuLine} />
-    <View style={styles.menuLine} />
-  </View>
-);
 
 // ─── macOS-STYLE FOLDER ICON ──────────────────────────────────────────────────
 const FolderIcon = ({ size = 68 }) => {
@@ -695,23 +690,22 @@ export default function LYDODocumentsScreen({ navigation }) {
 
   // ── Content body (shared between mobile/desktop) ──
   const renderContent = () => (
-    <ScrollView
-      style={[styles.main, isMobile && styles.mainMobile]}
-      contentContainerStyle={styles.mainContent}
-      showsVerticalScrollIndicator={false}
-    >
-      {/* Mobile Header */}
-      {isMobile && (
-        <View style={styles.mobileHeader}>
-          <TouchableOpacity style={styles.menuBtn} onPress={() => setSidebarVisible(true)}>
-            <MenuIcon />
-          </TouchableOpacity>
-          <Text style={styles.mobileTitle}>Documents</Text>
-              <TouchableOpacity style={styles.bellBtn} activeOpacity={0.7} onPress={notif.open}>
-                <LydoBellIcon count={notif.count} />
-              </TouchableOpacity>
-        </View>
-      )}
+    <View style={[styles.main, isMobile && styles.mainMobile]}>
+      <MobileHeader
+        title="Documents"
+        onMenuPress={() => setSidebarVisible(true)}
+        onBellPress={notif.open}
+        bellCount={notif.count}
+        BellIcon={LydoBellIcon}
+        colors={COLORS}
+        hidden={isMobile && sidebarVisible}
+      />
+      <ScrollView
+        style={{ flex: 1 }}
+        contentContainerStyle={styles.mainContent}
+        showsVerticalScrollIndicator={false}
+      >
+      <MobileHeaderSpacer />
 
       {/* Desktop Header */}
       {!isMobile && (
@@ -767,7 +761,7 @@ export default function LYDODocumentsScreen({ navigation }) {
       {view === 'folders' && (
         <>
           {/* Search + Add Folder button row */}
-          <View style={[styles.searchRow, { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 }]}>
+          <View style={[styles.searchRow, isMobile ? styles.searchRowStack : styles.searchRowInline]}>
             <View style={styles.searchBox}>
               <Text style={{ fontSize: 13, marginRight: 6 }}>🔍</Text>
               <TextInput
@@ -783,9 +777,9 @@ export default function LYDODocumentsScreen({ navigation }) {
                 </TouchableOpacity>
               )}
             </View>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <View style={[styles.addFolderButtonsWrap, isMobile && styles.addFolderButtonsWrapMobile]}>
               <TouchableOpacity
-                style={styles.addFolderBtn}
+                style={[styles.addFolderBtn, isMobile && styles.addFolderBtnMobile]}
                 onPress={() => {
                   setNewFolderYear('');
                   setAddFolderError('');
@@ -803,7 +797,7 @@ export default function LYDODocumentsScreen({ navigation }) {
                 <Text style={styles.addFolderBtnText}>Add Folder</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={styles.addFolderBtn}
+                style={[styles.addFolderBtn, isMobile && styles.addFolderBtnMobile]}
                 onPress={() => {
                   setNewDocTypeName('');
                   setNewDocTypeCategory('');
@@ -1331,6 +1325,7 @@ export default function LYDODocumentsScreen({ navigation }) {
         </>
       )}
     </ScrollView>
+    </View>
   );
 
   return (
@@ -1338,7 +1333,7 @@ export default function LYDODocumentsScreen({ navigation }) {
       <Head>
         <title>LYDO Document · SK Monitoring</title>
       </Head>
-      <SafeAreaView style={styles.safe}>
+      <SafeAreaView style={styles.safe} edges={isMobile ? ['left', 'right', 'bottom'] : ['top', 'left', 'right', 'bottom']}>
       <StatusBar barStyle="light-content" backgroundColor={COLORS.navy} />
 
       {/* Notification Modal — lists documents sent by SK officials */}
@@ -1382,7 +1377,7 @@ export default function LYDODocumentsScreen({ navigation }) {
           transparent={false}
           onRequestClose={() => setViewerModal({ visible: false, fileUrl: null, title: '' })}
         >
-          <SafeAreaView style={{ flex: 1, backgroundColor: COLORS.navy }}>
+          <SafeAreaView style={styles.safe} edges={isMobile ? ['left', 'right', 'bottom'] : ['top', 'left', 'right', 'bottom']}>
             {/* Viewer Header */}
             <View style={styles.viewerHeader}>
               <TouchableOpacity
@@ -1484,20 +1479,6 @@ const styles = StyleSheet.create({
   main: { flex: 1, backgroundColor: COLORS.offWhite, borderTopLeftRadius: 20 },
   mainMobile: { borderTopLeftRadius: 0 },
   mainContent: { padding: 20, paddingBottom: 40 },
-
-  // Mobile Header
-  mobileHeader: {
-    flexDirection: 'row', alignItems: 'center',
-    justifyContent: 'space-between', marginBottom: 16,
-    paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: COLORS.lightGray,
-  },
-  menuBtn: {
-    width: 40, height: 40, borderRadius: 20,
-    backgroundColor: COLORS.cardBg, alignItems: 'center', justifyContent: 'center',
-  },
-  menuIconContainer: { width: 20, height: 16, justifyContent: 'space-between' },
-  menuLine: { width: 20, height: 2, backgroundColor: '#133E75', borderRadius: 1 },
-  mobileTitle: { fontSize: 18, fontWeight: '800', color: COLORS.darkText },
 
   // Desktop Header
   header: {
@@ -1638,6 +1619,8 @@ const styles = StyleSheet.create({
 
   // Search
   searchRow: { marginBottom: 14 },
+  searchRowInline: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 },
+  searchRowStack: { flexDirection: 'column', alignItems: 'stretch', gap: 10 },
   searchBox: {
     flexDirection: 'row', alignItems: 'center',
     backgroundColor: COLORS.white, borderRadius: 20,
@@ -1725,8 +1708,10 @@ const styles = StyleSheet.create({
   emptyText: { fontSize: 14, color: COLORS.midGray },
 
   // ── Add Folder Button ──
+  addFolderButtonsWrap: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  addFolderButtonsWrapMobile: { flexWrap: 'wrap' },
   addFolderBtn: {
-    flexDirection: 'row', alignItems: 'center', gap: 8,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
     backgroundColor: COLORS.navy,
     paddingVertical: 8, paddingHorizontal: 14,
     borderRadius: 20,
@@ -1734,6 +1719,7 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.3, shadowRadius: 6, elevation: 4,
   },
+  addFolderBtnMobile: { flexGrow: 1, flexBasis: '47%' },
   addFolderBtnIconWrap: {
     width: 22, height: 18,
     justifyContent: 'flex-end',
@@ -1846,9 +1832,10 @@ const styles = StyleSheet.create({
 
   // ── Barangay-by-year table ──
   tableTopRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: isMobile ? 'column' : 'row',
+    alignItems: isMobile ? 'stretch' : 'center',
     justifyContent: 'space-between',
+    gap: isMobile ? 8 : 0,
     marginTop: 14,
     marginBottom: 10,
   },

@@ -13,8 +13,7 @@
       "Bash(node -e \"require\\('./app/index.js'\\)\")",
       "Bash(powershell -Command \"\\(Get-Content 'C:\\\\xampp\\\\htdocs\\\\SK\\\\app\\\\\\(tabs\\)\\\\lydo-monitor.js'\\).Count\")",
       "Bash(powershell -Command \"\\(Get-Content 'C:\\\\xampp\\\\htdocs\\\\SK\\\\app\\\\\\(tabs\\)\\\\lydo-document-templates.js'\\).Count\")",
-      "Bash(node *)",
-      "Bash(npx eslint *)"
+      "Bash(node *)"
     ]
   }
 }
