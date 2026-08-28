@@ -6,7 +6,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator, Alert,
   Animated,
-  Dimensions, Image,
+  Dimensions,
   Linking,
   Modal,
   Platform,
@@ -21,11 +21,11 @@ import {
 // context-aware version so insets work on both platforms.
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { supabase } from '../../utils/supabase';
-import { useAuth } from './authContext';
-import { useNav } from './navContext';
-import { NotificationModal, useNotificationCenter, BellIcon } from './notificationCenter';
 import Sidebar from './../components/Sidebar';
+import { useAuth } from './authContext';
 import MobileHeader, { MobileHeaderSpacer } from './mobileHeader';
+import { useNav } from './navContext';
+import { BellIcon, NotificationModal, useNotificationCenter } from './notificationCenter';
 // WebView: use react-native-webview on native, iframe on web
 let WebView = null;
 if (Platform.OS !== 'web') {
@@ -1033,24 +1033,7 @@ export default function SKDocumentManagementScreen() {
         </View>
       )}
 
-      {/* Search Bar */}
-      <View style={styles.searchRow}>
-        <View style={styles.searchBox}>
-          <Text style={styles.searchIcon}>🔍</Text>
-          <TextInput
-            style={styles.searchInput}
-            placeholder="Search"
-            placeholderTextColor={COLORS.midGray}
-            value={searchText}
-            onChangeText={setSearchText}
-          />
-          {searchText.length > 0 && (
-            <TouchableOpacity onPress={() => setSearchText('')}>
-              <Text style={{ color: COLORS.midGray, fontSize: 12 }}>✕</Text>
-            </TouchableOpacity>
-          )}
-        </View>
-      </View>
+
 
       {/* Folder / Document Management Tab Bar */}
       <View style={styles.filterRow}>
@@ -1077,7 +1060,24 @@ export default function SKDocumentManagementScreen() {
           })}
         </View>
       </View>
-
+      {/* Search Bar */}
+      <View style={styles.searchRow}>
+        <View style={styles.searchBox}>
+          <Text style={styles.searchIcon}>🔍</Text>
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Search"
+            placeholderTextColor={COLORS.midGray}
+            value={searchText}
+            onChangeText={setSearchText}
+          />
+          {searchText.length > 0 && (
+            <TouchableOpacity onPress={() => setSearchText('')}>
+              <Text style={{ color: COLORS.midGray, fontSize: 12 }}>✕</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      </View>
       {/* Draft Type + Sorted By Row */}
       <View style={styles.controlsRow}>
         {/* Draft Type Dropdown */}
