@@ -7,11 +7,14 @@
 // sk-logs, sk-account, lydo-dashboard, lydo-document, lydo-monitor,
 // lydo-accounts, lydo-logs, …).
 //
-// This keeps the ORIGINAL layout you already had — navy background, 250px
-// width, rounded pill nav items, white-filled active pill — and only
-// polishes the details (softer inactive state, subtle active shadow,
-// tighter spacing) so it feels a bit more refined without changing the
-// color or size of anything.
+// This keeps the ORIGINAL structure and navy sidebar you already had —
+// solid navy background, 250px width, same nav items/routes, same logo
+// circle — but modernizes the nav items into rounded rectangles (not full
+// pills) and changes how the ACTIVE item is shown: instead of a solid
+// white or solid navy block, it now gets a lighter, translucent navy
+// highlight (navyLight at ~55% opacity) with a subtle border, so it reads
+// as "lit up" against the navy background rather than a hard-edged pill.
+// Inactive items stay flat/transparent with muted white text and icons.
 //
 // Two ready-made nav configs are exported: NAV_ITEMS (SK side: Dashboard,
 // Documents, Planning, Portal, Logs, Account) and LYDO_NAV_ITEMS (LYDO
@@ -51,15 +54,26 @@
 
 import React from 'react';
 import { View, Text, TouchableOpacity, Image, StyleSheet, Dimensions } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
-// ── Brand colors — same navy sk-dashboard already used ────────────────────
+// ── Brand colors — the sidebar stays navy top-to-bottom; the ACTIVE item
+//    is the only thing that changes, picking up a lighter, translucent
+//    navy highlight rather than a solid block. ─────────────────────────
 export const COLORS = {
   navy: '#133E75',
+  navyLight: '#1E4D8C',
   white: '#FFFFFF',
-  inactiveText: 'rgba(255,255,255,0.78)',
-  inactiveIcon: 'rgba(255,255,255,0.78)',
+  sidebarBg: '#133E75',
+  logoBg: 'rgba(255,255,255,0.14)',
+  logoBorder: 'rgba(255,255,255,0.28)',
+  inactiveText: 'rgba(255,255,255,0.72)',
+  inactiveIcon: 'rgba(255,255,255,0.72)',
+  activeBg: 'rgba(30,77,140,0.55)',      // navyLight, translucent — the "light navy" highlight
+  activeBorder: 'rgba(255,255,255,0.18)',
+  activeText: '#FFFFFF',
+  activeIcon: '#FFFFFF',
 };
 
 // ─── NAV ICONS (unchanged from sk-dashboard — pure RN Views, no svg dep) ──
@@ -205,12 +219,21 @@ export default function Sidebar({
   logoSource = require('./../../assets/images/sk-logo.png'),
 }) {
   const isMobile = isMobileProp ?? SCREEN_WIDTH < 768;
+  const insets = useSafeAreaInsets();
+
+  // On mobile the drawer is an absolutely-positioned overlay that starts at
+  // top:0, so it sits *behind* the status bar (notch, clock, battery) unless
+  // we manually pad it with the device's safe-area inset. Desktop/tablet
+  // layout doesn't need this since the sidebar there is a normal in-flow
+  // column, not an overlay drawn under the OS status bar.
+  const mobileTopPad = isMobile ? { paddingTop: 20 + (insets?.top ?? 0) } : null;
 
   return (
     <View
       style={[
         styles.sidebar,
         isMobile && styles.sidebarMobile,
+        mobileTopPad,
         isMobile && !sidebarVisible && styles.sidebarHidden,
       ]}
     >
@@ -221,7 +244,7 @@ export default function Sidebar({
 
       {navItems.map(({ tab, label, IconComponent }) => {
         const active = activeTab === tab;
-        const iconColor = active ? COLORS.navy : COLORS.inactiveIcon;
+        const iconColor = active ? COLORS.activeIcon : COLORS.inactiveIcon;
         return (
           <TouchableOpacity
             key={tab}
@@ -255,7 +278,7 @@ export default function Sidebar({
 const styles = StyleSheet.create({
   sidebar: {
     width: 250,
-    backgroundColor: COLORS.navy,
+    backgroundColor: COLORS.sidebarBg,
     alignItems: 'center',
     paddingTop: 20,
     paddingBottom: 24,
@@ -274,17 +297,25 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     height: '100%',
-    zIndex: 30,
-    elevation: 20, // keep above Android's overlay backdrop too
+    // Must outrank MobileHeader's wrapper (zIndex: 50, elevation: 8) on
+    // BOTH platforms — iOS/web resolve stacking via zIndex, Android via
+    // elevation — otherwise the header bar (and its tappable bell/menu
+    // area) can paint on top of the open drawer instead of behind it.
+    zIndex: 100,
+    elevation: 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 2, height: 0 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
   },
 
   logoPill: {
     marginTop: 20,
     width: 70, height: 70, borderRadius: 35,
-    backgroundColor: 'rgba(255,255,255,0.14)',
+    backgroundColor: COLORS.logoBg,
     alignItems: 'center', justifyContent: 'center',
     marginBottom: 8,
-    borderWidth: 2, borderColor: 'rgba(255,255,255,0.28)',
+    borderWidth: 2, borderColor: COLORS.logoBorder,
   },
   logoImage: { width: 100, height: 100 },
 
@@ -292,18 +323,21 @@ const styles = StyleSheet.create({
     width: '100%',
     paddingVertical: 12,
     paddingHorizontal: 14,
-    borderRadius: 24,
-    marginBottom: 8,
+    borderRadius: 10,
+    marginBottom: 6,
     alignItems: 'flex-start',
-    backgroundColor: 'rgba(255,255,255,0.06)',
+    backgroundColor: 'transparent',
+    borderWidth: 1,
+    borderColor: 'transparent',
   },
   navItemActive: {
-    backgroundColor: COLORS.white,
+    backgroundColor: COLORS.activeBg,
+    borderColor: COLORS.activeBorder,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
+    shadowOpacity: 0.12,
     shadowRadius: 6,
-    elevation: 3,
+    elevation: 2,
   },
   navItemInner: { flexDirection: 'row', alignItems: 'center', gap: 10 },
 
@@ -314,7 +348,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.2,
   },
   navLabelActive: {
-    color: COLORS.navy,
+    color: COLORS.activeText,
     fontWeight: '800',
   },
 
@@ -322,12 +356,12 @@ const styles = StyleSheet.create({
     width: '100%',
     paddingVertical: 12,
     paddingHorizontal: 14,
-    borderRadius: 24,
+    borderRadius: 10,
     marginTop: 8,
     alignItems: 'flex-start',
     borderWidth: 1.5,
-    borderColor: 'rgba(255,255,255,0.35)',
-    backgroundColor: 'rgba(255,255,255,0.06)',
+    borderColor: 'rgba(255,255,255,0.28)',
+    backgroundColor: 'transparent',
   },
   logoutText: {
     fontSize: 13,

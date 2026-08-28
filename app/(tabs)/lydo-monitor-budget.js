@@ -1,15 +1,19 @@
 import React, { useState, useEffect } from 'react';
 import {
   View, Text, TextInput, ScrollView, TouchableOpacity,
-  StyleSheet, SafeAreaView, StatusBar, Dimensions,
+  StyleSheet, StatusBar, Dimensions,
   Modal, Alert, KeyboardAvoidingView, Platform, Image,
 } from 'react-native';
+// SafeAreaView from core 'react-native' is a no-op on Android. Use the
+// context-aware version so insets work on both platforms.
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import Head from 'expo-router/head';
 import { useNav } from './navContext';
 import Sidebar, { LYDO_NAV_ITEMS } from './../components/Sidebar';
 import { useAuth } from './authContext';
 import { useLydoNotificationCenter, LydoNotificationModal, LydoBellIcon } from './notificationCenter';
+import MobileHeader, { MobileHeaderSpacer } from './mobileHeader';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const isMobile = SCREEN_WIDTH < 768;
@@ -64,11 +68,7 @@ const BUDGET_ROWS = [
 ];
 
 // ─── ICONS ────────────────────────────────────────────────────────────────────
-const MenuIcon = () => (
-  <View style={S.menuIconContainer}>
-    {[0, 1, 2].map(i => <View key={i} style={S.menuLine} />)}
-  </View>
-);
+
 
 // ─── 3-DOT MENU ───────────────────────────────────────────────────────────────
 const ThreeDotMenu = ({ onSave, onEdit, onReturn }) => {
@@ -393,23 +393,22 @@ export default function LYDOMonitorBudgetScreen() {
 
   // ── Main Content ─────────────────────────────────────────────────────────────
   const renderContent = () => (
-    <ScrollView
-      style={[S.main, isMobile && S.mainMobile]}
-      contentContainerStyle={S.mainContent}
-      showsVerticalScrollIndicator={false}
-    >
-      {/* Mobile Header */}
-      {isMobile && (
-        <View style={S.mobileHeader}>
-          <TouchableOpacity style={S.menuBtn} onPress={() => setSidebarVisible(true)}>
-            <MenuIcon />
-          </TouchableOpacity>
-          <Text style={S.mobileTitle}>Budget Monitor</Text>
-              <TouchableOpacity style={styles.bellBtn} activeOpacity={0.7} onPress={notif.open}>
-                <LydoBellIcon count={notif.count} />
-              </TouchableOpacity>
-        </View>
-      )}
+    <View style={[S.main, isMobile && S.mainMobile]}>
+      <MobileHeader
+        title="Monitor Budget"
+        onMenuPress={() => setSidebarVisible(true)}
+        onBellPress={notif.open}
+        bellCount={notif.count}
+        BellIcon={LydoBellIcon}
+        colors={COLORS}
+        hidden={isMobile && sidebarVisible}
+      />
+      <ScrollView
+        style={{ flex: 1 }}
+        contentContainerStyle={S.mainContent}
+        showsVerticalScrollIndicator={false}
+      >
+      <MobileHeaderSpacer />
 
       {/* Desktop Header */}
       {!isMobile && (
@@ -437,7 +436,7 @@ export default function LYDOMonitorBudgetScreen() {
                 </View>
               </View>
             </View>
-              <TouchableOpacity style={styles.bellBtn} activeOpacity={0.7} onPress={notif.open}>
+              <TouchableOpacity style={S.bellBtn} activeOpacity={0.7} onPress={notif.open}>
                 <LydoBellIcon count={notif.count} />
               </TouchableOpacity>
           </View>
@@ -529,6 +528,7 @@ export default function LYDOMonitorBudgetScreen() {
         </TouchableOpacity>
       )}
     </ScrollView>
+    </View>
   );
 
   return (
@@ -536,7 +536,7 @@ export default function LYDOMonitorBudgetScreen() {
       <Head>
         <title>LYDO Budget Monitor · SK Monitoring</title>
       </Head>
-      <SafeAreaView style={S.safe}>
+      <SafeAreaView style={styles.safe} edges={isMobile ? ['left', 'right', 'bottom'] : ['top', 'left', 'right', 'bottom']}>
         <StatusBar barStyle="light-content" backgroundColor={COLORS.navy} />
 
         {/* Notification Modal — lists documents sent by SK officials */}
@@ -601,12 +601,6 @@ const S = StyleSheet.create({
   mainMobile:  { borderTopLeftRadius: 0 },
   mainContent: { padding: isMobile ? 12 : 20, paddingBottom: 40 },
 
-  // Mobile Header
-  mobileHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, paddingBottom: 10, borderBottomWidth: 1, borderBottomColor: COLORS.lightGray },
-  menuBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: COLORS.cardBg, alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.1, shadowRadius: 2, elevation: 2 },
-  menuIconContainer: { width: 18, height: 14, justifyContent: 'space-between' },
-  menuLine:    { width: 18, height: 2, backgroundColor: COLORS.navy, borderRadius: 1 },
-  mobileTitle: { fontSize: 16, fontWeight: '800', color: COLORS.darkText },
 
   // Desktop Header
   header:    { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 20 },
