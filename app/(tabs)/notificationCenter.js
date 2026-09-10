@@ -1,13 +1,13 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useFocusEffect } from 'expo-router';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  ActivityIndicator, Dimensions, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View,
+  ActivityIndicator, Dimensions, Modal, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, useWindowDimensions, View,
 } from 'react-native';
 import { BellIcon as HeroBellIcon } from 'react-native-heroicons/outline';
 import { supabase } from '../../utils/supabase';
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
+const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const isMobile = SCREEN_WIDTH < 768;
 
 const NAVY = '#133E75';
@@ -22,9 +22,9 @@ const SUB_TEXT = '#666666';
 // every screen (keyed only by category, not by screen) so the badge stays in
 // sync no matter where the user reads their notifications from.
 const SEEN_KEYS = {
-  approved:  'sk_notif_seen_approved',
+  approved: 'sk_notif_seen_approved',
   templates: 'sk_notif_seen_templates',
-  returned:  'sk_notif_seen_returned',
+  returned: 'sk_notif_seen_returned',
   deadlines: 'sk_notif_seen_deadlines',
 };
 
@@ -37,9 +37,9 @@ const loadSeenCounts = async () => {
       AsyncStorage.getItem(SEEN_KEYS.deadlines),
     ]);
     return {
-      approved:  parseInt(entries[0] || '0', 10) || 0,
+      approved: parseInt(entries[0] || '0', 10) || 0,
       templates: parseInt(entries[1] || '0', 10) || 0,
-      returned:  parseInt(entries[2] || '0', 10) || 0,
+      returned: parseInt(entries[2] || '0', 10) || 0,
       deadlines: parseInt(entries[3] || '0', 10) || 0,
     };
   } catch (err) {
@@ -51,9 +51,9 @@ const loadSeenCounts = async () => {
 const saveSeenCounts = async (counts) => {
   try {
     await Promise.all([
-      AsyncStorage.setItem(SEEN_KEYS.approved,  String(counts.approved  || 0)),
+      AsyncStorage.setItem(SEEN_KEYS.approved, String(counts.approved || 0)),
       AsyncStorage.setItem(SEEN_KEYS.templates, String(counts.templates || 0)),
-      AsyncStorage.setItem(SEEN_KEYS.returned,  String(counts.returned  || 0)),
+      AsyncStorage.setItem(SEEN_KEYS.returned, String(counts.returned || 0)),
       AsyncStorage.setItem(SEEN_KEYS.deadlines, String(counts.deadlines || 0)),
     ]);
   } catch (err) {
@@ -136,9 +136,9 @@ export function useNotificationCenter(barangayId) {
   useEffect(() => {
     if (!seenLoaded) return;
     saveSeenCounts({
-      approved:  seenApprovedCount,
+      approved: seenApprovedCount,
       templates: seenTemplatesCount,
-      returned:  seenReturnedCount,
+      returned: seenReturnedCount,
       deadlines: seenDeadlinesCount,
     });
   }, [seenLoaded, seenApprovedCount, seenTemplatesCount, seenReturnedCount, seenDeadlinesCount]);
@@ -223,6 +223,11 @@ export function useNotificationCenter(barangayId) {
     return () => { cancelled = true; };
   }, [barangayId, refreshKey]);
 
+  // A deadline only belongs in "approaching" notifications if it's overdue
+  // or due soon — not simply "not yet met" (which would include deadlines
+  // months away and clutter the bell with nothing actionable).
+  const APPROACHING_WINDOW_DAYS = 30;
+
   // Fetch approaching deadlines
   useEffect(() => {
     if (!barangayId) return;
@@ -238,10 +243,8 @@ export function useNotificationCenter(barangayId) {
 
         if (error || cancelled) return;
 
-        const notMetCount = (deadlines || []).filter(d => !d.is_met).length;
-        setDeadlinesCount(notMetCount);
-
         const todayUtc = Date.UTC(new Date().getFullYear(), new Date().getMonth(), new Date().getDate());
+
         const approaching = (deadlines || [])
           .filter((d) => !d.is_met)
           .map((d) => {
@@ -256,9 +259,13 @@ export function useNotificationCenter(barangayId) {
               urgent: daysLeft <= 3,
             };
           })
+          // Overdue (daysLeft < 0) always counts as approaching; anything
+          // further out than the window isn't "approaching" yet.
+          .filter((d) => d.daysLeft <= APPROACHING_WINDOW_DAYS)
           .sort((a, b) => a.daysLeft - b.daysLeft);
 
         setApproachingDeadlines(approaching);
+        setDeadlinesCount(approaching.length);
       } catch (err) {
         console.error('Error fetching deadlines for notifications:', err);
       }
@@ -268,10 +275,10 @@ export function useNotificationCenter(barangayId) {
   }, [barangayId, refreshKey]);
 
   const seenReady = seenLoaded ? 1 : 0;
-  const unviewedApproved  = seenReady ? Math.max(0, approvedDocuments.length  - seenApprovedCount)  : 0;
+  const unviewedApproved = seenReady ? Math.max(0, approvedDocuments.length - seenApprovedCount) : 0;
   const unviewedTemplates = seenReady ? Math.max(0, forwardedTemplates.length - seenTemplatesCount) : 0;
-  const unviewedReturned  = seenReady ? Math.max(0, returnedProposalsCount   - seenReturnedCount)  : 0;
-  const unviewedDeadlines = seenReady ? Math.max(0, deadlinesCount           - seenDeadlinesCount) : 0;
+  const unviewedReturned = seenReady ? Math.max(0, returnedProposalsCount - seenReturnedCount) : 0;
+  const unviewedDeadlines = seenReady ? Math.max(0, deadlinesCount - seenDeadlinesCount) : 0;
 
   const totalUnviewed = unviewedApproved + unviewedTemplates + unviewedReturned + unviewedDeadlines;
 
@@ -279,8 +286,8 @@ export function useNotificationCenter(barangayId) {
   const close = useCallback(() => setVisible(false), []);
 
   const onViewCategory = useCallback((category) => {
-    if (category === 'returned')  setSeenReturnedCount(returnedProposalsCount);
-    if (category === 'approved')  setSeenApprovedCount(approvedDocuments.length);
+    if (category === 'returned') setSeenReturnedCount(returnedProposalsCount);
+    if (category === 'approved') setSeenApprovedCount(approvedDocuments.length);
     if (category === 'templates') setSeenTemplatesCount(forwardedTemplates.length);
     if (category === 'deadlines') setSeenDeadlinesCount(deadlinesCount);
   }, [returnedProposalsCount, approvedDocuments.length, forwardedTemplates.length, deadlinesCount]);
@@ -314,10 +321,27 @@ export function useNotificationCenter(barangayId) {
 
   return {
     visible,
+    setVisible,
     open,
     close,
     count: totalUnviewed,
     hasUnviewed: totalUnviewed > 0,
+    returnedDocuments,
+    approvedDocuments,
+    forwardedTemplates,
+    approachingDeadlines,
+    unviewedCounts: {
+      returned: unviewedReturned,
+      approved: unviewedApproved,
+      templates: unviewedTemplates,
+      deadlines: unviewedDeadlines,
+    },
+    setSeenReturnedCount,
+    setSeenApprovedCount,
+    setSeenTemplatesCount,
+    setSeenDeadlinesCount,
+    onViewCategory,
+    onMarkAllRead,
     modalProps,
   };
 }
@@ -340,13 +364,13 @@ export function NotificationModal({
   onViewCategory,
   onOpenRoute,
 }) {
+  const { width, height } = useWindowDimensions();
+  const isMobile = width < 768;
   const TABS = ['all', 'returned', 'approved', 'templates', 'deadlines'];
   const [activeTab, setActiveTab] = useState('all');
-  const [dropdownVisible, setDropdownVisible] = useState(false);
 
   useEffect(() => {
     if (!visible) {
-      setDropdownVisible(false);
       setActiveTab('all');
     }
   }, [visible]);
@@ -431,8 +455,8 @@ export function NotificationModal({
   }, [notifications]);
 
   const badgeCounts = React.useMemo(() => {
-    const returned  = unviewedCounts.returned  || 0;
-    const approved  = unviewedCounts.approved  || 0;
+    const returned = unviewedCounts.returned || 0;
+    const approved = unviewedCounts.approved || 0;
     const templates = unviewedCounts.templates || 0;
     const deadlines = unviewedCounts.deadlines || 0;
     return { all: returned + approved + templates + deadlines, returned, approved, templates, deadlines };
@@ -452,10 +476,10 @@ export function NotificationModal({
     return toPhilippineTime(dateStr, { hour: '2-digit', minute: '2-digit' });
   };
 
-  const formatRelative = (dateStr) => {
-    if (!dateStr) return '';
+  const getRelativeTime = (dateStr) => {
+    if (!dateStr) return null;
     const target = toUtcDate(dateStr);
-    if (isNaN(target.getTime())) return '';
+    if (isNaN(target.getTime())) return null;
     const nowPh = new Date(
       new Date().toLocaleString('en-US', { timeZone: 'Asia/Manila' })
     );
@@ -463,7 +487,7 @@ export function NotificationModal({
       target.toLocaleString('en-US', { timeZone: 'Asia/Manila' })
     );
     const diffMs = nowPh.getTime() - targetPh.getTime();
-    if (diffMs < 0) return formatLongDate(dateStr);
+    if (diffMs < 0) return null;
     const mins = Math.floor(diffMs / 60000);
     if (mins < 1) return 'Just now';
     if (mins < 60) return `${mins}m ago`;
@@ -473,18 +497,26 @@ export function NotificationModal({
     const dayDelta = Math.round((startOfDay(nowPh) - startOfDay(targetPh)) / (24 * 3600 * 1000));
     if (dayDelta === 1) return 'Yesterday';
     if (dayDelta < 7) return `${dayDelta}d ago`;
-    return formatLongDate(dateStr);
+    return null;
   };
 
-  const tabRoute = {
-    returned: () => '/(tabs)/sk-document-management?initialTab=Returned',
-    approved: () => '/(tabs)/sk-document-management?initialTab=Approved',
-    templates: () => '/(tabs)/sk-portal',
-    deadlines: () => '/(tabs)/sk-document-management?initialTab=Saved',
-  }[activeTab];
+  const getItemRoute = (item) => {
+    switch (item?.type) {
+      case 'returned':
+        return '/(tabs)/sk-document-management?initialTab=Returned';
+      case 'approved':
+        return '/(tabs)/sk-document-management?initialTab=Approved';
+      case 'templates':
+        return '/(tabs)/sk-portal';
+      case 'deadlines':
+        return '/(tabs)/sk-document-management?initialTab=Saved';
+      default:
+        return '/(tabs)/sk-document-management';
+    }
+  };
 
-  const handleRowPress = () => {
-    const route = tabRoute ? tabRoute() : '/(tabs)/sk-document-management';
+  const handleRowPress = (item) => {
+    const route = getItemRoute(item);
     if (onOpenRoute) onOpenRoute(route);
   };
 
@@ -494,16 +526,32 @@ export function NotificationModal({
 
   const activeLabel =
     activeTab === 'all' ? 'All'
-    : activeTab === 'returned' ? 'Returned'
-    : activeTab === 'approved' ? 'Approved'
-    : activeTab === 'templates' ? 'Templates'
-    : 'Deadlines';
+      : activeTab === 'returned' ? 'Returned'
+        : activeTab === 'approved' ? 'Approved'
+          : activeTab === 'templates' ? 'Templates'
+            : 'Deadlines';
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <TouchableOpacity style={notifModalStyles.backdrop} activeOpacity={1} onPress={onClose}>
-        <TouchableOpacity activeOpacity={1} onPress={() => {}} style={notifModalStyles.caret} />
-        <TouchableOpacity activeOpacity={1} onPress={() => {}} style={notifModalStyles.modal}>
+      <TouchableOpacity
+        style={[
+          notifModalStyles.backdrop,
+          isMobile ? notifModalStyles.backdropMobile : notifModalStyles.backdropDesktop,
+        ]}
+        activeOpacity={1}
+        onPress={onClose}
+      >
+        <TouchableOpacity
+          activeOpacity={1}
+          onPress={(e) => { e?.stopPropagation?.(); }}
+          style={[
+            notifModalStyles.modal,
+            isMobile
+              ? { width: width - 24, height: Math.min(height - 80, 600) }
+              : { width: 480, height: Math.min(height - 100, 620) },
+            Platform.OS === 'web' && notifModalStyles.modalWeb,
+          ]}
+        >
           <View style={notifModalStyles.header}>
             <View style={notifModalStyles.headerLeft}>
               <View style={notifModalStyles.headerIcon}>
@@ -518,12 +566,22 @@ export function NotificationModal({
             </View>
             <View style={notifModalStyles.headerActions}>
               <TouchableOpacity
-                style={notifModalStyles.markAllBtn}
+                style={[
+                  notifModalStyles.markAllBtn,
+                  badgeCounts.all === 0 && notifModalStyles.markAllBtnDisabled,
+                ]}
                 onPress={handleMarkAllRead}
                 activeOpacity={0.8}
-                disabled={counts.all === 0}
+                disabled={badgeCounts.all === 0}
               >
-                <Text style={notifModalStyles.markAllBtnText}>Mark all read</Text>
+                <Text
+                  style={[
+                    notifModalStyles.markAllBtnText,
+                    badgeCounts.all === 0 && notifModalStyles.markAllBtnTextDisabled,
+                  ]}
+                >
+                  Mark all read
+                </Text>
               </TouchableOpacity>
               <TouchableOpacity style={notifModalStyles.closeBtn} onPress={onClose} activeOpacity={0.8}>
                 <Text style={notifModalStyles.closeBtnText}>✕</Text>
@@ -532,61 +590,77 @@ export function NotificationModal({
           </View>
 
           <View style={notifModalStyles.filterContainer}>
-            <TouchableOpacity
-              style={notifModalStyles.dropdownButton}
-              onPress={() => setDropdownVisible(!dropdownVisible)}
-              activeOpacity={0.8}
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={notifModalStyles.tabsScroll}
+              {...(Platform.OS === 'web' ? {
+                onWheel: (e) => {
+                  // Let a plain vertical mouse-wheel scroll this row
+                  // horizontally too, not just trackpad swipes/drag.
+                  if (e.deltaY !== 0 && e.currentTarget) {
+                    e.currentTarget.scrollLeft += e.deltaY;
+                    e.preventDefault();
+                  }
+                },
+              } : {})}
             >
-              <View style={notifModalStyles.dropdownButtonLeft}>
-                <Text style={notifModalStyles.dropdownButtonText}>{activeLabel}</Text>
-                {badgeCounts[activeTab] > 0 && (
-                  <View style={notifModalStyles.dropdownButtonBadge}>
-                    <Text style={notifModalStyles.dropdownButtonBadgeText}>
-                      {badgeCounts[activeTab] > 99 ? '99+' : badgeCounts[activeTab]}
-                    </Text>
-                  </View>
-                )}
-              </View>
-              <Text style={notifModalStyles.dropdownArrow}>{dropdownVisible ? '▲' : '▼'}</Text>
-            </TouchableOpacity>
-
-            {dropdownVisible && (
-              <View style={notifModalStyles.dropdownMenu}>
-                {TABS.map((tab, idx) => {
-                  const isActive = activeTab === tab;
-                  const itemLabel =
-                    tab === 'all' ? 'All'
+              {TABS.map((tab) => {
+                const isActive = activeTab === tab;
+                const itemLabel =
+                  tab === 'all' ? 'All'
                     : tab === 'returned' ? 'Returned'
-                    : tab === 'approved' ? 'Approved'
-                    : tab === 'templates' ? 'Templates'
-                    : 'Deadlines';
-                  const itemCount = badgeCounts[tab] || 0;
-                  return (
-                    <TouchableOpacity
-                      key={tab}
+                      : tab === 'approved' ? 'Approved'
+                        : tab === 'templates' ? 'Templates'
+                          : 'Deadlines';
+                const totalInTab = counts[tab] || 0;
+                const unviewedInTab = badgeCounts[tab] || 0;
+
+                return (
+                  <TouchableOpacity
+                    key={tab}
+                    style={[
+                      notifModalStyles.tabPill,
+                      isActive && notifModalStyles.tabPillActive,
+                    ]}
+                    onPress={() => setActiveTab(tab)}
+                    activeOpacity={0.8}
+                  >
+                    <Text
                       style={[
-                        notifModalStyles.dropdownItem,
-                        isActive && notifModalStyles.dropdownItemActive,
-                        idx < TABS.length - 1 && notifModalStyles.dropdownItemBorder,
+                        notifModalStyles.tabPillText,
+                        isActive && notifModalStyles.tabPillTextActive,
                       ]}
-                      onPress={() => { setActiveTab(tab); setDropdownVisible(false); }}
-                      activeOpacity={0.8}
                     >
-                      <Text style={[notifModalStyles.dropdownItemText, isActive && notifModalStyles.dropdownItemTextActive]}>
-                        {itemLabel}
+                      {itemLabel}
+                    </Text>
+                    <View
+                      style={[
+                        notifModalStyles.tabBadge,
+                        isActive
+                          ? notifModalStyles.tabBadgeActive
+                          : unviewedInTab > 0
+                            ? notifModalStyles.tabBadgeUnviewed
+                            : notifModalStyles.tabBadgeInactive,
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          notifModalStyles.tabBadgeText,
+                          isActive
+                            ? notifModalStyles.tabBadgeTextActive
+                            : unviewedInTab > 0
+                              ? notifModalStyles.tabBadgeTextUnviewed
+                              : notifModalStyles.tabBadgeTextInactive,
+                        ]}
+                      >
+                        {totalInTab > 99 ? '99+' : totalInTab}
                       </Text>
-                      {itemCount > 0 && (
-                        <View style={[notifModalStyles.dropdownItemBadge, isActive && notifModalStyles.dropdownItemBadgeActive]}>
-                          <Text style={[notifModalStyles.dropdownItemBadgeText, isActive && notifModalStyles.dropdownItemBadgeTextActive]}>
-                            {itemCount > 99 ? '99+' : itemCount}
-                          </Text>
-                        </View>
-                      )}
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-            )}
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
           </View>
 
           <View style={notifModalStyles.listContainer}>
@@ -595,7 +669,7 @@ export function NotificationModal({
                 <View style={notifModalStyles.emptyIconCircle}>
                   <Text style={notifModalStyles.emptyIcon}>🔕</Text>
                 </View>
-                <Text style={notifModalStyles.emptyText}>You're all caught up</Text>
+                <Text style={notifModalStyles.emptyText}>{"You're all caught up"}</Text>
                 <Text style={notifModalStyles.emptySubText}>
                   {activeTab === 'all'
                     ? 'No updates from LYDO right now. New returned documents, approvals, templates, and deadline reminders will appear here.'
@@ -608,36 +682,59 @@ export function NotificationModal({
                 showsVerticalScrollIndicator={false}
                 contentContainerStyle={notifModalStyles.listContent}
               >
-                {filteredNotifications.map((item) => (
-                  <TouchableOpacity
-                    key={item.id}
-                    style={notifModalStyles.notifItem}
-                    onPress={handleRowPress}
-                    activeOpacity={0.7}
-                  >
-                    <View style={[notifModalStyles.notifIcon, { backgroundColor: item.accentBg }]}>
-                      <Text style={[notifModalStyles.notifIconText, { color: item.iconColor }]}>{item.icon}</Text>
-                    </View>
-                    <View style={notifModalStyles.notifContent}>
-                      <Text style={notifModalStyles.notifTitle} numberOfLines={1}>{item.title}</Text>
-                      <Text style={[notifModalStyles.notifSubtitle, { color: item.iconColor }]} numberOfLines={1}>
-                        {item.subtitle}
-                      </Text>
-                      <View style={notifModalStyles.notifMetaRow}>
-                        <Text style={notifModalStyles.notifRelative}>{formatRelative(item.rawDate)}</Text>
-                        {item.rawDate && (
-                          <>
-                            <Text style={notifModalStyles.notifDotSep}>•</Text>
-                            <Text style={notifModalStyles.notifDate}>{formatLongDate(item.rawDate)}</Text>
-                            <Text style={notifModalStyles.notifDotSep}>•</Text>
-                            <Text style={notifModalStyles.notifTime}>{formatTimeOfDay(item.rawDate)}</Text>
-                          </>
-                        )}
+                {filteredNotifications.map((item) => {
+                  // Deadlines are date-only (no time-of-day in the DB), so never
+                  // derive a clock time for them — doing so via toUtcDate's
+                  // UTC-midnight assumption fabricates a fake local time (e.g.
+                  // a plain "2026-08-31" becomes "08:00 AM" once shifted to PHT).
+                  const isDeadline = item.type === 'deadlines';
+                  const rel = isDeadline ? null : getRelativeTime(item.rawDate);
+                  const dateStr = formatLongDate(item.rawDate);
+                  const timeStr = isDeadline ? '' : formatTimeOfDay(item.rawDate);
+
+                  return (
+                    <TouchableOpacity
+                      key={item.id}
+                      style={notifModalStyles.notifItem}
+                      onPress={() => handleRowPress(item)}
+                      activeOpacity={0.7}
+                    >
+                      <View style={[notifModalStyles.notifIcon, { backgroundColor: item.accentBg }]}>
+                        <Text style={[notifModalStyles.notifIconText, { color: item.iconColor }]}>{item.icon}</Text>
                       </View>
-                    </View>
-                    <Text style={notifModalStyles.notifChevron}>›</Text>
-                  </TouchableOpacity>
-                ))}
+                      <View style={notifModalStyles.notifContent}>
+                        <Text style={notifModalStyles.notifTitle} numberOfLines={2}>{item.title}</Text>
+                        <View style={notifModalStyles.notifBadgeRow}>
+                          <View style={[notifModalStyles.statusPill, { backgroundColor: item.accentBg }]}>
+                            <Text style={[notifModalStyles.statusPillText, { color: item.iconColor }]}>
+                              {item.subtitle}
+                            </Text>
+                          </View>
+                        </View>
+                        <View style={notifModalStyles.notifMetaRow}>
+                          {rel ? (
+                            <>
+                              <Text style={notifModalStyles.notifRelative}>{rel}</Text>
+                              <Text style={notifModalStyles.notifDotSep}>•</Text>
+                            </>
+                          ) : null}
+                          {dateStr ? (
+                            <Text style={notifModalStyles.notifDate}>{dateStr}</Text>
+                          ) : null}
+                          {timeStr ? (
+                            <>
+                              <Text style={notifModalStyles.notifDotSep}>•</Text>
+                              <Text style={notifModalStyles.notifTime}>{timeStr}</Text>
+                            </>
+                          ) : null}
+                        </View>
+                      </View>
+                      <View style={notifModalStyles.chevronBox}>
+                        <Text style={notifModalStyles.notifChevron}>›</Text>
+                      </View>
+                    </TouchableOpacity>
+                  );
+                })}
               </ScrollView>
             )}
           </View>
@@ -650,128 +747,185 @@ export function NotificationModal({
 // ─── NOTIFICATION MODAL STYLES ─────────────────────────────────────────────────
 const notifModalStyles = StyleSheet.create({
   backdrop: {
-    flex: 1, backgroundColor: 'rgba(15,23,42,0.25)',
-    alignItems: 'flex-end',
-    paddingTop: isMobile ? 58 : 84,
-    paddingRight: isMobile ? 10 : 24,
+    flex: 1,
+    backgroundColor: 'rgba(15, 23, 42, 0.35)',
+    justifyContent: 'flex-start',
   },
-  caret: {
-    width: 16, height: 16, backgroundColor: NAVY,
-    borderTopLeftRadius: 3,
-    transform: [{ rotate: '45deg' }],
-    marginBottom: -8, marginRight: isMobile ? 18 : 26,
+  backdropDesktop: {
+    alignItems: 'flex-end',
+    paddingTop: 68,
+    paddingRight: 24,
+    paddingBottom: 24,
+  },
+  backdropMobile: {
+    alignItems: 'center',
+    paddingTop: 54,
+    paddingHorizontal: 12,
+    paddingBottom: 16,
   },
   modal: {
-    width: isMobile ? SCREEN_WIDTH - 20 : 400,
-    height: isMobile ? 460 : 560,
-    backgroundColor: WHITE, borderRadius: 16, overflow: 'hidden',
-    shadowColor: '#000', shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.22, shadowRadius: 22, elevation: 18,
+    maxWidth: '100%',
+    backgroundColor: WHITE,
+    borderRadius: 18,
+    overflow: 'hidden',
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 16 },
+    shadowOpacity: 0.18,
+    shadowRadius: 32,
+    elevation: 24,
+    borderWidth: 1,
+    borderColor: 'rgba(226, 232, 240, 0.85)',
+  },
+  modalWeb: {
+    boxShadow: '0 20px 45px -10px rgba(15, 23, 42, 0.25), 0 0 0 1px rgba(15, 23, 42, 0.05)',
   },
 
   header: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    paddingHorizontal: 16, paddingVertical: 14, backgroundColor: NAVY,
+    paddingHorizontal: 20, paddingVertical: 16, backgroundColor: NAVY,
   },
   headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 },
   headerIcon: {
     width: 38, height: 38, borderRadius: 19,
-    backgroundColor: 'rgba(255,255,255,0.15)',
+    backgroundColor: 'rgba(255,255,255,0.18)',
     alignItems: 'center', justifyContent: 'center',
   },
   headerIconText: { fontSize: 18 },
-  title: { fontSize: 16, fontWeight: '800', color: WHITE, letterSpacing: 0.3 },
-  headerSub: { fontSize: 11.5, fontWeight: '600', color: 'rgba(255,255,255,0.7)', marginTop: 2 },
-  headerActions: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  title: { fontSize: 18, fontWeight: '800', color: WHITE, letterSpacing: 0.3 },
+  headerSub: { fontSize: 12, fontWeight: '500', color: 'rgba(255,255,255,0.85)', marginTop: 1 },
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   markAllBtn: {
-    paddingHorizontal: 10, paddingVertical: 7, borderRadius: 14,
-    backgroundColor: 'rgba(255,255,255,0.15)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.25)',
+    paddingHorizontal: 12, paddingVertical: 6, borderRadius: 14,
+    backgroundColor: 'rgba(255,255,255,0.18)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.3)',
   },
-  markAllBtnText: { fontSize: 11, fontWeight: '700', color: WHITE, letterSpacing: 0.3 },
-  closeBtn: { width: 30, height: 30, borderRadius: 15, backgroundColor: 'rgba(255,255,255,0.15)', alignItems: 'center', justifyContent: 'center' },
+  markAllBtnDisabled: {
+    opacity: 0.45,
+    borderColor: 'transparent',
+  },
+  markAllBtnText: { fontSize: 11.5, fontWeight: '700', color: WHITE, letterSpacing: 0.2 },
+  markAllBtnTextDisabled: { color: 'rgba(255,255,255,0.6)' },
+  closeBtn: {
+    width: 32, height: 32, borderRadius: 16,
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    alignItems: 'center', justifyContent: 'center',
+  },
   closeBtnText: { fontSize: 14, color: WHITE, fontWeight: '700' },
 
   filterContainer: {
-    paddingHorizontal: 16, paddingVertical: 12, backgroundColor: '#F8FAFC',
-    position: 'relative', zIndex: 10,
+    backgroundColor: '#F8FAFC',
+    borderBottomWidth: 1, borderBottomColor: '#E2E8F0',
+    paddingVertical: 10,
   },
-  dropdownButton: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: 16, paddingVertical: 12,
-    backgroundColor: NAVY, borderRadius: 10,
+  tabsScroll: {
+    paddingHorizontal: 14,
+    gap: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
   },
-  dropdownButtonLeft: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  dropdownButtonText: { fontSize: 14, fontWeight: '700', color: WHITE, letterSpacing: 0.3 },
-  dropdownButtonBadge: {
-    minWidth: 22, height: 18, borderRadius: 9,
-    backgroundColor: 'rgba(255,255,255,0.25)', paddingHorizontal: 6,
+  tabPill: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    paddingHorizontal: 10, paddingVertical: 6,
+    borderRadius: 16,
+    backgroundColor: WHITE,
+    borderWidth: 1, borderColor: '#CBD5E1',
+  },
+  tabPillActive: {
+    backgroundColor: NAVY,
+    borderColor: NAVY,
+  },
+  tabPillText: {
+    fontSize: 12, fontWeight: '600', color: '#475569',
+  },
+  tabPillTextActive: {
+    color: WHITE, fontWeight: '700',
+  },
+  tabBadge: {
+    minWidth: 18, height: 18, borderRadius: 9,
+    paddingHorizontal: 4,
     alignItems: 'center', justifyContent: 'center',
   },
-  dropdownButtonBadgeText: { fontSize: 11, fontWeight: '800', color: WHITE },
-  dropdownArrow: { fontSize: 11, fontWeight: '800', color: WHITE },
-  dropdownMenu: {
-    position: 'absolute', top: 52, left: 16, right: 16,
-    backgroundColor: WHITE, borderRadius: 10,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.18, shadowRadius: 10, elevation: 8,
-    borderWidth: 1, borderColor: '#E5E7EB', overflow: 'hidden',
+  tabBadgeInactive: {
+    backgroundColor: '#E2E8F0',
   },
-  dropdownItem: {
-    paddingHorizontal: 16, paddingVertical: 12,
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+  tabBadgeActive: {
+    backgroundColor: 'rgba(255,255,255,0.28)',
   },
-  dropdownItemBorder: { borderBottomWidth: 1, borderBottomColor: '#F3F4F6' },
-  dropdownItemActive: { backgroundColor: '#F0F4FA' },
-  dropdownItemText: { fontSize: 14, fontWeight: '500', color: '#374151' },
-  dropdownItemTextActive: { color: NAVY, fontWeight: '800' },
-  dropdownItemBadge: {
-    minWidth: 22, height: 18, borderRadius: 9,
-    backgroundColor: '#EEF2F7', paddingHorizontal: 6,
-    alignItems: 'center', justifyContent: 'center',
+  tabBadgeUnviewed: {
+    backgroundColor: '#EF4444',
   },
-  dropdownItemBadgeActive: { backgroundColor: NAVY },
-  dropdownItemBadgeText: { fontSize: 11, fontWeight: '800', color: '#374151' },
-  dropdownItemBadgeTextActive: { color: WHITE },
+  tabBadgeText: {
+    fontSize: 10.5, fontWeight: '800',
+  },
+  tabBadgeTextInactive: {
+    color: '#475569',
+  },
+  tabBadgeTextActive: {
+    color: WHITE,
+  },
+  tabBadgeTextUnviewed: {
+    color: WHITE,
+  },
 
   listContainer: { flex: 1, backgroundColor: WHITE },
   list: { flex: 1 },
-  listContent: { paddingVertical: 6 },
+  listContent: { paddingVertical: 4, paddingBottom: 24 },
   notifItem: {
     flexDirection: 'row', alignItems: 'center',
-    paddingVertical: 12, paddingHorizontal: 14,
+    paddingVertical: 14, paddingHorizontal: 18,
     borderBottomWidth: 1, borderBottomColor: '#F1F5F9',
-    gap: 10,
+    gap: 14,
   },
   notifIcon: {
-    width: 42, height: 42, borderRadius: 12,
+    width: 44, height: 44, borderRadius: 12,
     alignItems: 'center', justifyContent: 'center', flexShrink: 0,
   },
-  notifIconText: { fontSize: 18 },
+  notifIconText: { fontSize: 20 },
   notifContent: { flex: 1 },
-  notifTitle: { fontSize: 14, fontWeight: '700', color: DARK_TEXT, marginBottom: 2 },
-  notifSubtitle: { fontSize: 12, fontWeight: '700', marginBottom: 4 },
-  notifMetaRow: { flexDirection: 'row', alignItems: 'center', gap: 5, flexWrap: 'wrap' },
-  notifRelative: { fontSize: 11.5, fontWeight: '700', color: SUB_TEXT },
-  notifDotSep: { fontSize: 9, color: '#CBD5E1' },
-  notifDate: { fontSize: 11, color: SUB_TEXT },
+  notifTitle: {
+    fontSize: 14.5, fontWeight: '700', color: DARK_TEXT,
+    lineHeight: 20, marginBottom: 4,
+  },
+  notifBadgeRow: {
+    flexDirection: 'row', alignItems: 'center', marginBottom: 5,
+  },
+  statusPill: {
+    paddingHorizontal: 8, paddingVertical: 2.5, borderRadius: 6,
+  },
+  statusPillText: {
+    fontSize: 11.5, fontWeight: '700',
+  },
+  notifMetaRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 5, flexWrap: 'wrap',
+  },
+  notifRelative: { fontSize: 12, fontWeight: '600', color: SUB_TEXT },
+  notifDotSep: { fontSize: 10, color: '#CBD5E1' },
+  notifDate: { fontSize: 12, color: SUB_TEXT },
   notifTime: {
-    fontSize: 11, fontWeight: '700', color: NAVY,
+    fontSize: 12, fontWeight: '700', color: NAVY,
     fontVariant: ['tabular-nums'],
   },
-  notifChevron: { fontSize: 22, color: '#94A3B8', marginLeft: 4, lineHeight: 22 },
+  chevronBox: {
+    justifyContent: 'center', alignItems: 'center',
+    paddingLeft: 2,
+  },
+  notifChevron: { fontSize: 22, color: '#94A3B8', lineHeight: 22 },
 
-  emptyState: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 60, paddingHorizontal: 32 },
+  emptyState: {
+    flex: 1, alignItems: 'center', justifyContent: 'center',
+    paddingVertical: 50, paddingHorizontal: 32,
+  },
   emptyIconCircle: {
     width: 80, height: 80, borderRadius: 40,
-    backgroundColor: '#F1F5F9',
+    backgroundColor: '#F8FAFC',
     alignItems: 'center', justifyContent: 'center',
     marginBottom: 16,
+    borderWidth: 1, borderColor: '#F1F5F9',
   },
   emptyIcon: { fontSize: 36 },
-  emptyText: { fontSize: 16, fontWeight: '800', color: DARK_TEXT, marginBottom: 6 },
+  emptyText: { fontSize: 18, fontWeight: '800', color: DARK_TEXT, marginBottom: 6 },
   emptySubText: {
-    fontSize: 13, color: SUB_TEXT, textAlign: 'center',
-    lineHeight: 19, maxWidth: 340,
+    fontSize: 13.5, color: SUB_TEXT, textAlign: 'center',
+    lineHeight: 20, maxWidth: 320,
   },
 });
 
@@ -946,7 +1100,7 @@ const BELL_MAROON = '#8B0000';
 const BELL_GOLD = '#E8C547';
 const BADGE_RED = '#EF4444';
 
-export const BellIcon = ({ count = 0, hasNotif, size = 22, color = BELL_MAROON }) => {
+export const BellIcon = ({ count = 0, hasNotif, size = 28, color = BELL_MAROON }) => {
   const showCount = count > 0;
   const showDot = !showCount && hasNotif;
 
@@ -969,23 +1123,33 @@ export const BellIcon = ({ count = 0, hasNotif, size = 22, color = BELL_MAROON }
 export const LydoBellIcon = BellIcon;
 
 const bellStyles = StyleSheet.create({
-  bellWrapper: { width: 24, height: 24, alignItems: 'center', justifyContent: 'center' },
-  bellDot: { position: 'absolute', top: -1, right: -1, width: 8, height: 8, borderRadius: 4, backgroundColor: BELL_GOLD, borderWidth: 1.5, borderColor: WHITE },
-  // Numbered badge — matches the SK dashboard's red-circle unread-count design.
+  bellWrapper: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
+  bellDot: {
+    position: 'absolute', top: 2, right: 2,
+    width: 12, height: 12, borderRadius: 6,
+    backgroundColor: BELL_GOLD, borderWidth: 2, borderColor: WHITE,
+  },
+  // Numbered badge
   notifBadge: {
     position: 'absolute',
-    top: -6, right: -6,
-    minWidth: 18, height: 18,
-    borderRadius: 9,
+    top: -4, right: -6,
+    minWidth: 22, height: 22,
+    borderRadius: 11,
     backgroundColor: BADGE_RED,
     alignItems: 'center', justifyContent: 'center',
     borderWidth: 2,
     borderColor: WHITE,
     paddingHorizontal: 4,
+    shadowColor: BADGE_RED,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 3,
+    elevation: 3,
   },
   notifBadgeText: {
-    fontSize: 10, fontWeight: '800',
+    fontSize: 11, fontWeight: '800',
     color: WHITE,
+    textAlign: 'center',
   },
 });
 
@@ -1002,6 +1166,9 @@ export function LydoNotificationModal({
   onViewed,
   onReview,
 }) {
+  const { width, height } = useWindowDimensions();
+  const isMobile = width < 768;
+
   const formatDate = (dateStr) => {
     if (!dateStr) return '—';
     return toPhilippineDate(dateStr, { month: 'short', day: 'numeric', year: 'numeric' });
@@ -1021,9 +1188,25 @@ export function LydoNotificationModal({
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <TouchableOpacity style={lydoNotifModalStyles.backdrop} activeOpacity={1} onPress={onClose}>
-        <TouchableOpacity activeOpacity={1} onPress={() => {}} style={lydoNotifModalStyles.caret} />
-        <TouchableOpacity activeOpacity={1} onPress={() => {}} style={lydoNotifModalStyles.modal}>
+      <TouchableOpacity
+        style={[
+          lydoNotifModalStyles.backdrop,
+          isMobile ? lydoNotifModalStyles.backdropMobile : lydoNotifModalStyles.backdropDesktop,
+        ]}
+        activeOpacity={1}
+        onPress={onClose}
+      >
+        <TouchableOpacity
+          activeOpacity={1}
+          onPress={(e) => { e?.stopPropagation?.(); }}
+          style={[
+            lydoNotifModalStyles.modal,
+            isMobile
+              ? { width: width - 24, height: Math.min(height - 80, 600) }
+              : { width: 480, height: Math.min(height - 100, 620) },
+            Platform.OS === 'web' && lydoNotifModalStyles.modalWeb,
+          ]}
+        >
           <View style={lydoNotifModalStyles.header}>
             <View style={{ flex: 1 }}>
               <Text style={lydoNotifModalStyles.title}>Notifications</Text>
@@ -1071,7 +1254,7 @@ export function LydoNotificationModal({
                     <Text style={lydoNotifModalStyles.docIcon}>📄</Text>
                   </View>
                   <View style={lydoNotifModalStyles.itemInfo}>
-                    <Text style={lydoNotifModalStyles.itemTitle} numberOfLines={1}>
+                    <Text style={lydoNotifModalStyles.itemTitle} numberOfLines={2}>
                       {doc.title}
                     </Text>
                     <Text style={lydoNotifModalStyles.itemMeta} numberOfLines={1}>
@@ -1114,95 +1297,108 @@ const LYDO_ORANGE_LIGHT = '#FEF3C7';
 
 const lydoNotifModalStyles = StyleSheet.create({
   backdrop: {
-    flex: 1, backgroundColor: 'rgba(15,23,42,0.25)',
-    alignItems: 'flex-end',
-    paddingTop: isMobile ? 58 : 84,
-    paddingRight: isMobile ? 10 : 24,
+    flex: 1,
+    backgroundColor: 'rgba(15, 23, 42, 0.35)',
+    justifyContent: 'flex-start',
   },
-  caret: {
-    width: 16, height: 16, backgroundColor: NAVY,
-    borderTopLeftRadius: 3,
-    transform: [{ rotate: '45deg' }],
-    marginBottom: -8, marginRight: isMobile ? 18 : 26,
+  backdropDesktop: {
+    alignItems: 'flex-end',
+    paddingTop: 68,
+    paddingRight: 24,
+    paddingBottom: 24,
+  },
+  backdropMobile: {
+    alignItems: 'center',
+    paddingTop: 54,
+    paddingHorizontal: 12,
+    paddingBottom: 16,
   },
   modal: {
-    backgroundColor: WHITE, borderRadius: 16,
-    width: isMobile ? SCREEN_WIDTH - 20 : 400,
-    height: isMobile ? 460 : 560,
-    overflow: 'hidden', elevation: 18,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.22, shadowRadius: 22,
+    maxWidth: '100%',
+    backgroundColor: WHITE,
+    borderRadius: 18,
+    overflow: 'hidden',
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 16 },
+    shadowOpacity: 0.18,
+    shadowRadius: 32,
+    elevation: 24,
+    borderWidth: 1,
+    borderColor: 'rgba(226, 232, 240, 0.85)',
+  },
+  modalWeb: {
+    boxShadow: '0 20px 45px -10px rgba(15, 23, 42, 0.25), 0 0 0 1px rgba(15, 23, 42, 0.05)',
   },
   header: {
-    flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between',
-    paddingHorizontal: 16, paddingVertical: 14, backgroundColor: NAVY,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: 20, paddingVertical: 16, backgroundColor: NAVY,
   },
-  title: { fontSize: 16, fontWeight: '800', color: WHITE },
-  subtitle: { fontSize: 12, fontWeight: '600', color: 'rgba(255,255,255,0.75)', marginTop: 3 },
+  title: { fontSize: 18, fontWeight: '800', color: WHITE },
+  subtitle: { fontSize: 12, fontWeight: '500', color: 'rgba(255,255,255,0.85)', marginTop: 2 },
   closeBtn: {
-    width: 28, height: 28, borderRadius: 14,
-    backgroundColor: 'rgba(255,255,255,0.2)',
+    width: 32, height: 32, borderRadius: 16,
+    backgroundColor: 'rgba(255,255,255,0.18)',
     alignItems: 'center', justifyContent: 'center',
     marginLeft: 12,
   },
-  closeText: { fontSize: 12, fontWeight: '700', color: WHITE },
+  closeText: { fontSize: 14, fontWeight: '700', color: WHITE },
   divider: { height: 1, backgroundColor: LYDO_LIGHT_GRAY },
   body: { flex: 1 },
-  bodyContent: { padding: 16, flexGrow: 1 },
+  bodyContent: { padding: 18, paddingBottom: 24, flexGrow: 1 },
   countLabel: {
-    fontSize: 11, fontWeight: '700', color: LYDO_SUB_TEXT,
-    textTransform: 'uppercase', letterSpacing: 1,
-    marginBottom: 12,
+    fontSize: 12, fontWeight: '700', color: LYDO_SUB_TEXT,
+    textTransform: 'uppercase', letterSpacing: 1.1,
+    marginBottom: 14,
   },
   itemRow: {
     flexDirection: 'row', alignItems: 'center',
-    paddingVertical: 12, gap: 10,
+    paddingVertical: 14, gap: 14,
   },
-  itemRowBorder: { borderBottomWidth: 1, borderBottomColor: LYDO_LIGHT_GRAY },
+  itemRowBorder: { borderBottomWidth: 1, borderBottomColor: '#F1F5F9' },
   docIconBox: {
-    width: 40, height: 40, borderRadius: 10,
+    width: 44, height: 44, borderRadius: 12,
     backgroundColor: LYDO_BLUE_LIGHT,
     alignItems: 'center', justifyContent: 'center',
     flexShrink: 0,
   },
-  docIcon: { fontSize: 18 },
+  docIcon: { fontSize: 20 },
   itemInfo: { flex: 1 },
-  itemTitle: { fontSize: 14, fontWeight: '700', color: LYDO_DARK_TEXT, marginBottom: 2 },
-  itemMeta: { fontSize: 12, color: LYDO_SUB_TEXT, marginBottom: 6 },
+  itemTitle: { fontSize: 14.5, fontWeight: '700', color: LYDO_DARK_TEXT, lineHeight: 20, marginBottom: 3 },
+  itemMeta: { fontSize: 12, fontWeight: '600', color: LYDO_SUB_TEXT, marginBottom: 6 },
   itemFooter: {
     flexDirection: 'row', alignItems: 'center',
     justifyContent: 'space-between',
   },
   statusBadge: {
-    paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12,
+    paddingHorizontal: 10, paddingVertical: 3.5, borderRadius: 6,
     backgroundColor: LYDO_ORANGE_LIGHT,
   },
-  statusText: { fontSize: 10, fontWeight: '700', color: LYDO_ORANGE },
+  statusText: { fontSize: 11, fontWeight: '700', color: LYDO_ORANGE },
   itemTime: { alignItems: 'flex-end' },
-  itemDate: { fontSize: 11, color: LYDO_SUB_TEXT },
+  itemDate: { fontSize: 12, color: LYDO_SUB_TEXT },
   itemTimeText: {
     fontSize: 12, fontWeight: '700', color: NAVY,
     fontVariant: ['tabular-nums'],
   },
   reviewBtn: {
-    paddingHorizontal: 12, paddingVertical: 8,
+    paddingHorizontal: 14, paddingVertical: 8,
     borderRadius: 16, borderWidth: 1.5,
     borderColor: NAVY, backgroundColor: WHITE,
     flexShrink: 0,
-    marginLeft: 6,
+    marginLeft: 10,
   },
-  reviewBtnText: { fontSize: 11, fontWeight: '700', color: NAVY, letterSpacing: 0.2 },
+  reviewBtnText: { fontSize: 12, fontWeight: '700', color: NAVY, letterSpacing: 0.2 },
   loadingState: {
-    flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 40, gap: 10,
+    flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 40, gap: 12,
   },
   loadingText: { fontSize: 13, color: LYDO_SUB_TEXT },
   emptyState: {
-    flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 60, paddingHorizontal: 24,
+    flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 50, paddingHorizontal: 24,
   },
-  emptyIcon: { fontSize: 36, marginBottom: 12 },
-  emptyText: { fontSize: 15, fontWeight: '700', color: LYDO_DARK_TEXT, marginBottom: 4 },
+  emptyIcon: { fontSize: 38, marginBottom: 14 },
+  emptyText: { fontSize: 18, fontWeight: '800', color: LYDO_DARK_TEXT, marginBottom: 6 },
   emptySubText: {
-    fontSize: 13, color: LYDO_SUB_TEXT,
-    textAlign: 'center', lineHeight: 18,
+    fontSize: 13.5, color: LYDO_SUB_TEXT,
+    textAlign: 'center', lineHeight: 20,
   },
 });
