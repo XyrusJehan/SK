@@ -1,14 +1,19 @@
 import React, { useState, useEffect } from 'react';
 import {
   View, Text, TextInput, ScrollView, TouchableOpacity,
-  StyleSheet, SafeAreaView, StatusBar, Dimensions,
+  StyleSheet, StatusBar, Dimensions,
   Modal, Alert, Image, Platform, ActivityIndicator,
 } from 'react-native';
+// SafeAreaView from core 'react-native' is a no-op on Android. Use the
+// context-aware version so insets work on both platforms.
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
+import Head from 'expo-router/head';
 import { useNav } from './navContext';
 import Sidebar, { LYDO_NAV_ITEMS } from './../components/Sidebar';
 import { useAuth } from './authContext';
 import { useLydoNotificationCenter, LydoNotificationModal, LydoBellIcon } from './notificationCenter';
+import MobileHeader, { MobileHeaderSpacer } from './mobileHeader';
 import {
   fetchTransparencyReport,
   fetchSubmissionReport,
@@ -102,13 +107,6 @@ const DOC_FULL_NAMES = API_DOC_FULL_NAMES;
 // Both are derived from whichever sub-tab is active:
 //   Transparency -> fetchTransparencyReport()  (documents.status = 'published')
 //   Submission   -> fetchSubmissionReport()    (submission_deadlines.is_met)
-
-// ─── ICONS ────────────────────────────────────────────────────────────────────
-const MenuIcon = () => (
-  <View style={styles.menuIconContainer}>
-    {[0, 1, 2].map(i => <View key={i} style={styles.menuLine} />)}
-  </View>
-);
 
 // ─── DROPDOWN ─────────────────────────────────────────────────────────────────
 const Dropdown = ({ label, value, options, onSelect }) => {
@@ -769,23 +767,25 @@ export default function LYDOMonitorReportScreen() {
 
   // ── Main Content ─────────────────────────────────────────────────────────────
   const renderContent = () => (
-    <ScrollView
-      style={[styles.main, isMobile && styles.mainMobile]}
-      contentContainerStyle={styles.mainContent}
-      showsVerticalScrollIndicator={false}
-    >
-      {/* Mobile Header */}
-      {isMobile && (
-        <View style={styles.mobileHeader}>
-          <TouchableOpacity style={styles.menuBtn} onPress={() => setSidebarVisible(true)}>
-            <MenuIcon />
-          </TouchableOpacity>
-          <Text style={styles.mobileTitle}>Report Monitor</Text>
-              <TouchableOpacity style={styles.bellBtn} activeOpacity={0.7} onPress={notif.open}>
-                <LydoBellIcon count={notif.count} />
-              </TouchableOpacity>
-        </View>
-      )}
+    <View style={[styles.main, isMobile && styles.mainMobile]}>
+      {/* Pinned mobile header (no-op on desktop) — floats above the
+          ScrollView below; MobileHeaderSpacer reserves the matching space
+          at the top of the scroll content so nothing is hidden under it. */}
+      <MobileHeader
+        title="Monitor Report"
+        onMenuPress={() => setSidebarVisible(true)}
+        onBellPress={notif.open}
+        bellCount={notif.count}
+        BellIcon={LydoBellIcon}
+        colors={COLORS}
+        hidden={isMobile && sidebarVisible}
+      />
+
+      <ScrollView
+        contentContainerStyle={styles.mainContent}
+        showsVerticalScrollIndicator={false}
+      >
+      <MobileHeaderSpacer />
 
       {/* Desktop Header */}
       {!isMobile && (
@@ -1027,115 +1027,121 @@ export default function LYDOMonitorReportScreen() {
       )}
 
     </ScrollView>
+    </View>
   );
 
   // ── Root ────────────────────────────────────────────────────────────────────
   return (
-    <SafeAreaView style={styles.safe}>
-      <StatusBar barStyle="light-content" backgroundColor={COLORS.navy} />
+    <>
+      <Head>
+        <title>LYDO Reports · SK Monitoring</title>
+      </Head>
+      <SafeAreaView style={styles.safe} edges={isMobile ? ['left', 'right', 'bottom'] : ['top', 'left', 'right', 'bottom']}>
+        <StatusBar barStyle="light-content" backgroundColor={COLORS.navy} />
 
-      {/* Notification Modal — lists documents sent by SK officials */}
-      <LydoNotificationModal
-        {...notif.modalProps}
-        onReview={() => { notif.close(); }}
-      />
-
-      <View style={styles.layout}>
-        {/* Mobile: Sidebar as overlay */}
-        {isMobile && sidebarVisible && (
-          <TouchableOpacity
-            style={styles.sidebarOverlay}
-            activeOpacity={1}
-            onPress={() => setSidebarVisible(false)}
-          />
-        )}
-
-        <Sidebar
-          activeTab={activeTab}
-          onNavPress={handleNav}
-          onLogout={handleLogout}
-          isMobile={isMobile}
-          sidebarVisible={sidebarVisible}
-          navItems={LYDO_NAV_ITEMS}
-          logoSource={require('./../../assets/images/lydo-logo.png')}
+        {/* Notification Modal — lists documents sent by SK officials */}
+        <LydoNotificationModal
+          {...notif.modalProps}
+          onReview={() => { notif.close(); }}
         />
 
-        {renderContent()}
-      </View>
+        <View style={styles.layout}>
+          {/* Mobile: Sidebar as overlay */}
+          {isMobile && sidebarVisible && (
+            <TouchableOpacity
+              style={styles.sidebarOverlay}
+              activeOpacity={1}
+              onPress={() => setSidebarVisible(false)}
+            />
+          )}
 
-      {/* Report Preview Modal */}
-      <ReportPreviewModal
-        visible={pdfModalVisible}
-        onClose={() => { setPdfModalVisible(false); setPreviewHtml(null); }}
-        loading={previewLoading}
-        html={previewHtml}
-        saving={savingReport}
-        onSave={async () => {
-          setSavingReport(true);
-          try {
-            const isTransparency = reportSubTab === 'Transparency';
-            const reportType = isTransparency ? 'transparency' : 'submission';
-            const filename = buildReportFilename(
-              reportType,
-              selectedDoc,
-              selectedYear
-            );
+          <Sidebar
+            activeTab={activeTab}
+            onNavPress={handleNav}
+            onLogout={handleLogout}
+            isMobile={isMobile}
+            sidebarVisible={sidebarVisible}
+            navItems={LYDO_NAV_ITEMS}
+            logoSource={require('./../../assets/images/lydo-logo.png')}
+          />
 
-            // The preview HTML was already built by openReportPreview() when
-            // the modal opened — reuse it rather than refetching, so what
-            // the user reviewed is exactly what gets turned into the PDF.
+          {renderContent()}
+        </View>
 
-            // Render the report HTML to a base64 PDF (no share sheet / no
-            // browser print dialog) so we can hand it straight to Storage.
-            const { base64 } = await renderReportToBase64({ html: previewHtml, filename });
+        {/* Report Preview Modal */}
+        <ReportPreviewModal
+          visible={pdfModalVisible}
+          onClose={() => { setPdfModalVisible(false); setPreviewHtml(null); }}
+          loading={previewLoading}
+          html={previewHtml}
+          saving={savingReport}
+          onSave={async () => {
+            setSavingReport(true);
+            try {
+              const isTransparency = reportSubTab === 'Transparency';
+              const reportType = isTransparency ? 'transparency' : 'submission';
+              const filename = buildReportFilename(
+                reportType,
+                selectedDoc,
+                selectedYear
+              );
 
-            // Upload to the 'documents' bucket. compliance_documents.scanned_file_url
-            // will point at this URL.
-            const publicUrl = await uploadReportPdf({ base64, filename });
+              // The preview HTML was already built by openReportPreview() when
+              // the modal opened — reuse it rather than refetching, so what
+              // the user reviewed is exactly what gets turned into the PDF.
 
-            // Persist the row so the report shows up in Documents > Reports.
-            // barangayId comes from the logged-in LYDO user (the report
-            // represents the LYDO office's own compliance snapshot, not
-            // a specific barangay's submission — but the schema requires
-            // barangay_id, so we pin it to the user's own barangay).
-            await saveComplianceDocument({
-              reportType,
-              year: selectedYear,
-              documentType: selectedDoc,
-              barangayId: user?.barangayId,
-              userId: user?.userId,
-              fileUrl: publicUrl,
-              remarks: `Generated on ${new Date().toLocaleString('en-PH', { timeZone: 'Asia/Manila' })}`,
-            });
+              // Render the report HTML to a base64 PDF (no share sheet / no
+              // browser print dialog) so we can hand it straight to Storage.
+              const { base64 } = await renderReportToBase64({ html: previewHtml, filename });
 
-            setPdfModalVisible(false);
-            setPreviewHtml(null);
-            setSuccessModal({ visible: true, filename });
-          } catch (err) {
-            console.error('Failed to save report:', err);
-            notify('Save Failed', err.message || 'Could not save the report. Please try again.');
-          } finally {
-            setSavingReport(false);
-          }
-        }}
-        docLabel={selectedDoc}
-        year={selectedYear}
-        reportKind={reportSubTab === 'Transparency' ? 'transparency' : 'submission'}
-      />
+              // Upload to the 'documents' bucket. compliance_documents.scanned_file_url
+              // will point at this URL.
+              const publicUrl = await uploadReportPdf({ base64, filename });
 
-      {/* Save-success modal — pops up after the PDF finishes uploading and
-          the compliance_documents row is written. "Go to Reports" routes to
-          the Documents > Reports tab; "Stay Here" just dismisses. */}
-      <SuccessModal
-        visible={successModal.visible}
-        filename={successModal.filename}
-        onClose={() => setSuccessModal({ visible: false, filename: '' })}
-        onGoToReports={() => {
-          setSuccessModal({ visible: false, filename: '' });
-          router.push('/(tabs)/lydo-document-reports');
-        }}
-      />
-    </SafeAreaView>
+              // Persist the row so the report shows up in Documents > Reports.
+              // barangayId comes from the logged-in LYDO user (the report
+              // represents the LYDO office's own compliance snapshot, not
+              // a specific barangay's submission — but the schema requires
+              // barangay_id, so we pin it to the user's own barangay).
+              await saveComplianceDocument({
+                reportType,
+                year: selectedYear,
+                documentType: selectedDoc,
+                barangayId: user?.barangayId,
+                userId: user?.userId,
+                fileUrl: publicUrl,
+                remarks: `Generated on ${new Date().toLocaleString('en-PH', { timeZone: 'Asia/Manila' })}`,
+              });
+
+              setPdfModalVisible(false);
+              setPreviewHtml(null);
+              setSuccessModal({ visible: true, filename });
+            } catch (err) {
+              console.error('Failed to save report:', err);
+              notify('Save Failed', err.message || 'Could not save the report. Please try again.');
+            } finally {
+              setSavingReport(false);
+            }
+          }}
+          docLabel={selectedDoc}
+          year={selectedYear}
+          reportKind={reportSubTab === 'Transparency' ? 'transparency' : 'submission'}
+        />
+
+        {/* Save-success modal — pops up after the PDF finishes uploading and
+            the compliance_documents row is written. "Go to Reports" routes to
+            the Documents > Reports tab; "Stay Here" just dismisses. */}
+        <SuccessModal
+          visible={successModal.visible}
+          filename={successModal.filename}
+          onClose={() => setSuccessModal({ visible: false, filename: '' })}
+          onGoToReports={() => {
+            setSuccessModal({ visible: false, filename: '' });
+            router.push('/(tabs)/lydo-document-reports');
+          }}
+        />
+      </SafeAreaView>
+    </>
   );
 }
 
@@ -1152,13 +1158,6 @@ const styles = StyleSheet.create({
   main:        { flex: 1, backgroundColor: COLORS.offWhite, borderTopLeftRadius: 20 },
   mainMobile:  { borderTopLeftRadius: 0 },
   mainContent: { padding: 20, paddingBottom: 40 },
-
-  // ── Mobile header ────────────────────────────────────────────────────────────
-  mobileHeader:       { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: COLORS.lightGray },
-  menuBtn:            { width: 40, height: 40, borderRadius: 20, backgroundColor: COLORS.cardBg, alignItems: 'center', justifyContent: 'center' },
-  menuIconContainer:  { width: 20, height: 16, justifyContent: 'space-between' },
-  menuLine:           { width: 20, height: 2, backgroundColor: COLORS.navy, borderRadius: 1 },
-  mobileTitle:        { fontSize: 18, fontWeight: '800', color: COLORS.darkText },
 
   // ── Desktop header ───────────────────────────────────────────────────────────
   header:      { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 20 },

@@ -1,10 +1,14 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
   View, Text, TextInput, ScrollView, TouchableOpacity,
-  StyleSheet, SafeAreaView, StatusBar, Dimensions,
+  StyleSheet, StatusBar, Dimensions,
   Modal, Alert, Image, Linking,
 } from 'react-native';
+// SafeAreaView from core 'react-native' is a no-op on Android. Use the
+// context-aware version so insets work on both platforms.
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
+import Head from 'expo-router/head';
 import { useNav } from './navContext';
 import { useAuth } from './authContext';
 import { supabase } from '../../utils/supabase';
@@ -21,7 +25,7 @@ import {
   PlusCircleIcon,
   ArrowLeftIcon,
 } from 'react-native-heroicons/outline';
-
+import MobileHeader, { MobileHeaderSpacer } from './mobileHeader';
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const isMobile = SCREEN_WIDTH < 768;
 
@@ -55,9 +59,7 @@ const CATEGORY_CONFIG = {
 // (Data fetched via useEffect)
 
 
-const MenuIcon = () => (
-  <Bars3Icon size={22} color={COLORS.navy} strokeWidth={2} />
-);
+
 
 // Edit icon (pencil box) — tinted per category
 const EditIcon = ({ color }) => (
@@ -429,23 +431,22 @@ export default function SKPlanningScreen() {
 
   // ── Main Content ──
   const renderContent = () => (
-    <ScrollView
-      style={[styles.main, isMobile && styles.mainMobile]}
-      contentContainerStyle={styles.mainContent}
-      showsVerticalScrollIndicator={false}
-    >
-      {/* Mobile Header */}
-      {isMobile && (
-        <View style={styles.mobileHeader}>
-          <TouchableOpacity style={styles.menuBtn} onPress={() => setSidebarVisible(true)}>
-            <MenuIcon />
-          </TouchableOpacity>
-          <Text style={styles.mobileTitle}>Planning</Text>
-<TouchableOpacity style={styles.bellBtn} onPress={notif.open} activeOpacity={0.7}>
-  <BellIcon count={notifCount} />
-</TouchableOpacity>
-        </View>
-      )}
+    <View style={[styles.main, isMobile && styles.mainMobile]}>
+      <MobileHeader
+        title="Planning"
+        onMenuPress={() => setSidebarVisible(true)}
+        onBellPress={notif.open}
+        bellCount={notifCount}
+        BellIcon={BellIcon}
+        colors={COLORS}
+        hidden={isMobile && sidebarVisible}
+      />
+      <ScrollView
+        style={{ flex: 1 }}
+        contentContainerStyle={styles.mainContent}
+        showsVerticalScrollIndicator={false}
+      >
+      <MobileHeaderSpacer />
 
       {/* Desktop Header */}
       {!isMobile && (
@@ -583,41 +584,47 @@ export default function SKPlanningScreen() {
         </View>
       )}
     </ScrollView>
+    </View>
   );
 
   return (
-    <SafeAreaView style={styles.safe}>
-      <StatusBar barStyle="light-content" backgroundColor={COLORS.navy} />
+    <>
+      <Head>
+        <title>SK Planning · SK Monitoring</title>
+      </Head>
+      <SafeAreaView style={styles.safe} edges={isMobile ? ['left', 'right', 'bottom'] : ['top', 'left', 'right', 'bottom']}>
+        <StatusBar barStyle="light-content" backgroundColor={COLORS.navy} />
 
-      {renderEditModal()}
-      {renderViewerModal()}
+        {renderEditModal()}
+        {renderViewerModal()}
 
-      <NotificationModal
-        {...notif.modalProps}
-        onOpenRoute={(route) => {
-          notif.close();
-          setTimeout(() => router.push(route), 120);
-        }}
-      />
-
-      <View style={styles.layout}>
-        {isMobile && sidebarVisible && (
-          <TouchableOpacity
-            style={styles.sidebarOverlay}
-            activeOpacity={1}
-            onPress={() => setSidebarVisible(false)}
-          />
-        )}
-        <Sidebar
-          activeTab={activeTab}
-          onNavPress={handleNavPress}
-          onLogout={handleLogout}
-          isMobile={isMobile}
-          sidebarVisible={sidebarVisible}
+        <NotificationModal
+          {...notif.modalProps}
+          onOpenRoute={(route) => {
+            notif.close();
+            setTimeout(() => router.push(route), 120);
+          }}
         />
-        {renderContent()}
-      </View>
-    </SafeAreaView>
+
+        <View style={styles.layout}>
+          {isMobile && sidebarVisible && (
+            <TouchableOpacity
+              style={styles.sidebarOverlay}
+              activeOpacity={1}
+              onPress={() => setSidebarVisible(false)}
+            />
+          )}
+          <Sidebar
+            activeTab={activeTab}
+            onNavPress={handleNavPress}
+            onLogout={handleLogout}
+            isMobile={isMobile}
+            sidebarVisible={sidebarVisible}
+          />
+          {renderContent()}
+        </View>
+      </SafeAreaView>
+    </>
   );
 }
 
@@ -637,17 +644,9 @@ const styles = StyleSheet.create({
   mainMobile:  { borderTopLeftRadius: 0 },
   mainContent: { padding: 20, paddingBottom: 40 },
 
-  // Mobile header
-  mobileHeader: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    marginBottom: 16, paddingBottom: 12,
-    borderBottomWidth: 1, borderBottomColor: COLORS.lightGray,
-  },
-  menuBtn: {
-    width: 40, height: 40, borderRadius: 20,
-    backgroundColor: COLORS.cardBg, alignItems: 'center', justifyContent: 'center',
-  },
-  mobileTitle: { fontSize: 18, fontWeight: '800', color: COLORS.darkText },
+
+
+
 
   // Desktop header
   header: {

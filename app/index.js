@@ -1,12 +1,16 @@
 import React, { useState } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity,
-  StyleSheet, SafeAreaView, StatusBar,
+  StyleSheet, StatusBar,
   KeyboardAvoidingView, Platform, ScrollView,
   Dimensions, Image, ImageBackground,
 } from 'react-native';
+// SafeAreaView from core 'react-native' is a no-op on Android. Use the
+// context-aware version so insets work on both platforms.
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useAuth } from './(tabs)/authContext';
+import Head from 'expo-router/head';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const isMobile = SCREEN_WIDTH < 400;
@@ -71,7 +75,11 @@ export default function LoginScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.safe}>
+    <>
+      <Head>
+        <title>Login · SK Monitoring</title>
+      </Head>
+      <SafeAreaView style={styles.safe}>
       <StatusBar barStyle="light-content" backgroundColor={COLORS.navyDark} />
 
       {/* Full-screen background image */}
@@ -165,7 +173,8 @@ export default function LoginScreen() {
           </ScrollView>
         </KeyboardAvoidingView>
       </ImageBackground>
-    </SafeAreaView>
+      </SafeAreaView>
+    </>
   );
 }
 

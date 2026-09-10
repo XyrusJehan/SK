@@ -1,10 +1,14 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   View, Text, TextInput, ScrollView, TouchableOpacity,
-  StyleSheet, SafeAreaView, StatusBar, Dimensions,
+  StyleSheet, StatusBar, Dimensions,
   Modal, Alert, Image, Platform, Linking, ActivityIndicator,
 } from 'react-native';
+// SafeAreaView from core 'react-native' is a no-op on Android. Use the
+// context-aware version so insets work on both platforms.
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
+import Head from 'expo-router/head';
 import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
@@ -21,7 +25,7 @@ import { useAuth } from './authContext';
 import { supabase } from '../../utils/supabase';
 import { NotificationModal, useNotificationCenter, BellIcon } from './notificationCenter';
 import Sidebar from './../components/Sidebar';
-
+import MobileHeader, { MobileHeaderSpacer } from './mobileHeader';
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const isMobile = SCREEN_WIDTH < 768;
 
@@ -82,11 +86,6 @@ const YEAR_FILTERS = ['All Years', '2026', '2025', '2024'];
 // BellIcon now lives in notificationCenter.js and is imported above — shared
 // across every screen (SK + LYDO, desktop + mobile) instead of being redrawn here.
 
-const MenuIcon = () => (
-  <View style={styles.menuIconContainer}>
-    {[0, 1, 2].map(i => <View key={i} style={styles.menuLine} />)}
-  </View>
-);
 
 const UploadIcon = () => (
   <Text style={{ fontSize: 14, color: COLORS.navy }}>⬆</Text>
@@ -319,13 +318,13 @@ export default function SKPortalScreen() {
 
         // Then get comments for these posts
         const { data: comments, error } = await supabase
-          .from('resident_comments')
+          .from('comments')
           .select(`
             comment_id,
             content,
             created_at,
             is_read,
-            resident_id,
+            author_id,
             users (
               first_name,
               last_name
@@ -875,24 +874,22 @@ export default function SKPortalScreen() {
 
   // ── Main Content ──
   const renderContent = () => (
-    <ScrollView
-      style={[styles.main, isMobile && styles.mainMobile]}
-      contentContainerStyle={styles.mainContent}
-      showsVerticalScrollIndicator={false}
-      keyboardShouldPersistTaps="handled"
-    >
-      {/* Mobile Header */}
-      {isMobile && (
-        <View style={styles.mobileHeader}>
-          <TouchableOpacity style={styles.menuBtn} onPress={() => setSidebarVisible(true)}>
-            <MenuIcon />
-          </TouchableOpacity>
-          <Text style={styles.mobileTitle}>Portal</Text>
-<TouchableOpacity style={styles.bellBtn} onPress={notif.open} activeOpacity={0.7}>
-  <BellIcon count={notifCount} />
-</TouchableOpacity>
-        </View>
-      )}
+    <View style={[styles.main, isMobile && styles.mainMobile]}>
+      <MobileHeader
+        title="Planning"
+        onMenuPress={() => setSidebarVisible(true)}
+        onBellPress={notif.open}
+        bellCount={notifCount}
+        BellIcon={BellIcon}
+        colors={COLORS}
+        hidden={isMobile && sidebarVisible}
+      />
+      <ScrollView
+        style={{ flex: 1 }}
+        contentContainerStyle={styles.mainContent}
+        showsVerticalScrollIndicator={false}
+      >
+      <MobileHeaderSpacer />
 
       {/* Desktop Header */}
       {!isMobile && (
@@ -1070,6 +1067,7 @@ export default function SKPortalScreen() {
         </>
       )}
     </ScrollView>
+    </View>
   );
 
     // -- Success Modal --
@@ -1258,157 +1256,162 @@ export default function SKPortalScreen() {
   );
 
   return (
-    <SafeAreaView style={styles.safe}>
-      <StatusBar barStyle="light-content" backgroundColor={COLORS.navy} />
+    <>
+      <Head>
+        <title>SK Portal · SK Monitoring</title>
+      </Head>
+      <SafeAreaView style={styles.safe} edges={isMobile ? ['left', 'right', 'bottom'] : ['top', 'left', 'right', 'bottom']}>
+        <StatusBar barStyle="light-content" backgroundColor={COLORS.navy} />
 
-      {renderUploadModal()}
-      {renderAlertModal()}
-      {renderSuccessModal()}
+        {renderUploadModal()}
+        {renderAlertModal()}
+        {renderSuccessModal()}
 
-      <NotificationModal
-        {...notif.modalProps}
-        onOpenRoute={(route) => {
-          notif.close();
-          setTimeout(() => router.push(route), 120);
-        }}
-      />
+        <NotificationModal
+          {...notif.modalProps}
+          onOpenRoute={(route) => {
+            notif.close();
+            setTimeout(() => router.push(route), 120);
+          }}
+        />
 
-      {/* ── Document Viewer Modal ── */}
-      <Modal
-        visible={viewerModal.visible}
-        animationType="slide"
-        transparent={false}
-        onRequestClose={() => setViewerModal({ visible: false, fileUrl: null, title: '' })}
-      >
-        <SafeAreaView style={{ flex: 1, backgroundColor: COLORS.navy }}>
-          <View style={styles.viewerHeader}>
-            <TouchableOpacity
-              style={styles.viewerBackBtn}
-              onPress={() => setViewerModal({ visible: false, fileUrl: null, title: '' })}
-              activeOpacity={0.8}
-            >
-              <Feather name="arrow-left" size={20} color={COLORS.white} />
-            </TouchableOpacity>
-            <Text style={styles.viewerTitle} numberOfLines={1}>{viewerModal.title}</Text>
-            {viewerModal.fileUrl && (
+        {/* ── Document Viewer Modal ── */}
+        <Modal
+          visible={viewerModal.visible}
+          animationType="slide"
+          transparent={false}
+          onRequestClose={() => setViewerModal({ visible: false, fileUrl: null, title: '' })}
+        >
+          <SafeAreaView style={{ flex: 1, backgroundColor: COLORS.navy }}>
+            <View style={styles.viewerHeader}>
               <TouchableOpacity
-                style={styles.viewerOpenBtn}
-                onPress={() => {
-                  setViewerModal({ visible: false, fileUrl: null, title: '' });
-                  setDocumentToDownload({ fileUrl: viewerModal.fileUrl, title: viewerModal.title });
-                  setDownloadModalVisible(true);
-                }}
+                style={styles.viewerBackBtn}
+                onPress={() => setViewerModal({ visible: false, fileUrl: null, title: '' })}
                 activeOpacity={0.8}
               >
-                <Feather name="download" size={18} color={COLORS.gold} />
+                <Feather name="arrow-left" size={20} color={COLORS.white} />
               </TouchableOpacity>
-            )}
-          </View>
-          <View style={{ flex: 1, backgroundColor: COLORS.offWhite, overflow: 'hidden' }}>
-            {viewerModal.fileUrl && (
-              Platform.OS === 'web' ? (
-                <iframe
-                  src={`https://docs.google.com/gview?embedded=true&url=${encodeURIComponent(viewerModal.fileUrl)}`}
-                  style={{ flex: 1, width: '100%', height: '100%', border: 'none' }}
-                  title={viewerModal.title}
-                />
-              ) : (
-                WebView ? (
-                  <View style={{ flex: 1 }}>
-                    <WebView
-                      source={{ uri: `https://docs.google.com/gview?embedded=true&url=${encodeURIComponent(viewerModal.fileUrl)}` }}
-                      style={{ flex: 1 }}
-                      onLoadStart={() => setWebViewLoading(true)}
-                      onLoadEnd={() => setWebViewLoading(false)}
-                      onError={() => {
-                        setWebViewLoading(false);
-                        Alert.alert('Load Failed', 'Could not load the document.');
-                        setViewerModal({ visible: false, fileUrl: null, title: '' });
-                      }}
-                      startInLoadingState={true}
-                      renderLoading={() => (
+              <Text style={styles.viewerTitle} numberOfLines={1}>{viewerModal.title}</Text>
+              {viewerModal.fileUrl && (
+                <TouchableOpacity
+                  style={styles.viewerOpenBtn}
+                  onPress={() => {
+                    setViewerModal({ visible: false, fileUrl: null, title: '' });
+                    setDocumentToDownload({ fileUrl: viewerModal.fileUrl, title: viewerModal.title });
+                    setDownloadModalVisible(true);
+                  }}
+                  activeOpacity={0.8}
+                >
+                  <Feather name="download" size={18} color={COLORS.gold} />
+                </TouchableOpacity>
+              )}
+            </View>
+            <View style={{ flex: 1, backgroundColor: COLORS.offWhite, overflow: 'hidden' }}>
+              {viewerModal.fileUrl && (
+                Platform.OS === 'web' ? (
+                  <iframe
+                    src={`https://docs.google.com/gview?embedded=true&url=${encodeURIComponent(viewerModal.fileUrl)}`}
+                    style={{ flex: 1, width: '100%', height: '100%', border: 'none' }}
+                    title={viewerModal.title}
+                  />
+                ) : (
+                  WebView ? (
+                    <View style={{ flex: 1 }}>
+                      <WebView
+                        source={{ uri: `https://docs.google.com/gview?embedded=true&url=${encodeURIComponent(viewerModal.fileUrl)}` }}
+                        style={{ flex: 1 }}
+                        onLoadStart={() => setWebViewLoading(true)}
+                        onLoadEnd={() => setWebViewLoading(false)}
+                        onError={() => {
+                          setWebViewLoading(false);
+                          Alert.alert('Load Failed', 'Could not load the document.');
+                          setViewerModal({ visible: false, fileUrl: null, title: '' });
+                        }}
+                        startInLoadingState={true}
+                        renderLoading={() => (
+                          <View style={styles.viewerLoading}>
+                            <ActivityIndicator size="large" color={COLORS.navy} />
+                            <Text style={styles.viewerLoadingText}>Loading document…</Text>
+                          </View>
+                        )}
+                      />
+                      {webViewLoading && (
                         <View style={styles.viewerLoading}>
                           <ActivityIndicator size="large" color={COLORS.navy} />
                           <Text style={styles.viewerLoadingText}>Loading document…</Text>
                         </View>
                       )}
-                    />
-                    {webViewLoading && (
-                      <View style={styles.viewerLoading}>
-                        <ActivityIndicator size="large" color={COLORS.navy} />
-                        <Text style={styles.viewerLoadingText}>Loading document…</Text>
-                      </View>
-                    )}
-                  </View>
-                ) : null
-              )
-            )}
-          </View>
-        </SafeAreaView>
-      </Modal>
-
-      {/* ── Download Confirmation Modal ── */}
-      <Modal
-        visible={downloadModalVisible}
-        animationType="fade"
-        transparent={true}
-        onRequestClose={() => { setDownloadModalVisible(false); setDocumentToDownload(null); }}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.dlModalCard}>
-            <View style={styles.dlModalIconWrap}>
-              <Feather name="download" size={28} color={COLORS.navy} />
+                    </View>
+                  ) : null
+                )
+              )}
             </View>
-            <Text style={styles.dlModalTitle}>Download Document</Text>
-            <Text style={styles.dlModalBody}>
-              Do you want to download{' '}
-              <Text style={{ fontWeight: '700', color: COLORS.navy }}>"{documentToDownload?.title}"</Text>?
-            </Text>
-            <View style={styles.dlModalFooter}>
-              <TouchableOpacity
-                style={styles.dlCancelBtn}
-                onPress={() => { setDownloadModalVisible(false); setDocumentToDownload(null); }}
-                activeOpacity={0.8}
-              >
-                <Text style={styles.dlCancelText}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.dlConfirmBtn}
-                onPress={handleDownloadConfirm}
-                activeOpacity={0.8}
-              >
-                <Text style={styles.dlConfirmText}>Download</Text>
-              </TouchableOpacity>
+          </SafeAreaView>
+        </Modal>
+
+        {/* ── Download Confirmation Modal ── */}
+        <Modal
+          visible={downloadModalVisible}
+          animationType="fade"
+          transparent={true}
+          onRequestClose={() => { setDownloadModalVisible(false); setDocumentToDownload(null); }}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.dlModalCard}>
+              <View style={styles.dlModalIconWrap}>
+                <Feather name="download" size={28} color={COLORS.navy} />
+              </View>
+              <Text style={styles.dlModalTitle}>Download Document</Text>
+              <Text style={styles.dlModalBody}>
+                Do you want to download{' '}
+                <Text style={{ fontWeight: '700', color: COLORS.navy }}>"{documentToDownload?.title}"</Text>?
+              </Text>
+              <View style={styles.dlModalFooter}>
+                <TouchableOpacity
+                  style={styles.dlCancelBtn}
+                  onPress={() => { setDownloadModalVisible(false); setDocumentToDownload(null); }}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.dlCancelText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.dlConfirmBtn}
+                  onPress={handleDownloadConfirm}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.dlConfirmText}>Download</Text>
+                </TouchableOpacity>
+              </View>
             </View>
           </View>
-        </View>
-      </Modal>
+        </Modal>
 
-      {/* Floating dropdowns — always on top */}
-      {renderFloatingDropdown(showDocDropdown, setShowDocDropdown, docDropdownPos, DOCUMENT_FILTERS, docFilter, setDocFilter, 220)}
-      {renderFloatingDropdown(showYearDropdown, setShowYearDropdown, yearDropdownPos, YEAR_FILTERS, yearFilter, setYearFilter, 100)}
-      {renderFloatingDropdown(showUploadCatDropdown, setShowUploadCatDropdown, uploadCatDropdownPos, UPLOAD_FOLDER_CATEGORIES, uploadCategory, (val) => { setUploadCategory(val); setUploadDocType(null); }, 200)}
-      {renderFloatingDropdown(showUploadDocTypeDropdown, setShowUploadDocTypeDropdown, uploadDocTypeDropdownPos, (CATEGORY_DOC_TYPES[uploadCategory] || []).map(d => d.label), uploadDocType?.label, (val) => { const found = (CATEGORY_DOC_TYPES[uploadCategory] || []).find(d => d.label === val); setUploadDocType(found || null); }, 260)}
-      {renderFloatingDropdown(showUploadYearDropdown, setShowUploadYearDropdown, uploadYearDropdownPos, UPLOAD_YEARS, uploadYear, setUploadYear, 90)}
+        {/* Floating dropdowns — always on top */}
+        {renderFloatingDropdown(showDocDropdown, setShowDocDropdown, docDropdownPos, DOCUMENT_FILTERS, docFilter, setDocFilter, 220)}
+        {renderFloatingDropdown(showYearDropdown, setShowYearDropdown, yearDropdownPos, YEAR_FILTERS, yearFilter, setYearFilter, 100)}
+        {renderFloatingDropdown(showUploadCatDropdown, setShowUploadCatDropdown, uploadCatDropdownPos, UPLOAD_FOLDER_CATEGORIES, uploadCategory, (val) => { setUploadCategory(val); setUploadDocType(null); }, 200)}
+        {renderFloatingDropdown(showUploadDocTypeDropdown, setShowUploadDocTypeDropdown, uploadDocTypeDropdownPos, (CATEGORY_DOC_TYPES[uploadCategory] || []).map(d => d.label), uploadDocType?.label, (val) => { const found = (CATEGORY_DOC_TYPES[uploadCategory] || []).find(d => d.label === val); setUploadDocType(found || null); }, 260)}
+        {renderFloatingDropdown(showUploadYearDropdown, setShowUploadYearDropdown, uploadYearDropdownPos, UPLOAD_YEARS, uploadYear, setUploadYear, 90)}
 
-      <View style={styles.layout}>
-        {isMobile && sidebarVisible && (
-          <TouchableOpacity
-            style={styles.sidebarOverlay}
-            activeOpacity={1}
-            onPress={() => setSidebarVisible(false)}
+        <View style={styles.layout}>
+          {isMobile && sidebarVisible && (
+            <TouchableOpacity
+              style={styles.sidebarOverlay}
+              activeOpacity={1}
+              onPress={() => setSidebarVisible(false)}
+            />
+          )}
+          <Sidebar
+            activeTab={activeTab}
+            onNavPress={(tab) => tab === 'Portal' ? setActiveTab('Portal') : handleNavPress(tab)}
+            onLogout={handleLogout}
+            isMobile={isMobile}
+            sidebarVisible={sidebarVisible}
           />
-        )}
-        <Sidebar
-          activeTab={activeTab}
-          onNavPress={(tab) => tab === 'Portal' ? setActiveTab('Portal') : handleNavPress(tab)}
-          onLogout={handleLogout}
-          isMobile={isMobile}
-          sidebarVisible={sidebarVisible}
-        />
-        {renderContent()}
-      </View>
-    </SafeAreaView>
+          {renderContent()}
+        </View>
+      </SafeAreaView>
+    </>
   );
 }
 
@@ -1428,19 +1431,7 @@ const styles = StyleSheet.create({
   mainMobile:  { borderTopLeftRadius: 0 },
   mainContent: { padding: 20, paddingBottom: 40 },
 
-  // Mobile header
-  mobileHeader: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    marginBottom: 16, paddingBottom: 12,
-    borderBottomWidth: 1, borderBottomColor: COLORS.lightGray,
-  },
-  menuBtn: {
-    width: 40, height: 40, borderRadius: 20,
-    backgroundColor: COLORS.cardBg, alignItems: 'center', justifyContent: 'center',
-  },
-  menuIconContainer: { width: 20, height: 16, justifyContent: 'space-between' },
-  menuLine:    { width: 20, height: 2, backgroundColor: COLORS.navy, borderRadius: 1 },
-  mobileTitle: { fontSize: 18, fontWeight: '800', color: COLORS.darkText },
+
 
   // Desktop header
   header: {
@@ -2328,6 +2319,7 @@ const successStyles = StyleSheet.create({
     borderRadius: 3,
     marginTop: 4,
     flexShrink: 0,
+    
   },
   docChipText: {
     flex: 1,

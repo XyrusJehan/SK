@@ -1,11 +1,11 @@
 import { useFocusEffect } from '@react-navigation/native';
 import { useRouter } from 'expo-router';
+import Head from 'expo-router/head';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Dimensions, Image, Modal,
-  SafeAreaView,
   ScrollView,
   StatusBar,
   StyleSheet,
@@ -13,11 +13,17 @@ import {
   TouchableOpacity,
   View
 } from 'react-native';
+// NOTE: SafeAreaView from core 'react-native' only applies inset padding on
+// iOS — it's a documented no-op on Android, which is why content (and the
+// mobile sidebar drawer) rendered underneath the status bar there. The
+// context-aware version below works correctly on both platforms.
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { supabase } from '../../utils/supabase';
 import { useAuth } from './authContext';
 import { useNav } from './navContext';
 import Sidebar from './../components/Sidebar';
 import { BellIcon } from './notificationCenter';
+import MobileHeader, { MobileHeaderSpacer } from './mobileHeader';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const isMobile = SCREEN_WIDTH < 768;
@@ -118,14 +124,6 @@ const SearchIcon = () => (
 
 const ActivityDot = ({ type }) => (
   <View style={[styles.activityDot, { backgroundColor: type === 'upload' ? COLORS.accent : COLORS.teal }]} />
-);
-
-const MenuIcon = () => (
-  <View style={styles.menuIconContainer}>
-    <View style={styles.menuLine} />
-    <View style={styles.menuLine} />
-    <View style={styles.menuLine} />
-  </View>
 );
 
 // ─── ANNUAL COMPLIANCE TIMELINE ──────────────────────────────────────────────
@@ -1347,7 +1345,11 @@ const seenReady = seenLoaded ? 1 : 0;
   );
 
   return (
-    <SafeAreaView style={styles.safe}>
+    <>
+      <Head>
+        <title>Dashboard · SK Monitoring</title>
+      </Head>
+      <SafeAreaView style={styles.safe} edges={isMobile ? ['left', 'right', 'bottom'] : ['top', 'left', 'right', 'bottom']}>
       <StatusBar barStyle="light-content" backgroundColor={COLORS.navy} />
 
       {/* ── Calendar Modal ── */}
@@ -1398,24 +1400,19 @@ const seenReady = seenLoaded ? 1 : 0;
         )}
         {renderSidebar()}
 
-        <ScrollView style={[styles.main, isMobile && styles.mainMobile]} contentContainerStyle={styles.mainContent} showsVerticalScrollIndicator={false}>
-
-          {/* Mobile Header */}
-          {isMobile && (
-            <View style={styles.mobileHeader}>
-              <TouchableOpacity style={styles.menuBtn} onPress={() => setSidebarVisible(!sidebarVisible)}>
-                <MenuIcon />
-              </TouchableOpacity>
-              <Text style={styles.mobileTitle}>SK Dashboard</Text>
-              <View style={styles.mobileHeaderActions}>
-                <TouchableOpacity style={styles.bellBtnMobile} activeOpacity={0.7} onPress={() => {
-                  setNotificationModalVisible(true);
-                }}>
-                  <BellIcon count={notifCount} />
-                </TouchableOpacity>
-              </View>
-            </View>
-          )}
+        <View style={[styles.main, isMobile && styles.mainMobile]}>
+          <MobileHeader
+            title="SK Dashboard"
+            onMenuPress={() => setSidebarVisible(!sidebarVisible)}
+            onBellPress={() => setNotificationModalVisible(true)}
+            bellCount={notifCount}
+            BellIcon={BellIcon}
+            hidden={sidebarVisible}
+            colors={COLORS}
+            
+          />
+          <ScrollView style={styles.mainScroll} contentContainerStyle={styles.mainContent} showsVerticalScrollIndicator={false}>
+            <MobileHeaderSpacer />
 
           {/* Desktop Header */}
           {!isMobile && (
@@ -1596,8 +1593,10 @@ const seenReady = seenLoaded ? 1 : 0;
 
           <View style={{ height: 32 }} />
         </ScrollView>
+        </View>
       </View>
     </SafeAreaView>
+    </>
   );
 }
 
@@ -1914,18 +1913,8 @@ const styles = StyleSheet.create({
   // ── Main area ──
   main: { flex: 1, backgroundColor: COLORS.offWhite, borderTopLeftRadius: 20 },
   mainMobile: { borderTopLeftRadius: 0 },
+  mainScroll: { flex: 1 },
   mainContent: { padding: 20, paddingBottom: 40 },
-
-  // ── Mobile header ──
-  mobileHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, paddingBottom: 10, borderBottomWidth: 1, borderBottomColor: COLORS.lightGray },
-  menuBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: COLORS.cardBg, alignItems: 'center', justifyContent: 'center' },
-  menuIconContainer: { width: 20, height: 16, justifyContent: 'space-between' },
-  menuLine: { width: 20, height: 2, backgroundColor: COLORS.navy, borderRadius: 1 },
-  mobileTitle: { fontSize: 18, fontWeight: '800', color: COLORS.darkText },
-  mobileHeaderActions: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  mobileActionBtn: { width: 32, height: 32, borderRadius: 16, backgroundColor: COLORS.cardBg, alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.1, shadowRadius: 2, elevation: 2 },
-  mobileArchivesBtn: { backgroundColor: '#133E75' },
-  mobileActionIcon: { fontSize: 14 },
 
   // ── Desktop header (unchanged) ──
  // Desktop header

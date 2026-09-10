@@ -1,15 +1,20 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, TextInput, ScrollView, TouchableOpacity,
-  StyleSheet, SafeAreaView, StatusBar, Dimensions,
+  StyleSheet, StatusBar, Dimensions,
   Alert,
 } from 'react-native';
+// SafeAreaView from core 'react-native' is a no-op on Android. Use the
+// context-aware version so insets work on both platforms.
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
+import Head from 'expo-router/head';
 import { useNav } from './navContext';
 import { useAuth } from './authContext';
 import { supabase } from '../../utils/supabase';
 import { NotificationModal, useNotificationCenter, BellIcon } from './notificationCenter';
 import Sidebar from './../components/Sidebar';
+import MobileHeader, { MobileHeaderSpacer } from './mobileHeader';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const isMobile = SCREEN_WIDTH < 768;
@@ -108,12 +113,8 @@ const getCategoryMeta = (name) => {
 // ─── ICONS ────────────────────────────────────────────────────────────────────
 // BellIcon now lives in notificationCenter.js and is imported above — shared
 // across every screen (SK + LYDO, desktop + mobile) instead of being redrawn here.
-
-const MenuIcon = () => (
-  <View style={styles.menuIconContainer}>
-    {[0, 1, 2].map(i => <View key={i} style={styles.menuLine} />)}
-  </View>
-);
+// MenuIcon now lives in the shared mobileHeader module (see import above) so the
+// sticky mobile bar is identical on every SK + LYDO screen.
 
 // Nav icons + NAV_ITEMS now live in the shared Sidebar module (see import above).
 
@@ -121,7 +122,13 @@ const MenuIcon = () => (
 const DocumentCard = ({ group, onItemPress, submittedSet }) => {
   const { colors, title, icon, items } = group;
   return (
-    <View style={[styles.card, { backgroundColor: colors.bg, borderColor: colors.border || '#E5E5E5' }]}>
+    <View
+      style={[
+        styles.card,
+        !isMobile && styles.cardFillHeight,
+        { backgroundColor: colors.bg, borderColor: colors.border || '#E5E5E5' },
+      ]}
+    >
       <View style={[styles.cardHeader, { backgroundColor: colors.header }]}>
         <Text style={styles.cardHeaderIcon}>{icon}</Text>
         <Text style={styles.cardHeaderTitle}>{title}</Text>
@@ -323,27 +330,22 @@ export default function SKDocumentScreen() {
 
   // ── Main Content ──
   const renderContent = () => (
-    <ScrollView
-      style={[styles.main, isMobile && styles.mainMobile]}
-      contentContainerStyle={styles.mainContent}
-      showsVerticalScrollIndicator={false}
-    >
-      {/* Mobile Header */}
-      {isMobile && (
-        <View style={styles.mobileHeader}>
-          <TouchableOpacity style={styles.menuBtn} onPress={() => setSidebarVisible(true)}>
-            <MenuIcon />
-          </TouchableOpacity>
-          <Text style={styles.mobileTitle}>Documents</Text>
-          <TouchableOpacity
-            style={[styles.bellBtn, styles.bellBtnMobile]}
-            onPress={notif.open}
-            activeOpacity={0.7}
-          >
-            <BellIcon count={notifCount} />
-          </TouchableOpacity>
-        </View>
-      )}
+    <View style={[styles.main, isMobile && styles.mainMobile]}>
+      <MobileHeader
+        title="Documents"
+        onMenuPress={() => setSidebarVisible(true)}
+        onBellPress={notif.open}
+        bellCount={notifCount}
+        BellIcon={BellIcon}
+        colors={COLORS}
+        hidden={isMobile && sidebarVisible}
+      />
+      <ScrollView
+        style={styles.mainScroll}
+        contentContainerStyle={styles.mainContent}
+        showsVerticalScrollIndicator={false}
+      >
+        <MobileHeaderSpacer />
 
       {/* Desktop Header */}
       {!isMobile && (
@@ -362,7 +364,7 @@ export default function SKDocumentScreen() {
         </View>
       )}
 
-  
+
 
       <View style={styles.filterRow}>
         {/* Folder / Document Management tab bar */}
@@ -424,11 +426,16 @@ export default function SKDocumentScreen() {
           </View>
         )}
       </View>
-    </ScrollView>
+      </ScrollView>
+    </View>
   );
 
   return (
-    <SafeAreaView style={styles.safe}>
+    <>
+      <Head>
+        <title>Document · SK Monitoring</title>
+      </Head>
+      <SafeAreaView style={styles.safe} edges={isMobile ? ['left', 'right', 'bottom'] : ['top', 'left', 'right', 'bottom']}>
       <StatusBar barStyle="light-content" backgroundColor={COLORS.navy} />
 
       <NotificationModal
@@ -451,6 +458,7 @@ export default function SKDocumentScreen() {
         {renderContent()}
       </View>
     </SafeAreaView>
+    </>
   );
 }
 
@@ -468,6 +476,7 @@ const styles = StyleSheet.create({
   // ── Main ──
   main:        { flex: 1, backgroundColor: COLORS.offWhite, borderTopLeftRadius: 20 },
   mainMobile:  { borderTopLeftRadius: 0 },
+  mainScroll:  { flex: 1 },
   mainContent: { padding: 20, paddingBottom: 40 },
 
   // Mobile header
@@ -581,6 +590,13 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.06, shadowRadius: 6,
+  },
+  // Only used on the desktop row-wrap grid, to make cards in the same row
+  // match height. On mobile (column stack) each card wrapper has no fixed
+  // height, and a bare `height: '100%'` there resolves against the nearest
+  // ancestor with a defined height on Android — stretching the first card
+  // to fill the whole scroll view and pushing every other card off-screen.
+  cardFillHeight: {
     height: '100%',
   },
   cardHeader: {

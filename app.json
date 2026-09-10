@@ -1,8 +1,8 @@
 {
   "expo": {
-    "name": "SK",
+    "name": "SK Rizal",
     "slug": "sk",
-    "version": "1.0.0",
+    "version": "0.1.0",
     "orientation": "portrait",
     "icon": "./assets/images/rizal-logo.png",
     "scheme": "sk",
@@ -17,14 +17,13 @@
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
-        "foregroundImage": "./assets/images/android-icon-foreground.png",
-        "backgroundImage": "./assets/images/android-icon-background.png",
-        "monochromeImage": "./assets/images/android-icon-monochrome.png"
+        "backgroundColor": "#00000000",
+        "foregroundImage": "./assets/images/rizal-logo.png"
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
-      "package": "com.rizal.sk"
+      "label": "SK Rizal",
+      "versionCode": 1
     },
     "web": {
       "output": "static",
