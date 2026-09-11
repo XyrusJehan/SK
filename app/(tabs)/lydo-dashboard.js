@@ -1458,10 +1458,10 @@ const styles = StyleSheet.create({
   // Bell — unread-count badge lives in LydoBellIcon (notificationCenter.js);
   // only the button containers are styled here.
   bellBtn: {
-    width: 44, height: 44, borderRadius: 22,
+    width: 40, height: 40, borderRadius: 20,
     backgroundColor: COLORS.white, alignItems: 'center', justifyContent: 'center',
-    shadowColor: COLORS.navy, shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.15, shadowRadius: 8, elevation: 4,
+    shadowColor: COLORS.navy, shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15, shadowRadius: 6, elevation: 3,
   },
 
   // ── Stat Cards (HeroUI-inspired) ──

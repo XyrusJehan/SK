@@ -14,6 +14,7 @@ import {
 // context-aware version so insets work on both platforms.
 import { useRouter } from 'expo-router';
 import Head from 'expo-router/head';
+import { Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { supabase } from '../../utils/supabase';
 import Sidebar, { LYDO_NAV_ITEMS } from './../components/Sidebar';
@@ -735,6 +736,33 @@ export default function LYDOMonitorAccountScreen() {
     fetchData();
   }, []);
 
+  // On web, the outer html/body defaults to a black background, which shows
+  // as a thin black strip above the app's own navy header/sidebar. Force the
+  // page root to match so there's no visible gap.
+  useEffect(() => {
+    if (Platform.OS === 'web' && typeof document !== 'undefined') {
+      const prevHtmlBg = document.documentElement.style.backgroundColor;
+      const prevBodyBg = document.body.style.backgroundColor;
+      const prevHtmlHeight = document.documentElement.style.height;
+      const prevBodyHeight = document.body.style.height;
+      const prevBodyMargin = document.body.style.margin;
+
+      document.documentElement.style.backgroundColor = COLORS.navy;
+      document.body.style.backgroundColor = COLORS.navy;
+      document.documentElement.style.height = '100%';
+      document.body.style.height = '100%';
+      document.body.style.margin = '0';
+
+      return () => {
+        document.documentElement.style.backgroundColor = prevHtmlBg;
+        document.body.style.backgroundColor = prevBodyBg;
+        document.documentElement.style.height = prevHtmlHeight;
+        document.body.style.height = prevBodyHeight;
+        document.body.style.margin = prevBodyMargin;
+      };
+    }
+  }, []);
+
   const togglePasswordVisibility = (userId) => {
     setVisiblePasswords(prev => {
       const next = new Set(prev);
@@ -1058,7 +1086,7 @@ export default function LYDOMonitorAccountScreen() {
     <>
       <Head>
         <title>LYDO Accounts · SK Monitoring</title>
-      </Head>z
+      </Head>
       <GlobalDropdownProvider>
         <SafeAreaView style={styles.safe} edges={isMobile ? ['left', 'right', 'bottom'] : ['top', 'left', 'right', 'bottom']}>
           <StatusBar barStyle="light-content" backgroundColor={COLORS.navy} />

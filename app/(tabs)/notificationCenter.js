@@ -115,8 +115,13 @@ export function useNotificationCenter(barangayId) {
 
   const [refreshKey, setRefreshKey] = useState(0);
 
-  // Load persisted "seen" counts once on mount so the bell badge doesn't show
-  // stale notifications as "new" after a refresh or app restart.
+  // Load persisted "seen" counts on mount AND every time this screen regains
+  // focus (refreshKey bumps on focus — see below). Re-reading on focus, not
+  // just on mount, is what makes the badge sync across tabs: if the user
+  // marks everything read on one tab (which writes to AsyncStorage) and then
+  // switches to another already-mounted tab, that tab's own hook instance
+  // otherwise never learns the counts changed and keeps showing a stale
+  // badge. Re-reading storage on every focus fixes that.
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -129,7 +134,7 @@ export function useNotificationCenter(barangayId) {
       setSeenLoaded(true);
     })();
     return () => { cancelled = true; };
-  }, []);
+  }, [refreshKey]);
 
   // Persist seen counts to AsyncStorage whenever they change after the
   // initial load.
@@ -974,8 +979,10 @@ export function useLydoNotificationCenter() {
 
   const [refreshKey, setRefreshKey] = useState(0);
 
-  // Load the persisted "seen" count once on mount so the bell badge doesn't
-  // show stale notifications as "new" after a refresh or app restart.
+  // Load the persisted "seen" count on mount AND every time this screen
+  // regains focus (refreshKey bumps on focus below), so a mark-as-read on
+  // one LYDO tab is picked up by other already-mounted tabs instead of
+  // leaving their badge stuck at the old count.
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -985,7 +992,7 @@ export function useLydoNotificationCenter() {
       setSeenLoaded(true);
     })();
     return () => { cancelled = true; };
-  }, []);
+  }, [refreshKey]);
 
   // Persist the seen count to AsyncStorage whenever it changes after the
   // initial load.
