@@ -21,6 +21,8 @@ import { useNav } from './navContext';
 // context-aware version below works correctly on both platforms.
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { supabase } from '../../utils/supabase';
+import AnnualComplianceGraph from '../components/AnnualComplianceGraph';
+import TopBarangaysRanking from '../components/TopBarangaysRanking';
 import Sidebar, { LYDO_NAV_ITEMS } from './../components/Sidebar';
 import MobileHeader, { MobileHeaderSpacer } from './mobileHeader';
 import { LydoBellIcon, LydoNotificationModal, useLydoNotificationCenter } from './notificationCenter';
@@ -1196,6 +1198,9 @@ export default function LYDOHomeScreen() {
                 </View>
               </View>
 
+              {/* Annual Compliance Graph */}
+              <AnnualComplianceGraph />
+
               {/* ── APPROACHING DEADLINE ── */}
               <View style={styles.deadlineCard}>
                 <View style={styles.deadlineHeader}>
@@ -1353,6 +1358,9 @@ export default function LYDOHomeScreen() {
                   </TouchableOpacity>
                 </View>
               </View>
+
+              {/* Top Barangays Ranking */}
+              <TopBarangaysRanking />
 
               <View style={{ height: 32 }} />
             </ScrollView>

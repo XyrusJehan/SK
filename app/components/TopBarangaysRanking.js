@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import { ActivityIndicator, Dimensions, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { computeStatus } from '../(tabs)/reportsApi';
 import { supabase } from '../../utils/supabase';
 
@@ -18,6 +18,9 @@ const HERO = {
   default300: '#D4D4D8', default500: '#71717A', foreground: '#11181C',
   white: '#FFFFFF',
 };
+
+const { width: SCREEN_W } = Dimensions.get('window');
+const YEAR_MENU_WIDTH = 130;
 
 // Rank-badge styling for the top 3 spots (gold/silver/bronze), default beyond that
 const RANK_STYLE = [
@@ -38,21 +41,46 @@ export default function TopBarangaysRanking() {
   const [yearOptions, setYearOptions] = useState([]);
   const [ranking, setRanking] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [yearDropdownOpen, setYearDropdownOpen] = useState(false);
+  const [yearMenuAnchor, setYearMenuAnchor] = useState({ top: 0, left: 0 });
+  const yearTriggerRef = useRef(null);
 
-  // Fetch the fiscal years actually configured in folder_year, newest first —
+  // Measures the trigger's on-screen position so the dropdown (rendered in a
+  // top-level Modal, above every other layer) can be anchored right beneath it.
+  const openYearDropdown = () => {
+    if (yearTriggerRef.current) {
+      yearTriggerRef.current.measureInWindow((x, y, width, height) => {
+        const left = Math.min(
+          Math.max(8, x + width - YEAR_MENU_WIDTH),
+          SCREEN_W - YEAR_MENU_WIDTH - 8
+        );
+        setYearMenuAnchor({ top: y + height + 6, left });
+        setYearDropdownOpen(true);
+      });
+    } else {
+      setYearDropdownOpen(true);
+    }
+  };
+
+  // Fetch the fiscal years actually configured in folder_year, oldest first —
   // same source used by AnnualComplianceGraph's year selector — and default
-  // to the most recent one.
+  // to the current calendar year (falling back to the closest available one).
   useEffect(() => {
     const fetchYears = async () => {
       try {
         const { data, error } = await supabase
           .from('folder_year')
           .select('fiscal_year')
-          .order('fiscal_year', { ascending: false });
+          .order('fiscal_year', { ascending: true });
         if (error) throw error;
         const years = (data || []).map((row) => String(row.fiscal_year));
         setYearOptions(years);
-        setSelectedYear((prev) => (prev && years.includes(prev) ? prev : years[0] || null));
+        const currentYear = String(new Date().getFullYear());
+        setSelectedYear((prev) => {
+          if (prev && years.includes(prev)) return prev;
+          if (years.includes(currentYear)) return currentYear;
+          return years[years.length - 1] || null;
+        });
       } catch (e) {
         console.error('Failed to load fiscal years:', e);
       }
@@ -145,28 +173,59 @@ export default function TopBarangaysRanking() {
             </Text>
           )}
         </View>
-      </View>
 
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        style={rankingStyles.yearScroll}
-        contentContainerStyle={rankingStyles.yearPicker}
-      >
-        {yearOptions.map((y) => {
-          const active = selectedYear === y;
-          return (
+        {/* ── HeroUI-style Select: year dropdown ── */}
+        <View style={rankingStyles.yearDropdownWrap}>
+          <TouchableOpacity
+            ref={yearTriggerRef}
+            style={[rankingStyles.yearTrigger, yearDropdownOpen && rankingStyles.yearTriggerOpen]}
+            onPress={() => (yearDropdownOpen ? setYearDropdownOpen(false) : openYearDropdown())}
+            activeOpacity={0.75}
+          >
+            <Text style={rankingStyles.yearTriggerText}>{selectedYear || 'Year'}</Text>
+            <Text style={[rankingStyles.yearTriggerChevron, yearDropdownOpen && rankingStyles.yearTriggerChevronOpen]}>⌄</Text>
+          </TouchableOpacity>
+
+          {/* Rendered in a top-level Modal so it always paints above every
+              other layer on the screen, instead of depending on local
+              z-index/elevation stacking within the card. */}
+          <Modal
+            visible={yearDropdownOpen}
+            transparent
+            animationType="fade"
+            onRequestClose={() => setYearDropdownOpen(false)}
+          >
             <TouchableOpacity
-              key={y}
-              style={[rankingStyles.yearOption, active && rankingStyles.yearOptionActive]}
-              onPress={() => setSelectedYear(y)}
-              activeOpacity={0.75}
+              style={StyleSheet.absoluteFillObject}
+              activeOpacity={1}
+              onPress={() => setYearDropdownOpen(false)}
+            />
+            <View
+              style={[
+                rankingStyles.yearMenu,
+                { position: 'absolute', top: yearMenuAnchor.top, left: yearMenuAnchor.left, width: YEAR_MENU_WIDTH },
+              ]}
             >
-              <Text style={[rankingStyles.yearOptionText, active && rankingStyles.yearOptionTextActive]}>{y}</Text>
-            </TouchableOpacity>
-          );
-        })}
-      </ScrollView>
+              <ScrollView style={rankingStyles.yearMenuScroll} showsVerticalScrollIndicator={false}>
+                {yearOptions.map((y) => {
+                  const active = selectedYear === y;
+                  return (
+                    <TouchableOpacity
+                      key={y}
+                      style={[rankingStyles.yearMenuItem, active && rankingStyles.yearMenuItemActive]}
+                      onPress={() => { setSelectedYear(y); setYearDropdownOpen(false); }}
+                      activeOpacity={0.75}
+                    >
+                      <Text style={[rankingStyles.yearMenuItemText, active && rankingStyles.yearMenuItemTextActive]}>{y}</Text>
+                      {active && <Text style={rankingStyles.yearMenuCheck}>✓</Text>}
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+            </View>
+          </Modal>
+        </View>
+      </View>
 
       {loading || !selectedYear ? (
         <View style={rankingStyles.loadingWrap}>
@@ -234,16 +293,34 @@ const rankingStyles = StyleSheet.create({
   title: { fontSize: 16, fontWeight: '800', color: HERO.foreground },
   subtitle: { fontSize: 12, color: HERO.default500, marginTop: 3, fontWeight: '500' },
 
-  // ── Year picker — HeroUI-style pill/segmented control ──
-  yearScroll: { marginBottom: 14 },
-  yearPicker: { flexDirection: 'row', gap: 8, paddingRight: 4 },
-  yearOption: {
-    paddingHorizontal: 14, paddingVertical: 7, borderRadius: 999,
-    backgroundColor: HERO.default100, borderWidth: 1, borderColor: HERO.default200,
+  // ── Year dropdown — HeroUI-style Select ──
+  yearDropdownWrap: { flexShrink: 0 },
+  yearTrigger: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10,
+    backgroundColor: HERO.default50, borderWidth: 1, borderColor: HERO.default200,
   },
-  yearOptionActive: { backgroundColor: HERO.primary, borderColor: HERO.primary },
-  yearOptionText: { fontSize: 12.5, fontWeight: '700', color: HERO.default500 },
-  yearOptionTextActive: { color: HERO.white },
+  yearTriggerOpen: { borderColor: HERO.primary, backgroundColor: HERO.primary50 },
+  yearTriggerText: { fontSize: 12.5, fontWeight: '700', color: HERO.foreground },
+  yearTriggerChevron: { fontSize: 12, color: HERO.default500, fontWeight: '700' },
+  yearTriggerChevronOpen: { color: HERO.primary, transform: [{ rotate: '180deg' }] },
+
+  yearMenu: {
+    backgroundColor: HERO.white, borderRadius: 14,
+    borderWidth: 1, borderColor: HERO.default200,
+    paddingVertical: 6, elevation: 16,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.12, shadowRadius: 16,
+  },
+  yearMenuScroll: { maxHeight: 220 },
+  yearMenuItem: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    gap: 10, paddingHorizontal: 14, paddingVertical: 10,
+  },
+  yearMenuItemActive: { backgroundColor: HERO.primary50 },
+  yearMenuItemText: { fontSize: 13, fontWeight: '600', color: HERO.foreground },
+  yearMenuItemTextActive: { color: HERO.primary, fontWeight: '800' },
+  yearMenuCheck: { fontSize: 12, fontWeight: '800', color: HERO.primary },
 
   // ── Loading / empty states ──
   loadingWrap: { alignItems: 'center', justifyContent: 'center', paddingVertical: 28, gap: 8 },
