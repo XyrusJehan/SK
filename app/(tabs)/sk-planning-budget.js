@@ -357,55 +357,72 @@ export default function SKPlanningBudgetScreen() {
           <View style={styles.tableHeader}>
             <Text style={[styles.thText, styles.colBarangay]}>Barangay</Text>
             <Text style={[styles.thText, styles.colStatus]}>Status</Text>
-            <Text style={[styles.thText, styles.colAction]}>Document</Text>
+            <Text style={[styles.thText, styles.colAction, { textAlign: 'right' }]}>Document</Text>
           </View>
 
           {/* Data rows */}
           {loading ? (
             <View style={styles.stateRow}>
-              <Text style={styles.stateText}>Loading budget documents…</Text>
+              <ActivityIndicator size="small" color={COLORS.navy} />
+              <Text style={[styles.stateText, { marginTop: 10 }]}>Loading budget documents…</Text>
             </View>
           ) : filteredRows.length === 0 ? (
             <View style={styles.stateRow}>
+              <Text style={styles.stateEmoji}>🗂️</Text>
               <Text style={styles.stateText}>No approved annual budget documents found for {selectedYear}.</Text>
             </View>
           ) : (
-            filteredRows.map((item, idx) => (
-              <View
-                key={item.id}
-                style={[styles.tableRow, idx % 2 !== 0 && styles.tableRowEven]}
-              >
-                <Text style={[styles.tdBarangay, styles.colBarangay]}>{item.barangay}</Text>
+            filteredRows.map((item, idx) => {
+              const isOwnBarangay = item.barangayId === barangayId;
+              const isLast = idx === filteredRows.length - 1;
+              return (
+                <View
+                  key={item.id}
+                  style={[
+                    styles.tableRow,
+                    idx % 2 !== 0 && styles.tableRowEven,
+                    isOwnBarangay && styles.tableRowOwn,
+                    isLast && styles.tableRowLast,
+                  ]}
+                >
+                  <View style={[styles.colBarangay, { flexDirection: 'row', alignItems: 'center' }]}>
+                    <Text
+                      style={[styles.tdBarangay, isOwnBarangay && styles.tdBarangayOwn]}
+                      numberOfLines={1}
+                    >
+                      {item.barangay}
+                    </Text>
+                  </View>
 
-                <View style={[styles.colStatus, { alignItems: 'flex-start' }]}>
-                  <View style={styles.statusChip}>
-                    <CheckIcon size={11} color={COLORS.success} strokeWidth={3} />
-                    <Text style={styles.statusChipText}>Approved</Text>
+                  <View style={[styles.colStatus, { alignItems: 'flex-start' }]}>
+                    <View style={styles.statusChip}>
+                      <View style={styles.statusDot} />
+                      <Text style={styles.statusChipText}>Approved</Text>
+                    </View>
+                  </View>
+
+                  <View style={[styles.colAction, { alignItems: 'flex-end' }]}>
+                    {item.fileUrl ? (
+                      <TouchableOpacity
+                        style={[styles.viewDocBtn, isOwnBarangay && styles.viewDocBtnOwn]}
+                        activeOpacity={0.75}
+                        onPress={() => handleView(item)}
+                      >
+                        <Text style={[styles.viewDocText, isOwnBarangay && styles.viewDocTextOwn]}>View</Text>
+                        <ArrowTopRightOnSquareIcon
+                          size={12}
+                          color={isOwnBarangay ? COLORS.white : COLORS.navy}
+                          strokeWidth={2.2}
+                        />
+                      </TouchableOpacity>
+                    ) : (
+                      <Text style={styles.readOnlyText}>—</Text>
+                    )}
                   </View>
                 </View>
-
-                <View style={[styles.colAction, { alignItems: 'flex-end' }]}>
-                  {item.fileUrl ? (
-                    <TouchableOpacity
-                      style={styles.viewDocBtn}
-                      activeOpacity={0.75}
-                      onPress={() => handleView(item)}
-                    >
-                      <Text style={styles.viewDocText}>View</Text>
-                      <ArrowTopRightOnSquareIcon size={12} color={COLORS.navy} strokeWidth={2.2} />
-                    </TouchableOpacity>
-                  ) : (
-                    <Text style={styles.readOnlyText}>—</Text>
-                  )}
-                </View>
-              </View>
-            ))
+              );
+            })
           )}
-
-          {/* Filler empty rows */}
-          {!loading && Array(Math.max(0, EMPTY_ROWS - Math.max(0, EMPTY_ROWS - filteredRows.length))).fill(null).map((_, i) => (
-            <View key={`empty-${i}`} style={[styles.tableRow, styles.tableRowEmpty]} />
-          ))}
         </View>
       </ScrollView>
 
@@ -750,57 +767,100 @@ const styles = StyleSheet.create({
 
   // Status chip (replaces Read-Only / Formulate action)
   statusChip: {
-    flexDirection: 'row', alignItems: 'center', gap: 4,
+    flexDirection: 'row', alignItems: 'center', gap: 5,
     backgroundColor: COLORS.successBg, borderRadius: 999,
-    paddingHorizontal: 9, paddingVertical: 4,
+    paddingHorizontal: 10, paddingVertical: 5,
+  },
+  statusDot: {
+    width: 6, height: 6, borderRadius: 3, backgroundColor: COLORS.success,
   },
   statusChipText: { fontSize: isMobile ? 9 : 11, fontWeight: '700', color: COLORS.success },
 
   // Loading / empty state
-  stateRow: { paddingVertical: 28, alignItems: 'center', justifyContent: 'center' },
-  stateText: { fontSize: 12, fontWeight: '600', color: COLORS.subText },
+  stateRow: { paddingVertical: 40, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 20 },
+  stateEmoji: { fontSize: 26, marginBottom: 8, opacity: 0.6 },
+  stateText: { fontSize: 12, fontWeight: '600', color: COLORS.subText, textAlign: 'center' },
 
   // ── Budget Table ──
   tableContainer: {
     backgroundColor: COLORS.white,
-    borderRadius: 14,
+    borderRadius: 18,
     borderWidth: 1,
     borderColor: COLORS.border,
     overflow: 'hidden',
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
+    elevation: 3,
+    shadowColor: '#0F2A52',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.08,
+    shadowRadius: 16,
   },
 
   // Table header
   tableHeader: {
-
     flexDirection: 'row', alignItems: 'center',
     backgroundColor: COLORS.navy,
-    paddingVertical: 11, paddingHorizontal: isMobile ? 10 : 16,
+    paddingVertical: 13, paddingHorizontal: isMobile ? 12 : 18,
   },
   thText: {
-    fontSize: isMobile ? 9 : 12, fontWeight: '800', color: COLORS.white,
+    fontSize: isMobile ? 9 : 11, fontWeight: '800', color: 'rgba(255,255,255,0.85)',
+    letterSpacing: 0.8, textTransform: 'uppercase',
   },
 
   // Table rows
   tableRow: {
     flexDirection: 'row', alignItems: 'center',
-    paddingVertical: isMobile ? 8 : 13, paddingHorizontal: isMobile ? 10 : 16,
-    borderBottomWidth: 1, borderBottomColor: COLORS.lightGray,
-    backgroundColor: COLORS.white, minHeight: isMobile ? 42 : 50,
+    paddingVertical: isMobile ? 10 : 15, paddingHorizontal: isMobile ? 12 : 18,
+    borderBottomWidth: 1, borderBottomColor: '#F0F1F3',
+    backgroundColor: COLORS.white, minHeight: isMobile ? 52 : 62,
   },
-  tableRowEven: { backgroundColor: '#F5F7FA' },
+  tableRowEven: { backgroundColor: '#FAFBFC' },
+  tableRowLast: { borderBottomWidth: 0 },
   tableRowEmpty: { minHeight: isMobile ? 42 : 50 },
+
+  // Highlighted row for the logged-in user's own barangay
+  tableRowOwn: {
+    backgroundColor: '#FFF9E6',
+    borderLeftWidth: 3,
+    borderLeftColor: COLORS.gold,
+    paddingLeft: isMobile ? 9 : 15,
+  },
 
   // Columns
   colBarangay: { flex: 2, paddingRight: 4 },
   colStatus: { flex: 1, paddingRight: 4 },
   colAction: { width: isMobile ? 78 : 110, alignItems: 'flex-end' },
 
-  tdBarangay: { fontSize: isMobile ? 10 : 13, color: COLORS.darkText, fontWeight: '500' },
+  // Barangay initials avatar
+  avatarCircle: {
+    width: isMobile ? 28 : 34, height: isMobile ? 28 : 34, borderRadius: 999,
+    backgroundColor: COLORS.offWhite,
+    borderWidth: 1, borderColor: COLORS.border,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  avatarCircleOwn: {
+    backgroundColor: COLORS.navy,
+    borderColor: COLORS.navy,
+  },
+  avatarText: {
+    fontSize: isMobile ? 10 : 12, fontWeight: '800', color: COLORS.navy,
+  },
+  avatarTextOwn: { color: COLORS.gold },
+
+  tdBarangay: { fontSize: isMobile ? 11 : 13.5, color: COLORS.darkText, fontWeight: '600' },
+  tdBarangayOwn: { color: COLORS.navy, fontWeight: '800' },
+
+  ownBadge: {
+    backgroundColor: COLORS.navy,
+    borderRadius: 999,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+  },
+  ownBadgeText: {
+    fontSize: isMobile ? 7 : 9,
+    fontWeight: '800',
+    color: COLORS.gold,
+    letterSpacing: 0.5,
+  },
 
   // View Document action button
   viewDocBtn: {
@@ -810,6 +870,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10, paddingVertical: 5,
   },
   viewDocText: { fontSize: isMobile ? 9 : 11, fontWeight: '700', color: COLORS.navy },
+  viewDocBtnOwn: {
+    backgroundColor: COLORS.navy,
+    borderColor: COLORS.navy,
+  },
+  viewDocTextOwn: { color: COLORS.white },
 
   readOnlyText: {
     fontSize: isMobile ? 10 : 12, color: COLORS.midGray, fontWeight: '600',
