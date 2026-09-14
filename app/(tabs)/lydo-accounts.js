@@ -1,49 +1,60 @@
-import React, { useState, useEffect, useContext, useRef } from 'react';
+import React, { useContext, useEffect, useRef, useState } from 'react';
 import {
-  View, Text, TextInput, ScrollView, TouchableOpacity,
-  StyleSheet, StatusBar, Dimensions,
-  Alert, Image, ActivityIndicator,
+  ActivityIndicator,
+  Alert,
+  Dimensions,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text, TextInput,
+  TouchableOpacity,
+  View
 } from 'react-native';
 // SafeAreaView from core 'react-native' is a no-op on Android. Use the
 // context-aware version so insets work on both platforms.
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import Head from 'expo-router/head';
-import { useNav } from './navContext';
-import Sidebar, { LYDO_NAV_ITEMS } from './../components/Sidebar';
-import MobileHeader, { MobileHeaderSpacer } from './mobileHeader';
-import { useAuth, encryptPassword, decryptPassword } from './authContext';
+import { Platform } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { supabase } from '../../utils/supabase';
-import { useLydoNotificationCenter, LydoNotificationModal, LydoBellIcon } from './notificationCenter';
+import Sidebar, { LYDO_NAV_ITEMS } from './../components/Sidebar';
+import { decryptPassword, encryptPassword, useAuth } from './authContext';
+import MobileHeader, { MobileHeaderSpacer } from './mobileHeader';
+import { useNav } from './navContext';
+import { LydoBellIcon, LydoNotificationModal, useLydoNotificationCenter } from './notificationCenter';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const isMobile = SCREEN_WIDTH < 768;
 
+// Sum of the fixed column widths below (colBrgy..colPassword) — used so the
+// header + rows share one scrollable width and stay column-aligned.
+const TABLE_MIN_WIDTH = 900;
+
 // ─── COLORS ───────────────────────────────────────────────────────────────────
 const COLORS = {
-  navy:       '#133E75',
-  navyLight:  '#1E4D8C',
-  gold:       '#E8C547',
-  white:      '#FFFFFF',
-  offWhite:   '#F7F5F2',
-  lightGray:  '#ECECEC',
-  midGray:    '#B0B0B0',
-  darkText:   '#1A1A1A',
-  subText:    '#666666',
-  cardBg:     '#FFFFFF',
-  approve:    '#2E7D32',
-  approveBg:  '#43A047',
-  reject:     '#7B0000',
-  rejectBg:   '#C62828',
-  pending:    '#B8860B',
-  pendingBg:  '#FFF3CD',
+  navy: '#133E75',
+  navyLight: '#1E4D8C',
+  gold: '#E8C547',
+  white: '#FFFFFF',
+  offWhite: '#F7F5F2',
+  lightGray: '#ECECEC',
+  midGray: '#B0B0B0',
+  darkText: '#1A1A1A',
+  subText: '#666666',
+  cardBg: '#FFFFFF',
+  approve: '#2E7D32',
+  approveBg: '#43A047',
+  reject: '#7B0000',
+  rejectBg: '#C62828',
+  pending: '#B8860B',
+  pendingBg: '#FFF3CD',
   pendingBdr: '#E8C547',
-  checkBlue:  '#1565C0',
+  checkBlue: '#1565C0',
 };
 
 const BARANGAY_TABS = ['List of Accounts', 'Barangay'];
 // Tabs that show a red notification badge
-const NOTIF_TABS   = new Set(['List of Accounts', 'Barangay']);
+const NOTIF_TABS = new Set(['List of Accounts', 'Barangay']);
 
 // ─── DROPDOWN OPTIONS ─────────────────────────────────────────────────────────
 let BARANGAY_OPTIONS = ['Select Barangay'];
@@ -84,9 +95,9 @@ const Checkbox = ({ checked, onToggle }) => (
 );
 
 const CB = StyleSheet.create({
-  box:        { width: 18, height: 18, borderRadius: 3, borderWidth: 1.5, borderColor: COLORS.midGray, backgroundColor: COLORS.white, alignItems: 'center', justifyContent: 'center' },
+  box: { width: 18, height: 18, borderRadius: 3, borderWidth: 1.5, borderColor: COLORS.midGray, backgroundColor: COLORS.white, alignItems: 'center', justifyContent: 'center' },
   boxChecked: { backgroundColor: COLORS.checkBlue, borderColor: COLORS.checkBlue },
-  check:      { fontSize: 11, color: COLORS.white, fontWeight: '900', lineHeight: 14 },
+  check: { fontSize: 11, color: COLORS.white, fontWeight: '900', lineHeight: 14 },
 });
 
 // ─── GLOBAL DROPDOWN CONTEXT ────────────────────────────────────────────────────
@@ -173,11 +184,11 @@ const RenderedDropdowns = ({ dropdowns, onSelect }) => {
 };
 
 const GD = StyleSheet.create({
-  overlay:    { position: 'absolute', zIndex: 99999 },
-  backdrop:   { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 99998 },
-  menu:       { backgroundColor: COLORS.white, borderRadius: 8, borderWidth: 1, borderColor: COLORS.lightGray, elevation: 20, shadowColor: '#000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.25, shadowRadius: 12 },
-  item:       { paddingHorizontal: 12, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: COLORS.lightGray },
-  itemText:   { fontSize: 12, color: COLORS.darkText },
+  overlay: { position: 'absolute', zIndex: 99999 },
+  backdrop: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 99998 },
+  menu: { backgroundColor: COLORS.white, borderRadius: 8, borderWidth: 1, borderColor: COLORS.lightGray, elevation: 20, shadowColor: '#000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.25, shadowRadius: 12 },
+  item: { paddingHorizontal: 12, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: COLORS.lightGray },
+  itemText: { fontSize: 12, color: COLORS.darkText },
 });
 
 // ─── INLINE DROPDOWN ──────────────────────────────────────────────────────────
@@ -206,15 +217,15 @@ const InlineDropdown = ({ value, options, onSelect, width = 120, id }) => {
 };
 
 const IDD = StyleSheet.create({
-  wrap:          { position: 'relative', zIndex: 1000 },
-  btn:           { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: COLORS.white, borderRadius: 6, borderWidth: 1, borderColor: '#C8C8C8', paddingHorizontal: 8, paddingVertical: 5 },
-  value:         { fontSize: 11, color: COLORS.darkText, flex: 1 },
-  arrow:         { fontSize: 9, color: COLORS.subText, marginLeft: 4 },
-  menu:          { position: 'absolute', top: 30, left: 0, backgroundColor: COLORS.white, borderRadius: 8, borderWidth: 1, borderColor: COLORS.lightGray, elevation: 20, shadowColor: '#000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.25, shadowRadius: 12, zIndex: 1001 },
-  item:          { paddingHorizontal: 12, paddingVertical: 9, borderBottomWidth: 1, borderBottomColor: COLORS.lightGray },
-  itemActive:    { backgroundColor: '#EEF3FB' },
-  itemText:      { fontSize: 11, color: COLORS.darkText },
-  itemTextActive:{ fontWeight: '700', color: COLORS.navy },
+  wrap: { position: 'relative', zIndex: 1000 },
+  btn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: COLORS.white, borderRadius: 6, borderWidth: 1, borderColor: '#C8C8C8', paddingHorizontal: 8, paddingVertical: 5 },
+  value: { fontSize: 11, color: COLORS.darkText, flex: 1 },
+  arrow: { fontSize: 9, color: COLORS.subText, marginLeft: 4 },
+  menu: { position: 'absolute', top: 30, left: 0, backgroundColor: COLORS.white, borderRadius: 8, borderWidth: 1, borderColor: COLORS.lightGray, elevation: 20, shadowColor: '#000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.25, shadowRadius: 12, zIndex: 1001 },
+  item: { paddingHorizontal: 12, paddingVertical: 9, borderBottomWidth: 1, borderBottomColor: COLORS.lightGray },
+  itemActive: { backgroundColor: '#EEF3FB' },
+  itemText: { fontSize: 11, color: COLORS.darkText },
+  itemTextActive: { fontWeight: '700', color: COLORS.navy },
 });
 
 // ─── FILTER DROPDOWN ──────────────────────────────────────────────────────────
@@ -246,16 +257,16 @@ const FilterDropdown = ({ value, options, onSelect }) => {
 };
 
 const FD = StyleSheet.create({
-  wrap:          { position: 'relative', zIndex: 1000, alignSelf: 'flex-start' },
-  btn:           { flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.white, borderRadius: 6, borderWidth: 1, borderColor: '#B0B8C8', minWidth: 180, height: 36 },
-  label:         { flex: 1, fontSize: 13, color: COLORS.darkText, fontWeight: '400', paddingHorizontal: 12 },
-  divider:       { width: 1, height: '100%', backgroundColor: '#B0B8C8' },
-  arrow:         { fontSize: 10, color: COLORS.darkText, paddingHorizontal: 10 },
-  menu:          { position: 'absolute', top: 38, left: 0, minWidth: 200, backgroundColor: COLORS.white, borderRadius: 8, borderWidth: 1, borderColor: COLORS.lightGray, elevation: 20, shadowColor: '#000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.25, shadowRadius: 12, zIndex: 1001 },
-  item:          { paddingHorizontal: 14, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: COLORS.lightGray },
-  itemActive:    { backgroundColor: '#EEF3FB' },
-  itemText:      { fontSize: 12, color: COLORS.darkText },
-  itemTextActive:{ fontWeight: '700', color: COLORS.navy },
+  wrap: { position: 'relative', zIndex: 1000, alignSelf: 'flex-start' },
+  btn: { flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.white, borderRadius: 6, borderWidth: 1, borderColor: '#B0B8C8', minWidth: 180, height: 36 },
+  label: { flex: 1, fontSize: 13, color: COLORS.darkText, fontWeight: '400', paddingHorizontal: 12 },
+  divider: { width: 1, height: '100%', backgroundColor: '#B0B8C8' },
+  arrow: { fontSize: 10, color: COLORS.darkText, paddingHorizontal: 10 },
+  menu: { position: 'absolute', top: 38, left: 0, minWidth: 200, backgroundColor: COLORS.white, borderRadius: 8, borderWidth: 1, borderColor: COLORS.lightGray, elevation: 20, shadowColor: '#000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.25, shadowRadius: 12, zIndex: 1001 },
+  item: { paddingHorizontal: 14, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: COLORS.lightGray },
+  itemActive: { backgroundColor: '#EEF3FB' },
+  itemText: { fontSize: 12, color: COLORS.darkText },
+  itemTextActive: { fontWeight: '700', color: COLORS.navy },
 });
 
 // ─── STATUS PILL ──────────────────────────────────────────────────────────────
@@ -447,96 +458,96 @@ const CreateAccountModal = ({ visible, onClose, onSave, barangays }) => {
         <ScrollView showsVerticalScrollIndicator={false} style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 4 }}>
           <View style={M.modalBody}>
 
-          {/* ── Two-column form ── */}
-          <View style={M.formCols}>
+            {/* ── Two-column form ── */}
+            <View style={M.formCols}>
 
-            {/* Left — Personal Details */}
-            <View style={M.col}>
-              <Text style={M.colHeading}>Personal Details</Text>
-              <View style={M.colDivider} />
+              {/* Left — Personal Details */}
+              <View style={M.col}>
+                <Text style={M.colHeading}>Personal Details</Text>
+                <View style={M.colDivider} />
 
-              <MDropdown
-                label="Barangay"
-                value={form.barangay}
-                options={barangayOpts}
-                open={showBrgyDd}
-                setOpen={setShowBrgyDd}
-                onSelect={v => { set('barangay', v); setErrors(e => ({ ...e, barangay: null })); }}
-                placeholder="Select Barangay"
-                scrollable
-                error={errors.barangay}
-              />
-              <MField label="Last Name"      value={form.lastName}      onChange={v => { set('lastName', v); setErrors(e => ({ ...e, lastName: null })); }}      placeholder="Enter last name" error={errors.lastName} />
-              <MField label="First Name"     value={form.firstName}     onChange={v => { set('firstName', v); setErrors(e => ({ ...e, firstName: null })); }}     placeholder="Enter first name" error={errors.firstName} />
-              <MField label="Middle Initial" value={form.middleInitial} onChange={v => set('middleInitial', v)} placeholder="e.g. A" />
+                <MDropdown
+                  label="Barangay"
+                  value={form.barangay}
+                  options={barangayOpts}
+                  open={showBrgyDd}
+                  setOpen={setShowBrgyDd}
+                  onSelect={v => { set('barangay', v); setErrors(e => ({ ...e, barangay: null })); }}
+                  placeholder="Select Barangay"
+                  scrollable
+                  error={errors.barangay}
+                />
+                <MField label="Last Name" value={form.lastName} onChange={v => { set('lastName', v); setErrors(e => ({ ...e, lastName: null })); }} placeholder="Enter last name" error={errors.lastName} />
+                <MField label="First Name" value={form.firstName} onChange={v => { set('firstName', v); setErrors(e => ({ ...e, firstName: null })); }} placeholder="Enter first name" error={errors.firstName} />
+                <MField label="Middle Initial" value={form.middleInitial} onChange={v => set('middleInitial', v)} placeholder="e.g. A" />
+              </View>
+
+              {/* Right — Account & Role */}
+              <View style={M.col}>
+                <Text style={M.colHeading}>Account & Role</Text>
+                <View style={M.colDivider} />
+
+                <MDropdown
+                  label="Position"
+                  value={form.position}
+                  options={positionOpts}
+                  open={showPosDd}
+                  setOpen={setShowPosDd}
+                  onSelect={v => { set('position', v); setErrors(e => ({ ...e, position: null })); }}
+                  placeholder="Select Position"
+                  error={errors.position}
+                />
+
+                {/* Role — static display pill */}
+                <View style={M.fieldWrap}>
+                  <Text style={M.fieldLabel}>Role</Text>
+                  <View style={M.rolePill}>
+                    <Text style={M.rolePillText}>SK</Text>
+                  </View>
+                </View>
+
+                <MField label="Email" value={form.email} onChange={v => { set('email', v); setErrors(e => ({ ...e, email: null })); }} placeholder="e.g. juan@email.com" error={errors.email} />
+                <MField label="Auto Generated Password" value={form.password} onChange={() => { }} placeholder="Auto-generated" secure isVisible={showPassword} onToggle={() => setShowPassword(v => !v)} editable={false} />
+              </View>
             </View>
 
-            {/* Right — Account & Role */}
-            <View style={M.col}>
-              <Text style={M.colHeading}>Account & Role</Text>
-              <View style={M.colDivider} />
+            {/* ── Preview summary card ── */}
+            <View style={M.previewCard}>
+              <View style={M.previewCols}>
+                {/* Left preview */}
+                <View style={M.previewCol}>
+                  <Text style={M.previewHeading}>Personal Details</Text>
+                  <PreviewRow label="Barangay" value={form.barangay} />
+                  <PreviewRow label="Last Name" value={form.lastName} />
+                  <PreviewRow label="First Name" value={form.firstName} />
+                  <PreviewRow label="Middle Initial" value={form.middleInitial} />
+                </View>
 
-              <MDropdown
-                label="Position"
-                value={form.position}
-                options={positionOpts}
-                open={showPosDd}
-                setOpen={setShowPosDd}
-                onSelect={v => { set('position', v); setErrors(e => ({ ...e, position: null })); }}
-                placeholder="Select Position"
-                error={errors.position}
-              />
+                {/* Vertical divider */}
+                <View style={M.previewDivider} />
 
-              {/* Role — static display pill */}
-              <View style={M.fieldWrap}>
-                <Text style={M.fieldLabel}>Role</Text>
-                <View style={M.rolePill}>
-                  <Text style={M.rolePillText}>SK</Text>
+                {/* Right preview */}
+                <View style={M.previewCol}>
+                  <Text style={M.previewHeading}>Account & Role</Text>
+                  <PreviewRow label="Position" value={form.position} />
+                  <PreviewRow label="Role" value={form.role} />
+                  <PreviewRow label="Email" value={form.email} />
+                  <PreviewRow label="Password" value={form.password} isPassword={true} showPassword={showPassword} />
                 </View>
               </View>
 
-              <MField label="Email"                  value={form.email}           onChange={v => { set('email', v); setErrors(e => ({ ...e, email: null })); }}           placeholder="e.g. juan@email.com" error={errors.email} />
-              <MField label="Auto Generated Password" value={form.password}        onChange={() => {}}        placeholder="Auto-generated"       secure isVisible={showPassword} onToggle={() => setShowPassword(v => !v)} editable={false} />
-            </View>
-          </View>
-
-          {/* ── Preview summary card ── */}
-          <View style={M.previewCard}>
-            <View style={M.previewCols}>
-              {/* Left preview */}
-              <View style={M.previewCol}>
-                <Text style={M.previewHeading}>Personal Details</Text>
-                <PreviewRow label="Barangay"       value={form.barangay} />
-                <PreviewRow label="Last Name"      value={form.lastName} />
-                <PreviewRow label="First Name"     value={form.firstName} />
-                <PreviewRow label="Middle Initial" value={form.middleInitial} />
-              </View>
-
-              {/* Vertical divider */}
-              <View style={M.previewDivider} />
-
-              {/* Right preview */}
-              <View style={M.previewCol}>
-                <Text style={M.previewHeading}>Account & Role</Text>
-                <PreviewRow label="Position" value={form.position} />
-                <PreviewRow label="Role"     value={form.role} />
-                <PreviewRow label="Email"    value={form.email} />
-                <PreviewRow label="Password" value={form.password} isPassword={true} showPassword={showPassword} />
+              {/* Confirm Details checkbox */}
+              <View style={M.confirmRow}>
+                <Text style={M.confirmLabel}>Confirm Details</Text>
+                <TouchableOpacity
+                  style={[M.confirmBox, confirmed && M.confirmBoxChecked]}
+                  onPress={() => setConfirmed(c => !c)}
+                  activeOpacity={0.8}
+                >
+                  {confirmed && <Text style={M.confirmCheck}>✓</Text>}
+                </TouchableOpacity>
               </View>
             </View>
-
-            {/* Confirm Details checkbox */}
-            <View style={M.confirmRow}>
-              <Text style={M.confirmLabel}>Confirm Details</Text>
-              <TouchableOpacity
-                style={[M.confirmBox, confirmed && M.confirmBoxChecked]}
-                onPress={() => setConfirmed(c => !c)}
-                activeOpacity={0.8}
-              >
-                {confirmed && <Text style={M.confirmCheck}>✓</Text>}
-              </TouchableOpacity>
-            </View>
-          </View>
 
           </View>{/* end modalBody */}
         </ScrollView>
@@ -562,86 +573,86 @@ const CreateAccountModal = ({ visible, onClose, onSave, barangays }) => {
 
 const M = StyleSheet.create({
   // Overlay & modal shell
-  overlay:        { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center', zIndex: 99999 },
-  modal:          { backgroundColor: COLORS.offWhite, borderRadius: 16, width: isMobile ? '96%' : 660, maxHeight: '88%', flexShrink: 1, shadowColor: '#000', shadowOffset: {width:0,height:12}, shadowOpacity: 0.4, shadowRadius: 28, elevation: 28, overflow: 'hidden' },
+  overlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center', zIndex: 99999 },
+  modal: { backgroundColor: COLORS.offWhite, borderRadius: 16, width: isMobile ? '96%' : 660, maxHeight: '88%', flexShrink: 1, shadowColor: '#000', shadowOffset: { width: 0, height: 12 }, shadowOpacity: 0.4, shadowRadius: 28, elevation: 28, overflow: 'hidden' },
 
   // Modal header band
-  modalHeader:    { backgroundColor: COLORS.navy, paddingHorizontal: 20, paddingTop: 18, paddingBottom: 16 },
+  modalHeader: { backgroundColor: COLORS.navy, paddingHorizontal: 20, paddingTop: 18, paddingBottom: 16 },
 
   // Header
-  closeBtn:       { position: 'absolute', top: 12, right: 14, zIndex: 10, width: 28, height: 28, borderRadius: 14, backgroundColor: 'rgba(255,255,255,0.18)', alignItems: 'center', justifyContent: 'center' },
-  closeX:         { fontSize: 14, color: COLORS.white, fontWeight: '700', lineHeight: 16 },
-  title:          { fontSize: isMobile ? 11 : 13, fontWeight: '800', color: COLORS.white, letterSpacing: 0.5, marginBottom: 0, paddingRight: 36, lineHeight: 18 },
-  titleDivider:   { height: 0, marginBottom: 0 },
+  closeBtn: { position: 'absolute', top: 12, right: 14, zIndex: 10, width: 28, height: 28, borderRadius: 14, backgroundColor: 'rgba(255,255,255,0.18)', alignItems: 'center', justifyContent: 'center' },
+  closeX: { fontSize: 14, color: COLORS.white, fontWeight: '700', lineHeight: 16 },
+  title: { fontSize: isMobile ? 11 : 13, fontWeight: '800', color: COLORS.white, letterSpacing: 0.5, marginBottom: 0, paddingRight: 36, lineHeight: 18 },
+  titleDivider: { height: 0, marginBottom: 0 },
 
   // Modal body
-  modalBody:      { padding: 18, paddingBottom: 0 },
+  modalBody: { padding: 18, paddingBottom: 0 },
 
   // Two-column form
-  formCols:       { flexDirection: isMobile ? 'column' : 'row', gap: 14, marginBottom: 14 },
-  col:            { flex: 1, backgroundColor: COLORS.white, borderRadius: 10, padding: 14, borderWidth: 1, borderColor: COLORS.lightGray },
-  colHeading:     { fontSize: 12, fontWeight: '800', color: COLORS.navy, marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 },
-  colDivider:     { height: 1, backgroundColor: COLORS.lightGray, marginBottom: 12 },
+  formCols: { flexDirection: isMobile ? 'column' : 'row', gap: 14, marginBottom: 14 },
+  col: { flex: 1, backgroundColor: COLORS.white, borderRadius: 10, padding: 14, borderWidth: 1, borderColor: COLORS.lightGray },
+  colHeading: { fontSize: 12, fontWeight: '800', color: COLORS.navy, marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 },
+  colDivider: { height: 1, backgroundColor: COLORS.lightGray, marginBottom: 12 },
 
   // Fields
-  fieldWrap:      { marginBottom: 10, position: 'relative' },
-  fieldLabel:     { fontSize: 11, color: COLORS.subText, fontWeight: '600', marginBottom: 4 },
+  fieldWrap: { marginBottom: 10, position: 'relative' },
+  fieldLabel: { fontSize: 11, color: COLORS.subText, fontWeight: '600', marginBottom: 4 },
   inputContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.white, borderRadius: 7, borderWidth: 1, borderColor: '#D0D0D0' },
-  input:          { flex: 1, borderRadius: 7, paddingHorizontal: 10, paddingVertical: 7, fontSize: 12, color: COLORS.darkText, height: 36 },
+  input: { flex: 1, borderRadius: 7, paddingHorizontal: 10, paddingVertical: 7, fontSize: 12, color: COLORS.darkText, height: 36 },
   inputWithToggle: { borderWidth: 0, borderRadius: 0 },
-  toggleBtn:      { width: 36, height: 36, alignItems: 'center', justifyContent: 'center', borderLeftWidth: 1, borderLeftColor: '#D0D0D0' },
-  toggleText:     { fontSize: 14 },
+  toggleBtn: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center', borderLeftWidth: 1, borderLeftColor: '#D0D0D0' },
+  toggleText: { fontSize: 14 },
 
   // Disabled state
-  inputDisabled:  { backgroundColor: '#F0F0F0' },
-  inputNoEdit:    { backgroundColor: '#F0F0F0', color: COLORS.subText },
-  inputError:     { borderColor: '#C62828', borderWidth: 1.5 },
+  inputDisabled: { backgroundColor: '#F0F0F0' },
+  inputNoEdit: { backgroundColor: '#F0F0F0', color: COLORS.subText },
+  inputError: { borderColor: '#C62828', borderWidth: 1.5 },
 
   // Error text
-  errorText:      { fontSize: 10, color: '#C62828', marginTop: 3 },
+  errorText: { fontSize: 10, color: '#C62828', marginTop: 3 },
 
   // Dropdown error state
-  ddBtnError:     { borderColor: '#C62828', borderWidth: 1.5 },
+  ddBtnError: { borderColor: '#C62828', borderWidth: 1.5 },
 
   // Dropdown
-  ddBtn:          { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: COLORS.white, borderRadius: 7, borderWidth: 1, borderColor: '#D0D0D0', paddingHorizontal: 10, paddingVertical: 7, height: 36 },
-  ddVal:          { fontSize: 12, color: COLORS.darkText, flex: 1 },
-  ddPlaceholder:  { color: 'rgba(0,0,0,0.3)' },
-  ddArrow:        { fontSize: 9, color: COLORS.subText },
-  ddMenu:         { position: 'absolute', top: 60, left: 0, right: 0, backgroundColor: COLORS.white, borderRadius: 8, borderWidth: 1, borderColor: COLORS.lightGray, zIndex: 9999, elevation: 40, shadowColor: '#000', shadowOffset: {width:0,height:4}, shadowOpacity: 0.18, shadowRadius: 10 },
-  ddMenuScrollable: { position: 'absolute', top: 60, left: 0, right: 0, backgroundColor: COLORS.white, borderRadius: 8, borderWidth: 1, borderColor: COLORS.lightGray, zIndex: 9999, elevation: 40, shadowColor: '#000', shadowOffset: {width:0,height:4}, shadowOpacity: 0.18, shadowRadius: 10, overflow: 'hidden' },
-  ddItem:         { paddingHorizontal: 12, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: COLORS.lightGray },
-  ddItemText:     { fontSize: 12, color: COLORS.darkText },
+  ddBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: COLORS.white, borderRadius: 7, borderWidth: 1, borderColor: '#D0D0D0', paddingHorizontal: 10, paddingVertical: 7, height: 36 },
+  ddVal: { fontSize: 12, color: COLORS.darkText, flex: 1 },
+  ddPlaceholder: { color: 'rgba(0,0,0,0.3)' },
+  ddArrow: { fontSize: 9, color: COLORS.subText },
+  ddMenu: { position: 'absolute', top: 60, left: 0, right: 0, backgroundColor: COLORS.white, borderRadius: 8, borderWidth: 1, borderColor: COLORS.lightGray, zIndex: 9999, elevation: 40, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.18, shadowRadius: 10 },
+  ddMenuScrollable: { position: 'absolute', top: 60, left: 0, right: 0, backgroundColor: COLORS.white, borderRadius: 8, borderWidth: 1, borderColor: COLORS.lightGray, zIndex: 9999, elevation: 40, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.18, shadowRadius: 10, overflow: 'hidden' },
+  ddItem: { paddingHorizontal: 12, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: COLORS.lightGray },
+  ddItemText: { fontSize: 12, color: COLORS.darkText },
 
   // Role static pill
-  rolePill:       { backgroundColor: '#EEF3FB', borderRadius: 7, borderWidth: 1, borderColor: '#C8D8EE', height: 36, alignItems: 'flex-start', justifyContent: 'center', paddingHorizontal: 10 },
-  rolePillText:   { fontSize: 12, fontWeight: '700', color: COLORS.navy },
+  rolePill: { backgroundColor: '#EEF3FB', borderRadius: 7, borderWidth: 1, borderColor: '#C8D8EE', height: 36, alignItems: 'flex-start', justifyContent: 'center', paddingHorizontal: 10 },
+  rolePillText: { fontSize: 12, fontWeight: '700', color: COLORS.navy },
 
   // Preview card
-  previewCard:    { backgroundColor: COLORS.white, borderRadius: 10, padding: 14, marginBottom: 14, borderWidth: 1, borderColor: COLORS.lightGray },
-  previewTitle:   { fontSize: 11, fontWeight: '800', color: COLORS.navy, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 10 },
-  previewCols:    { flexDirection: 'row', gap: 0 },
-  previewCol:     { flex: 1, paddingRight: 10 },
+  previewCard: { backgroundColor: COLORS.white, borderRadius: 10, padding: 14, marginBottom: 14, borderWidth: 1, borderColor: COLORS.lightGray },
+  previewTitle: { fontSize: 11, fontWeight: '800', color: COLORS.navy, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 10 },
+  previewCols: { flexDirection: 'row', gap: 0 },
+  previewCol: { flex: 1, paddingRight: 10 },
   previewHeading: { fontSize: 11, fontWeight: '700', color: COLORS.navy, marginBottom: 8, textAlign: 'center', backgroundColor: '#EEF3FB', paddingVertical: 4, borderRadius: 5 },
   previewDivider: { width: 1, backgroundColor: COLORS.lightGray, marginHorizontal: 10 },
-  previewRow:     { flexDirection: 'row', flexWrap: 'wrap', marginBottom: 6, alignItems: 'flex-start' },
-  previewLabel:   { fontSize: 10, color: COLORS.subText, fontWeight: '600', minWidth: 70 },
-  previewVal:     { fontSize: 10, color: COLORS.darkText, flex: 1, marginLeft: 4 },
+  previewRow: { flexDirection: 'row', flexWrap: 'wrap', marginBottom: 6, alignItems: 'flex-start' },
+  previewLabel: { fontSize: 10, color: COLORS.subText, fontWeight: '600', minWidth: 70 },
+  previewVal: { fontSize: 10, color: COLORS.darkText, flex: 1, marginLeft: 4 },
 
   // Confirm Details
-  confirmRow:     { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', marginTop: 12, paddingTop: 10, borderTopWidth: 1, borderTopColor: COLORS.lightGray, gap: 8 },
-  confirmLabel:   { fontSize: 12, fontWeight: '600', color: COLORS.subText },
-  confirmBox:     { width: 22, height: 22, borderRadius: 5, borderWidth: 1.5, borderColor: COLORS.midGray, backgroundColor: COLORS.white, alignItems: 'center', justifyContent: 'center' },
+  confirmRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', marginTop: 12, paddingTop: 10, borderTopWidth: 1, borderTopColor: COLORS.lightGray, gap: 8 },
+  confirmLabel: { fontSize: 12, fontWeight: '600', color: COLORS.subText },
+  confirmBox: { width: 22, height: 22, borderRadius: 5, borderWidth: 1.5, borderColor: COLORS.midGray, backgroundColor: COLORS.white, alignItems: 'center', justifyContent: 'center' },
   confirmBoxChecked: { backgroundColor: COLORS.navy, borderColor: COLORS.navy },
-  confirmCheck:   { fontSize: 13, color: COLORS.white, fontWeight: '900' },
+  confirmCheck: { fontSize: 13, color: COLORS.white, fontWeight: '900' },
 
   // Footer
-  actions:        { flexDirection: 'row', gap: 10, paddingHorizontal: 18, paddingVertical: 14, backgroundColor: COLORS.white, borderTopWidth: 1, borderTopColor: COLORS.lightGray },
-  cancelBtn:      { flex: 1, backgroundColor: COLORS.offWhite, borderRadius: 8, paddingVertical: 12, alignItems: 'center', borderWidth: 1, borderColor: COLORS.lightGray },
-  cancelText:     { fontSize: 13, fontWeight: '600', color: COLORS.subText },
-  saveBtn:        { flex: 2, backgroundColor: COLORS.navy, borderRadius: 8, paddingVertical: 12, alignItems: 'center' },
-  saveBtnDisabled:{ opacity: 0.4 },
-  saveText:       { fontSize: 13, fontWeight: '700', color: COLORS.white },
+  actions: { flexDirection: 'row', gap: 10, paddingHorizontal: 18, paddingVertical: 14, backgroundColor: COLORS.white, borderTopWidth: 1, borderTopColor: COLORS.lightGray },
+  cancelBtn: { flex: 1, backgroundColor: COLORS.offWhite, borderRadius: 8, paddingVertical: 12, alignItems: 'center', borderWidth: 1, borderColor: COLORS.lightGray },
+  cancelText: { fontSize: 13, fontWeight: '600', color: COLORS.subText },
+  saveBtn: { flex: 2, backgroundColor: COLORS.navy, borderRadius: 8, paddingVertical: 12, alignItems: 'center' },
+  saveBtnDisabled: { opacity: 0.4 },
+  saveText: { fontSize: 13, fontWeight: '700', color: COLORS.white },
 });
 
 // ─── ACCOUNT LIST ROW ─────────────────────────────────────────────────────────
@@ -673,7 +684,7 @@ const AccountListRow = ({ account, isEven, isPasswordVisible, onTogglePassword }
       onPress={() => onTogglePassword(account.id)}
       activeOpacity={0.7}
     >
-      <Text style={styles.cellText} numberOfLines={1}>
+      <Text style={[styles.cellText, styles.passwordText]}>
         {isPasswordVisible ? (decryptPassword(account.password) || '—') : '••••••••'}
       </Text>
     </TouchableOpacity>
@@ -687,16 +698,16 @@ export default function LYDOMonitorAccountScreen() {
   const { logout, user: authUser } = useAuth();
 
   const [activeBarangayTab, setActiveBarangayTab] = useState('List of Accounts');
-  const [accounts, setAccounts]         = useState([]);
-  const [barangays, setBarangays]       = useState([]);
-  const [selectedIds, setSelectedIds]   = useState(new Set());
-  const [filterBrgy, setFilterBrgy]     = useState('All Barangays');
-  const [searchText, setSearchText]     = useState('');
+  const [accounts, setAccounts] = useState([]);
+  const [barangays, setBarangays] = useState([]);
+  const [selectedIds, setSelectedIds] = useState(new Set());
+  const [filterBrgy, setFilterBrgy] = useState('All Barangays');
+  const [searchText, setSearchText] = useState('');
   const notif = useLydoNotificationCenter();
-  const [currentTime, setCurrentTime]   = useState('');
+  const [currentTime, setCurrentTime] = useState('');
   const [sidebarVisible, setSidebarVisible] = useState(false);
-  const [loading, setLoading]           = useState(true);
-  const [showCreate, setShowCreate]     = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [showCreate, setShowCreate] = useState(false);
 
   const today = new Date().toLocaleDateString('en-PH', {
     timeZone: 'Asia/Manila', month: 'long', day: 'numeric', year: 'numeric',
@@ -723,6 +734,33 @@ export default function LYDOMonitorAccountScreen() {
   // ── Fetch data from Supabase ─────────────────────────────────────────────────
   useEffect(() => {
     fetchData();
+  }, []);
+
+  // On web, the outer html/body defaults to a black background, which shows
+  // as a thin black strip above the app's own navy header/sidebar. Force the
+  // page root to match so there's no visible gap.
+  useEffect(() => {
+    if (Platform.OS === 'web' && typeof document !== 'undefined') {
+      const prevHtmlBg = document.documentElement.style.backgroundColor;
+      const prevBodyBg = document.body.style.backgroundColor;
+      const prevHtmlHeight = document.documentElement.style.height;
+      const prevBodyHeight = document.body.style.height;
+      const prevBodyMargin = document.body.style.margin;
+
+      document.documentElement.style.backgroundColor = COLORS.navy;
+      document.body.style.backgroundColor = COLORS.navy;
+      document.documentElement.style.height = '100%';
+      document.body.style.height = '100%';
+      document.body.style.margin = '0';
+
+      return () => {
+        document.documentElement.style.backgroundColor = prevHtmlBg;
+        document.body.style.backgroundColor = prevBodyBg;
+        document.documentElement.style.height = prevHtmlHeight;
+        document.body.style.height = prevBodyHeight;
+        document.body.style.margin = prevBodyMargin;
+      };
+    }
   }, []);
 
   const togglePasswordVisibility = (userId) => {
@@ -809,7 +847,7 @@ export default function LYDOMonitorAccountScreen() {
 
       // Map display position to DB key
       const posMap = { 'Chairman': 'chairman', 'Secretary': 'secretary', 'Treasurer': 'treasurer', 'SK Federation': 'sk_federation' };
-      const dbPos  = posMap[form.position] || null;
+      const dbPos = posMap[form.position] || null;
 
       // SK Federation gets sk_federation role, others get sk_official role
       const dbRole = form.position === 'SK Federation' ? 'sk_federation' : 'sk_official';
@@ -818,15 +856,15 @@ export default function LYDOMonitorAccountScreen() {
         .from('roles').select('role_id').eq('role_name', dbRole).single();
 
       const { error } = await supabase.from('users').insert({
-        first_name:     form.firstName,
-        last_name:      form.lastName,
+        first_name: form.firstName,
+        last_name: form.lastName,
         middle_initial: form.middleInitial,
-        email:          form.email,
-        password:       encryptPassword(form.password), // Encrypted for login
-        position:       dbPos,
-        barangay_id:    barangay?.barangay_id || null,
-        role_id:        roleData?.role_id || null,
-        status:         'active',
+        email: form.email,
+        password: encryptPassword(form.password), // Encrypted for login
+        position: dbPos,
+        barangay_id: barangay?.barangay_id || null,
+        role_id: roleData?.role_id || null,
+        status: 'active',
       });
 
       if (error) {
@@ -876,8 +914,8 @@ export default function LYDOMonitorAccountScreen() {
   const handleLogout = () => { logout(); router.replace('/'); };
 
   const handleBarangayTabPress = (tab) => {
-    if (tab === 'List of Accounts') { router.push('/(tabs)/lydo-accounts');return; }
-    if (tab === 'Barangay')       { router.push('/(tabs)/lydo-barangay'); return; }
+    if (tab === 'List of Accounts') { router.push('/(tabs)/lydo-accounts'); return; }
+    if (tab === 'Barangay') { router.push('/(tabs)/lydo-barangay'); return; }
     setActiveBarangayTab(tab);
   };
 
@@ -891,146 +929,156 @@ export default function LYDOMonitorAccountScreen() {
         bellCount={notif.count}
         BellIcon={LydoBellIcon}
         colors={COLORS}
-        hidden={isMobile && sidebarVisible}      
+        hidden={isMobile && sidebarVisible}
       />
       <ScrollView
         style={{ flex: 1 }}
         contentContainerStyle={styles.mainContent}
         showsVerticalScrollIndicator={false}
       >
-      <MobileHeaderSpacer />
+        <MobileHeaderSpacer />
 
-      {/* Desktop Header */}
-      {!isMobile && (
-        <View style={styles.header}>
-          <View>
-            <Text style={styles.headerSub}>SANGGUNIANG KABATAAN FEDERATION</Text>
-            <Text style={styles.headerTitle}>RIZAL, LAGUNA</Text>
-          </View>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-            <View style={styles.datetimeCard}>
-              <View style={styles.datetimeRow}>
-                <View style={styles.datetimeDivider} />
-                <View style={styles.datetimeBlock}>
-                  <Text style={styles.datetimeLabel}>DATE</Text>
-                  <Text style={styles.datetimeValue}>{today}</Text>
-                </View>
-                <View style={styles.datetimeSeparator} />
-                <View style={[styles.datetimeDivider, { backgroundColor: '#22C55E' }]} />
-                <View style={styles.datetimeBlock}>
-                  <Text style={styles.datetimeLabel}>TIME (PHT)</Text>
-                  <Text style={[styles.datetimeValue, styles.datetimeTime]}>{currentTime}</Text>
+        {/* Desktop Header */}
+        {!isMobile && (
+          <View style={styles.header}>
+            <View>
+              <Text style={styles.headerSub}>SANGGUNIANG KABATAAN FEDERATION</Text>
+              <Text style={styles.headerTitle}>RIZAL, LAGUNA</Text>
+            </View>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+              <View style={styles.datetimeCard}>
+                <View style={styles.datetimeRow}>
+                  <View style={styles.datetimeDivider} />
+                  <View style={styles.datetimeBlock}>
+                    <Text style={styles.datetimeLabel}>DATE</Text>
+                    <Text style={styles.datetimeValue}>{today}</Text>
+                  </View>
+                  <View style={styles.datetimeSeparator} />
+                  <View style={[styles.datetimeDivider, { backgroundColor: '#22C55E' }]} />
+                  <View style={styles.datetimeBlock}>
+                    <Text style={styles.datetimeLabel}>TIME (PHT)</Text>
+                    <Text style={[styles.datetimeValue, styles.datetimeTime]}>{currentTime}</Text>
+                  </View>
                 </View>
               </View>
-            </View>
               <TouchableOpacity style={styles.bellBtn} activeOpacity={0.7} onPress={notif.open}>
                 <LydoBellIcon count={notif.count} />
               </TouchableOpacity>
-          </View>
-        </View>
-      )}
-
-      {/* ── Barangay Tabs ── */}
-      <View style={styles.barangayTabBar}>
-        {BARANGAY_TABS.map(tab => {
-          const active = activeBarangayTab === tab;
-          const hasNotif = NOTIF_TABS.has(tab);
-          return (
-            <TouchableOpacity
-              key={tab}
-              style={[styles.barangayTab, active && styles.barangayTabActive]}
-              onPress={() => handleBarangayTabPress(tab)}
-              activeOpacity={0.8}
-            >
-              <Text style={[styles.barangayTabText, active && styles.barangayTabTextActive]}>
-                {tab}
-              </Text>
-              {hasNotif && !active && <View style={styles.tabNotifDot} />}
-            </TouchableOpacity>
-          );
-        })}
-      </View>
-
-      {/* ── Toolbar: Search | + Account ── */}
-      <View style={styles.toolbar}>
-        <View style={styles.searchWrap}>
-          <Text style={styles.searchIcon}>🔍</Text>
-          <TextInput
-            style={styles.searchInput}
-            placeholder="Search"
-            placeholderTextColor={COLORS.midGray}
-            value={searchText}
-            onChangeText={setSearchText}
-          />
-          {searchText.length > 0 && (
-            <TouchableOpacity onPress={() => setSearchText('')} activeOpacity={0.7}>
-              <Text style={styles.searchClear}>✕</Text>
-            </TouchableOpacity>
-          )}
-        </View>
-        <TouchableOpacity style={styles.createBtn} onPress={() => setShowCreate(true)} activeOpacity={0.85}>
-          <Text style={styles.createBtnPlus}>＋</Text>
-          <Text style={styles.createBtnText}>Account</Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* ── List of Accounts heading + Barangay filter ── */}
-      <View style={styles.listHeadingRow}>
-        <Text style={styles.listHeading}>List of Accounts</Text>
-      </View>
-      <View style={{ marginBottom: 10, zIndex: 200 }}>
-        <FilterDropdown
-          value={filterBrgy}
-          options={['All Barangays', ...barangays.map(b => b.barangay_name)]}
-          onSelect={setFilterBrgy}
-          label={filterBrgy}
-        />
-      </View>
-
-      {/* ── Table ── */}
-      <View style={styles.tableContainer}>
-        {/* Header */}
-        <View style={styles.tableHeader}>
-          {[
-            ['Barangay',      styles.colBrgy],
-            ['Last Name',     styles.colLastName],
-            ['First Name',    styles.colFirstName],
-            ['Middle Initial',styles.colMiddleInitial],
-            ['Role',          styles.colRole],
-            ['Position',      styles.colPosition],
-            ['Email',         styles.colEmail],
-            ['Password', styles.colPassword],
-          ].map(([col, colStyle]) => (
-            <View key={col} style={colStyle}>
-              <Text style={styles.tableHeaderText}>{col}</Text>
             </View>
-          ))}
+          </View>
+        )}
+
+        {/* ── Barangay Tabs ── */}
+        <View style={styles.barangayTabBar}>
+          {BARANGAY_TABS.map(tab => {
+            const active = activeBarangayTab === tab;
+            const hasNotif = NOTIF_TABS.has(tab);
+            return (
+              <TouchableOpacity
+                key={tab}
+                style={[styles.barangayTab, active && styles.barangayTabActive]}
+                onPress={() => handleBarangayTabPress(tab)}
+                activeOpacity={0.8}
+              >
+                <Text style={[styles.barangayTabText, active && styles.barangayTabTextActive]}>
+                  {tab}
+                </Text>
+                {hasNotif && !active && <View style={styles.tabNotifDot} />}
+              </TouchableOpacity>
+            );
+          })}
         </View>
 
-        {/* Rows */}
-        {loading ? (
-          <View style={styles.emptyState}>
-            <ActivityIndicator size="large" color={COLORS.navy} />
-            <Text style={styles.emptyText}>Loading accounts...</Text>
-          </View>
-        ) : filtered.length === 0 ? (
-          <View style={styles.emptyState}>
-            <Text style={styles.emptyText}>No accounts found.</Text>
-          </View>
-        ) : (
-          filtered.map((acc, idx) => (
-            <AccountListRow
-              key={acc.id}
-              account={acc}
-              isEven={idx % 2 !== 0}
-              isPasswordVisible={visiblePasswords.has(acc.id)}
-              onTogglePassword={togglePasswordVisibility}
+        {/* ── Toolbar: Search | + Account ── */}
+        <View style={styles.toolbar}>
+          <View style={styles.searchWrap}>
+            <Text style={styles.searchIcon}>🔍</Text>
+            <TextInput
+              style={styles.searchInput}
+              placeholder="Search"
+              placeholderTextColor={COLORS.midGray}
+              value={searchText}
+              onChangeText={setSearchText}
             />
-          ))
-        )}
-      </View>
+            {searchText.length > 0 && (
+              <TouchableOpacity onPress={() => setSearchText('')} activeOpacity={0.7}>
+                <Text style={styles.searchClear}>✕</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+          <TouchableOpacity style={styles.createBtn} onPress={() => setShowCreate(true)} activeOpacity={0.85}>
+            <Text style={styles.createBtnPlus}>＋</Text>
+            <Text style={styles.createBtnText}>Account</Text>
+          </TouchableOpacity>
+        </View>
 
-    </ScrollView>
+        {/* ── List of Accounts heading + Barangay filter ── */}
+        <View style={styles.listHeadingRow}>
+          <Text style={styles.listHeading}>List of Accounts</Text>
+        </View>
+        <View style={{ marginBottom: 10, zIndex: 200 }}>
+          <FilterDropdown
+            value={filterBrgy}
+            options={['All Barangays', ...barangays.map(b => b.barangay_name)]}
+            onSelect={setFilterBrgy}
+            label={filterBrgy}
+          />
+        </View>
+
+        {/* ── Table ── */}
+        <View style={styles.tableContainer}>
+          <ScrollView
+            horizontal
+            scrollEnabled
+            showsHorizontalScrollIndicator={isMobile}
+            bounces={false}
+            contentContainerStyle={{ minWidth: isMobile ? TABLE_MIN_WIDTH : '100%', flexGrow: 1 }}
+          >
+            <View style={{ flex: 1 }}>
+              {/* Header */}
+              <View style={styles.tableHeader}>
+                {[
+                  ['Barangay', styles.colBrgy],
+                  ['Last Name', styles.colLastName],
+                  ['First Name', styles.colFirstName],
+                  ['Middle Initial', styles.colMiddleInitial],
+                  ['Role', styles.colRole],
+                  ['Position', styles.colPosition],
+                  ['Email', styles.colEmail],
+                  ['Password', styles.colPassword],
+                ].map(([col, colStyle]) => (
+                  <View key={col} style={colStyle}>
+                    <Text style={styles.tableHeaderText}>{col}</Text>
+                  </View>
+                ))}
+              </View>
+
+              {/* Rows */}
+              {loading ? (
+                <View style={styles.emptyState}>
+                  <ActivityIndicator size="large" color={COLORS.navy} />
+                  <Text style={styles.emptyText}>Loading accounts...</Text>
+                </View>
+              ) : filtered.length === 0 ? (
+                <View style={styles.emptyState}>
+                  <Text style={styles.emptyText}>No accounts found.</Text>
+                </View>
+              ) : (
+                filtered.map((acc, idx) => (
+                  <AccountListRow
+                    key={acc.id}
+                    account={acc}
+                    isEven={idx % 2 !== 0}
+                    isPasswordVisible={visiblePasswords.has(acc.id)}
+                    onTogglePassword={togglePasswordVisibility}
+                  />
+                ))
+              )}
+            </View>
+          </ScrollView>
+        </View>
+
+      </ScrollView>
     </View>
   );
 
@@ -1038,73 +1086,73 @@ export default function LYDOMonitorAccountScreen() {
     <>
       <Head>
         <title>LYDO Accounts · SK Monitoring</title>
-      </Head>z
+      </Head>
       <GlobalDropdownProvider>
-      <SafeAreaView style={styles.safe} edges={isMobile ? ['left', 'right', 'bottom'] : ['top', 'left', 'right', 'bottom']}>
-        <StatusBar barStyle="light-content" backgroundColor={COLORS.navy} />
+        <SafeAreaView style={styles.safe} edges={isMobile ? ['left', 'right', 'bottom'] : ['top', 'left', 'right', 'bottom']}>
+          <StatusBar barStyle="light-content" backgroundColor={COLORS.navy} />
 
-        {/* Notification Modal — lists documents sent by SK officials */}
-        <LydoNotificationModal
-          {...notif.modalProps}
-          onReview={(doc) => {
-            notif.close();
-            router.push({
-              pathname: '/(tabs)/lydo-monitor',
-              params: { viewFilter: 'submitted' },
-            });
-          }}
-        />
+          {/* Notification Modal — lists documents sent by SK officials */}
+          <LydoNotificationModal
+            {...notif.modalProps}
+            onReview={(doc) => {
+              notif.close();
+              router.push({
+                pathname: '/(tabs)/lydo-monitor',
+                params: { viewFilter: 'submitted' },
+              });
+            }}
+          />
 
-        <View style={styles.layout}>
-          {isMobile && sidebarVisible && (
-            <TouchableOpacity
-              style={styles.sidebarOverlay}
-              activeOpacity={1}
-              onPress={() => setSidebarVisible(false)}
+          <View style={styles.layout}>
+            {isMobile && sidebarVisible && (
+              <TouchableOpacity
+                style={styles.sidebarOverlay}
+                activeOpacity={1}
+                onPress={() => setSidebarVisible(false)}
+              />
+            )}
+            <Sidebar
+              activeTab={activeTab}
+              onNavPress={handleNav}
+              onLogout={handleLogout}
+              isMobile={isMobile}
+              sidebarVisible={sidebarVisible}
+              navItems={LYDO_NAV_ITEMS}
+              logoSource={require('./../../assets/images/lydo-logo.png')}
+            />
+            {renderContent()}
+          </View>
+
+          {/* Create Account Modal — rendered at SafeAreaView level so it's independent of scroll content */}
+          {showCreate && (
+            <CreateAccountModal
+              visible={showCreate}
+              onClose={() => setShowCreate(false)}
+              onSave={handleCreateAccount}
+              barangays={barangays}
             />
           )}
-          <Sidebar
-            activeTab={activeTab}
-            onNavPress={handleNav}
-            onLogout={handleLogout}
-            isMobile={isMobile}
-            sidebarVisible={sidebarVisible}
-            navItems={LYDO_NAV_ITEMS}
-            logoSource={require('./../../assets/images/lydo-logo.png')}
-          />
-          {renderContent()}
-        </View>
-
-        {/* Create Account Modal — rendered at SafeAreaView level so it's independent of scroll content */}
-        {showCreate && (
-          <CreateAccountModal
-            visible={showCreate}
-            onClose={() => setShowCreate(false)}
-            onSave={handleCreateAccount}
-            barangays={barangays}
-          />
-        )}
-      </SafeAreaView>
-    </GlobalDropdownProvider>
+        </SafeAreaView>
+      </GlobalDropdownProvider>
     </>
   );
 }
 
 // ─── STYLES ───────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
-  safe:   { flex: 1, backgroundColor: COLORS.navy },
+  safe: { flex: 1, backgroundColor: COLORS.navy },
   layout: { flex: 1, flexDirection: 'row' },
 
   sidebarOverlay: { position: 'absolute', left: 0, top: 0, bottom: 0, right: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 5 },
 
   // ── Main ─────────────────────────────────────────────────────────────────────
-  main:        { flex: 1, backgroundColor: COLORS.offWhite, borderTopLeftRadius: 20 },
-  mainMobile:  { borderTopLeftRadius: 0 },
+  main: { flex: 1, backgroundColor: COLORS.offWhite, borderTopLeftRadius: 20 },
+  mainMobile: { borderTopLeftRadius: 0 },
   mainContent: { padding: 20, paddingBottom: 40 },
 
   // ── Desktop header ───────────────────────────────────────────────────────────
-  header:      { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 18 },
-  headerSub:   { fontSize: 10, fontWeight: '600', color: COLORS.subText, letterSpacing: 2, textTransform: 'uppercase', marginBottom: 2 },
+  header: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 18 },
+  headerSub: { fontSize: 10, fontWeight: '600', color: COLORS.subText, letterSpacing: 2, textTransform: 'uppercase', marginBottom: 2 },
   headerTitle: { fontSize: 20, fontWeight: '900', color: COLORS.darkText, letterSpacing: 0.5 },
 
   // Bell
@@ -1128,52 +1176,53 @@ const styles = StyleSheet.create({
   datetimeLabel: { fontSize: 9, fontWeight: '700', color: '#666666', letterSpacing: 1.2, textTransform: 'uppercase', marginBottom: 1 },
   datetimeValue: { fontSize: 13, fontWeight: '700', color: '#1A1A1A', letterSpacing: 0.2 },
   datetimeTime: { fontVariant: ['tabular-nums'], color: '#133E75', fontSize: 14, fontWeight: '800' },
-  bellBtn:        { width: 40, height: 40, borderRadius: 20, backgroundColor: COLORS.cardBg, alignItems: 'center', justifyContent: 'center', shadowColor: 'rgba(0,0,0,0.08)', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 1, shadowRadius: 6, elevation: 3 },
-  notifBadge:     { position: 'absolute', top: -2, right: -2, width: 16, height: 16, borderRadius: 8, backgroundColor: COLORS.gold, alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: COLORS.white },
+  bellBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: COLORS.cardBg, alignItems: 'center', justifyContent: 'center', shadowColor: 'rgba(0,0,0,0.08)', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 1, shadowRadius: 6, elevation: 3 },
+  notifBadge: { position: 'absolute', top: -2, right: -2, width: 16, height: 16, borderRadius: 8, backgroundColor: COLORS.gold, alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: COLORS.white },
   notifBadgeText: { fontSize: 8, fontWeight: '900', color: COLORS.navy },
 
   // ── Barangay tabs ─────────────────────────────────────────────────────────────
-  barangayTabBar:        { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: COLORS.lightGray, marginBottom: 14, overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.30, shadowRadius: 3, elevation: 6 },
-  barangayTab:           { flex: 1, paddingHorizontal: isMobile ? 8 : 40, backgroundColor: COLORS.navy, paddingVertical: 10, borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)', alignItems: 'center', position: 'relative' },
-  barangayTabActive:     { backgroundColor: COLORS.gold, borderRadius: 4, borderColor: COLORS.gold, shadowColor: COLORS.gold, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.4, shadowRadius: 4, elevation: 3 },
-  barangayTabText:       { fontSize: isMobile ? 10 : 13, fontWeight: '600', color: COLORS.white },
+  barangayTabBar: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: COLORS.lightGray, marginBottom: 14, overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.30, shadowRadius: 3, elevation: 6 },
+  barangayTab: { flex: 1, paddingHorizontal: isMobile ? 8 : 40, backgroundColor: COLORS.navy, paddingVertical: 10, borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)', alignItems: 'center', position: 'relative' },
+  barangayTabActive: { backgroundColor: COLORS.gold, borderRadius: 4, borderColor: COLORS.gold, shadowColor: COLORS.gold, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.4, shadowRadius: 4, elevation: 3 },
+  barangayTabText: { fontSize: isMobile ? 10 : 13, fontWeight: '600', color: COLORS.white },
   barangayTabTextActive: { color: COLORS.darkText, fontWeight: '800' },
-  
+
 
   // ── Toolbar ──────────────────────────────────────────────────────────────────
-  toolbar:       { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 14 },
-  createBtn:     { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#7BAFD4', borderRadius: 20, paddingHorizontal: 18, paddingVertical: 6, shadowColor: '#7BAFD4', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.35, shadowRadius: 6, elevation: 3 },
+  toolbar: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 14 },
+  createBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#7BAFD4', borderRadius: 20, paddingHorizontal: 18, paddingVertical: 6, shadowColor: '#7BAFD4', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.35, shadowRadius: 6, elevation: 3 },
   createBtnPlus: { fontSize: 18, fontWeight: '300', color: COLORS.white, lineHeight: 20 },
   createBtnText: { fontSize: 14, fontWeight: '500', color: COLORS.white },
-  searchWrap:    { flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.white, borderRadius: 20, borderWidth: 1, borderColor: COLORS.lightGray, paddingHorizontal: 10, paddingVertical: 6, width: isMobile ? 160 : 220 },
-  searchIcon:    { fontSize: 12, marginRight: 4 },
-  searchInput:   { flex: 1, fontSize: 11, color: COLORS.darkText, padding: 0 },
-  searchClear:   { color: COLORS.midGray, fontSize: 12 },
+  searchWrap: { flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.white, borderRadius: 20, borderWidth: 1, borderColor: COLORS.lightGray, paddingHorizontal: 10, paddingVertical: 6, width: isMobile ? 160 : 220 },
+  searchIcon: { fontSize: 12, marginRight: 4 },
+  searchInput: { flex: 1, fontSize: 11, color: COLORS.darkText, padding: 0 },
+  searchClear: { color: COLORS.midGray, fontSize: 12 },
 
   // ── List heading ─────────────────────────────────────────────────────────────
   listHeadingRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 6 },
-  listHeading:    { fontSize: isMobile ? 13 : 15, fontWeight: '800', color: COLORS.navy },
+  listHeading: { fontSize: isMobile ? 13 : 15, fontWeight: '800', color: COLORS.navy },
 
   // ── Table ─────────────────────────────────────────────────────────────────────
-  tableContainer:  { backgroundColor: COLORS.white, borderRadius: 10, overflow: 'hidden', borderWidth: 1, borderColor: COLORS.lightGray, elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 6 },
-  tableHeader:     { flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.white, paddingVertical: 10, paddingHorizontal: 10, borderBottomWidth: 1, borderBottomColor: COLORS.lightGray },
+  tableContainer: { backgroundColor: COLORS.white, borderRadius: 10, overflow: 'hidden', borderWidth: 1, borderColor: COLORS.lightGray, elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 6 },
+  tableHeader: { flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.white, paddingVertical: 10, paddingHorizontal: 10, borderBottomWidth: 1, borderBottomColor: COLORS.lightGray },
   tableHeaderText: { fontSize: isMobile ? 9 : 11, fontWeight: '700', color: COLORS.darkText, letterSpacing: 0.1 },
-  tableRow:        { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, paddingHorizontal: 10, borderBottomWidth: 1, borderBottomColor: COLORS.lightGray, backgroundColor: COLORS.white, minHeight: 44 },
-  tableRowEven:    { backgroundColor: '#FAFAFA' },
-  emptyRow:        { minHeight: 44 },
-  cellText:        { fontSize: isMobile ? 9 : 11, color: COLORS.darkText },
+  tableRow: { flexDirection: 'row', alignItems: 'flex-start', paddingVertical: 10, paddingHorizontal: 10, borderBottomWidth: 1, borderBottomColor: COLORS.lightGray, backgroundColor: COLORS.white, minHeight: 44 },
+  tableRowEven: { backgroundColor: '#FAFAFA' },
+  emptyRow: { minHeight: 44 },
+  cellText: { fontSize: isMobile ? 9 : 11, color: COLORS.darkText },
+  passwordText: { flexWrap: 'wrap' },
 
   // Columns matching the UI screenshot
-  colBrgy:          { flex: 1.4, paddingRight: 6 },
-  colLastName:      { flex: 1.2, paddingRight: 6 },
-  colFirstName:     { flex: 1.2, paddingRight: 6 },
-  colMiddleInitial: { flex: 0.6, paddingRight: 6 },
-  colRole:          { flex: 1, paddingRight: 6 },
-  colPosition:      { flex: 1.2, paddingRight: 6 },
-  colEmail:         { flex: 1.6, paddingRight: 6 },
-  colPassword:      { flex: 0.9 },
-  colFlex:          { flex: 1, paddingRight: 6 },
+  colBrgy: isMobile ? { width: 140, paddingRight: 6 } : { flex: 1.4, paddingRight: 6 },
+  colLastName: isMobile ? { width: 110, paddingRight: 6 } : { flex: 1.2, paddingRight: 6 },
+  colFirstName: isMobile ? { width: 110, paddingRight: 6 } : { flex: 1.2, paddingRight: 6 },
+  colMiddleInitial: isMobile ? { width: 60, paddingRight: 6 } : { flex: 0.6, paddingRight: 6 },
+  colRole: isMobile ? { width: 90, paddingRight: 6 } : { flex: 1, paddingRight: 6 },
+  colPosition: isMobile ? { width: 110, paddingRight: 6 } : { flex: 1.2, paddingRight: 6 },
+  colEmail: isMobile ? { width: 150, paddingRight: 6 } : { flex: 1.6, paddingRight: 6 },
+  colPassword: isMobile ? { width: 130 } : { flex: 0.9 },
+  colFlex: { flex: 1, paddingRight: 6 },
 
   emptyState: { alignItems: 'center', paddingVertical: 40 },
-  emptyText:  { fontSize: 14, color: COLORS.midGray },
+  emptyText: { fontSize: 14, color: COLORS.midGray },
 });
