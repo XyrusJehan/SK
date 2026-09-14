@@ -1,36 +1,42 @@
-import React, { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import {
-  View, Text, TextInput, ScrollView, TouchableOpacity,
-  StyleSheet, StatusBar, Dimensions,
-  Modal, Alert, KeyboardAvoidingView, Platform, Image,
+  Alert,
+  Dimensions,
+  Modal,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text, TextInput,
+  TouchableOpacity,
+  View
 } from 'react-native';
 // SafeAreaView from core 'react-native' is a no-op on Android. Use the
 // context-aware version so insets work on both platforms.
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import Head from 'expo-router/head';
-import { useNav } from './navContext';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import Sidebar, { LYDO_NAV_ITEMS } from './../components/Sidebar';
 import { useAuth } from './authContext';
-import { useLydoNotificationCenter, LydoNotificationModal, LydoBellIcon } from './notificationCenter';
 import MobileHeader, { MobileHeaderSpacer } from './mobileHeader';
+import { useNav } from './navContext';
+import { LydoBellIcon, LydoNotificationModal, useLydoNotificationCenter } from './notificationCenter';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const isMobile = SCREEN_WIDTH < 768;
 
 // ─── COLORS ───────────────────────────────────────────────────────────────────
 const COLORS = {
-  navy:      '#133E75',
+  navy: '#133E75',
   navyLight: '#1E4D8C',
-  gold:      '#E8C547',
-  white:     '#FFFFFF',
-  offWhite:  '#F7F5F2',
+  gold: '#E8C547',
+  white: '#FFFFFF',
+  offWhite: '#F7F5F2',
   lightGray: '#ECECEC',
-  midGray:   '#B0B0B0',
-  darkText:  '#1A1A1A',
-  subText:   '#666666',
-  cardBg:    '#FFFFFF',
-  maroon:    '#8B0000',
+  midGray: '#B0B0B0',
+  darkText: '#1A1A1A',
+  subText: '#666666',
+  cardBg: '#FFFFFF',
+  maroon: '#8B0000',
 };
 
 const MONITOR_TABS = ['Consultation', 'Budget', 'Report', 'Deadlines'];
@@ -41,8 +47,8 @@ const MONITOR_TABS = ['Consultation', 'Budget', 'Report', 'Deadlines'];
 // step 3 → Send to SK        (same as step 2 + Save / Forward buttons)
 const STEPS = [
   { id: 1, label: 'Submitted Budget' },
-  { id: 2, label: 'Review Summary'   },
-  { id: 3, label: 'Send to SK'       },
+  { id: 2, label: 'Review Summary' },
+  { id: 3, label: 'Send to SK' },
 ];
 
 // ─── DATA ─────────────────────────────────────────────────────────────────────
@@ -81,8 +87,8 @@ const ThreeDotMenu = ({ onSave, onEdit, onReturn }) => {
       {open && (
         <View style={TD.menu}>
           {[
-            { label: '💾  Save',   action: onSave   },
-            { label: '✏️  Edit',   action: onEdit   },
+            { label: '💾  Save', action: onSave },
+            { label: '✏️  Edit', action: onEdit },
             { label: '↩  Return', action: onReturn },
           ].map((item, i) => (
             <TouchableOpacity
@@ -101,7 +107,7 @@ const ThreeDotMenu = ({ onSave, onEdit, onReturn }) => {
 };
 const TD = StyleSheet.create({
   wrap: { position: 'relative', zIndex: 9999, elevation: 9999 },
-  btn:  { width: 36, height: 36, borderRadius: 18, backgroundColor: COLORS.lightGray, alignItems: 'center', justifyContent: 'center' },
+  btn: { width: 36, height: 36, borderRadius: 18, backgroundColor: COLORS.lightGray, alignItems: 'center', justifyContent: 'center' },
   dots: { fontSize: 14, fontWeight: '900', color: COLORS.darkText, letterSpacing: 2 },
   menu: {
     position: 'absolute', top: 42, right: 0,
@@ -109,18 +115,18 @@ const TD = StyleSheet.create({
     shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.15, shadowRadius: 8,
     borderWidth: 1, borderColor: COLORS.lightGray, zIndex: 9999,
   },
-  item:       { paddingHorizontal: 16, paddingVertical: 13 },
+  item: { paddingHorizontal: 16, paddingVertical: 13 },
   itemBorder: { borderBottomWidth: 1, borderBottomColor: COLORS.lightGray },
-  itemText:   { fontSize: 13, fontWeight: '600', color: COLORS.darkText },
+  itemText: { fontSize: 13, fontWeight: '600', color: COLORS.darkText },
 });
 
 // ─── STEP INDICATOR ───────────────────────────────────────────────────────────
 const StepIndicator = ({ currentStep, onStepPress }) => (
   <View style={S.stepRow}>
     {STEPS.map((step, idx) => {
-      const isActive   = currentStep === step.id;
+      const isActive = currentStep === step.id;
       const isComplete = currentStep > step.id;
-      const isLast     = idx === STEPS.length - 1;
+      const isLast = idx === STEPS.length - 1;
 
       return (
         <View key={step.id} style={S.stepItem}>
@@ -131,7 +137,7 @@ const StepIndicator = ({ currentStep, onStepPress }) => (
           >
             <View style={[
               S.stepCircle,
-              isActive   && S.stepCircleActive,
+              isActive && S.stepCircleActive,
               isComplete && S.stepCircleComplete,
             ]}>
               {isComplete
@@ -141,7 +147,7 @@ const StepIndicator = ({ currentStep, onStepPress }) => (
             </View>
             <Text style={[
               S.stepLabel,
-              isActive   && S.stepLabelActive,
+              isActive && S.stepLabelActive,
               isComplete && S.stepLabelComplete,
             ]}>
               {step.label}
@@ -240,25 +246,25 @@ const BudgetDocumentViewer = ({ item, onClose }) => {
   );
 };
 const DV = StyleSheet.create({
-  overlay:    { flex: 1, backgroundColor: 'rgba(0,0,0,0.35)', justifyContent: 'flex-end' },
-  sheet:      { backgroundColor: COLORS.offWhite, borderTopLeftRadius: 20, borderTopRightRadius: 20, height: SCREEN_HEIGHT * 0.92, zIndex: 1 },
-  topBar:     { flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.white, paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: COLORS.lightGray, gap: 10 },
-  backBtn:    { paddingHorizontal: 4 },
-  backText:   { fontSize: 13, color: COLORS.navy, fontWeight: '700' },
+  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.35)', justifyContent: 'flex-end' },
+  sheet: { backgroundColor: COLORS.offWhite, borderTopLeftRadius: 20, borderTopRightRadius: 20, height: SCREEN_HEIGHT * 0.92, zIndex: 1 },
+  topBar: { flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.white, paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: COLORS.lightGray, gap: 10 },
+  backBtn: { paddingHorizontal: 4 },
+  backText: { fontSize: 13, color: COLORS.navy, fontWeight: '700' },
   sheetTitle: { flex: 1, fontSize: 13, fontWeight: '700', color: COLORS.darkText },
-  docPage:    { padding: 20, paddingBottom: 100 },
-  paper:      { backgroundColor: COLORS.white, borderRadius: 8, padding: 20, elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 6 },
-  paperCenter:{ textAlign: 'center', fontSize: 11, color: COLORS.darkText, marginBottom: 4 },
-  bold:       { fontWeight: '800', letterSpacing: 0.5 },
-  table:      { borderWidth: 1, borderColor: '#ccc', marginTop: 14, borderRadius: 4, overflow: 'hidden' },
-  tRow:       { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: '#e0e0e0' },
-  tCell:      { flex: 1, paddingVertical: 7, paddingHorizontal: 8, fontSize: 10, color: COLORS.darkText, borderRightWidth: 1, borderRightColor: '#e0e0e0' },
-  tHead:      { fontWeight: '700', fontSize: 10, color: '#333' },
-  sigRow:     { flexDirection: 'row', justifyContent: 'space-around', marginTop: 24, marginBottom: 8 },
-  sigBlock:   { alignItems: 'center', gap: 4 },
-  sigLine:    { width: 100, height: 1, backgroundColor: COLORS.darkText },
-  sigLabel:   { fontSize: 9, color: COLORS.subText },
-  bottomBar:  { position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: COLORS.white, borderTopWidth: 1, borderTopColor: COLORS.lightGray, paddingHorizontal: 20, paddingVertical: 12, alignItems: 'center' },
+  docPage: { padding: 20, paddingBottom: 100 },
+  paper: { backgroundColor: COLORS.white, borderRadius: 8, padding: 20, elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 6 },
+  paperCenter: { textAlign: 'center', fontSize: 11, color: COLORS.darkText, marginBottom: 4 },
+  bold: { fontWeight: '800', letterSpacing: 0.5 },
+  table: { borderWidth: 1, borderColor: '#ccc', marginTop: 14, borderRadius: 4, overflow: 'hidden' },
+  tRow: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: '#e0e0e0' },
+  tCell: { flex: 1, paddingVertical: 7, paddingHorizontal: 8, fontSize: 10, color: COLORS.darkText, borderRightWidth: 1, borderRightColor: '#e0e0e0' },
+  tHead: { fontWeight: '700', fontSize: 10, color: '#333' },
+  sigRow: { flexDirection: 'row', justifyContent: 'space-around', marginTop: 24, marginBottom: 8 },
+  sigBlock: { alignItems: 'center', gap: 4 },
+  sigLine: { width: 100, height: 1, backgroundColor: COLORS.darkText },
+  sigLabel: { fontSize: 9, color: COLORS.subText },
+  bottomBar: { position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: COLORS.white, borderTopWidth: 1, borderTopColor: COLORS.lightGray, paddingHorizontal: 20, paddingVertical: 12, alignItems: 'center' },
   approveBtn: { backgroundColor: COLORS.navy, borderRadius: 10, paddingVertical: 12, paddingHorizontal: 40 },
   approveBtnText: { color: COLORS.white, fontWeight: '800', fontSize: 14 },
 });
@@ -270,11 +276,11 @@ export default function LYDOMonitorBudgetScreen() {
   const { logout } = useAuth();
 
   const [activeMonitorTab, setActiveMonitorTab] = useState('Budget');
-  const [currentStep, setCurrentStep]           = useState(1);   // 1 | 2 | 3
-  const [searchText, setSearchText]             = useState('');
+  const [currentStep, setCurrentStep] = useState(1);   // 1 | 2 | 3
+  const [searchText, setSearchText] = useState('');
   const notif = useLydoNotificationCenter();
-  const [sidebarVisible, setSidebarVisible]     = useState(false);
-  const [currentTime, setCurrentTime]           = useState('');
+  const [sidebarVisible, setSidebarVisible] = useState(false);
+  const [currentTime, setCurrentTime] = useState('');
 
   const today = new Date().toLocaleDateString('en-PH', {
     timeZone: 'Asia/Manila', month: 'long', day: 'numeric', year: 'numeric',
@@ -296,7 +302,7 @@ export default function LYDOMonitorBudgetScreen() {
     const interval = setInterval(tick, 1000);
     return () => clearInterval(interval);
   }, []);
-  const [viewingItem, setViewingItem]           = useState(null);
+  const [viewingItem, setViewingItem] = useState(null);
 
   const handleNav = (tab) => {
     setActiveTab(tab);
@@ -408,126 +414,126 @@ export default function LYDOMonitorBudgetScreen() {
         contentContainerStyle={S.mainContent}
         showsVerticalScrollIndicator={false}
       >
-      <MobileHeaderSpacer />
+        <MobileHeaderSpacer />
 
-      {/* Desktop Header */}
-      {!isMobile && (
-        <View style={S.header}>
-          <View>
-            <Text style={S.headerSub}>SANGGUNIANG KABATAAN FEDERATION</Text>
-            <Text style={S.headerTitle}>RIZAL, LAGUNA</Text>
-            <Text style={S.headerDesc}>
-              SK Full Disclosure Policy Compliance Portal for the Submission and Validation{'\n'}of Statutory Financial Reports and Developmental Plans
-            </Text>
-          </View>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-            <View style={S.datetimeCard}>
-              <View style={S.datetimeRow}>
-                <View style={S.datetimeDivider} />
-                <View style={S.datetimeBlock}>
-                  <Text style={S.datetimeLabel}>DATE</Text>
-                  <Text style={S.datetimeValue}>{today}</Text>
-                </View>
-                <View style={S.datetimeSeparator} />
-                <View style={[S.datetimeDivider, { backgroundColor: '#22C55E' }]} />
-                <View style={S.datetimeBlock}>
-                  <Text style={S.datetimeLabel}>TIME (PHT)</Text>
-                  <Text style={[S.datetimeValue, S.datetimeTime]}>{currentTime}</Text>
+        {/* Desktop Header */}
+        {!isMobile && (
+          <View style={S.header}>
+            <View>
+              <Text style={S.headerSub}>SANGGUNIANG KABATAAN FEDERATION</Text>
+              <Text style={S.headerTitle}>RIZAL, LAGUNA</Text>
+              <Text style={S.headerDesc}>
+                SK Full Disclosure Policy Compliance Portal for the Submission and Validation{'\n'}of Statutory Financial Reports and Developmental Plans
+              </Text>
+            </View>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+              <View style={S.datetimeCard}>
+                <View style={S.datetimeRow}>
+                  <View style={S.datetimeDivider} />
+                  <View style={S.datetimeBlock}>
+                    <Text style={S.datetimeLabel}>DATE</Text>
+                    <Text style={S.datetimeValue}>{today}</Text>
+                  </View>
+                  <View style={S.datetimeSeparator} />
+                  <View style={[S.datetimeDivider, { backgroundColor: '#22C55E' }]} />
+                  <View style={S.datetimeBlock}>
+                    <Text style={S.datetimeLabel}>TIME (PHT)</Text>
+                    <Text style={[S.datetimeValue, S.datetimeTime]}>{currentTime}</Text>
+                  </View>
                 </View>
               </View>
-            </View>
               <TouchableOpacity style={S.bellBtn} activeOpacity={0.7} onPress={notif.open}>
                 <LydoBellIcon count={notif.count} />
               </TouchableOpacity>
+            </View>
           </View>
-        </View>
-      )}
+        )}
 
-      {/* ── Monitor Tabs ── */}
-      <View style={S.monitorTabBar}>
-        {MONITOR_TABS.map(tab => {
-          const active = activeMonitorTab === tab;
-          return (
-            <TouchableOpacity
-              key={tab}
-              style={[S.monitorTab, active && S.monitorTabActive]}
-              onPress={() => handleMonitorTabPress(tab)}
-              activeOpacity={0.75}
-            >
-              <Text style={[S.monitorTabText, active && S.monitorTabTextActive]}>{tab}</Text>
-            </TouchableOpacity>
-          );
-        })}
-      </View>
-
-      {/* ── Top Control Row: Search (step 1) + Section Title + Step 3 actions ── */}
-      <View style={S.topControlRow}>
-        {/* Search — only on step 1 */}
-        {currentStep === 1 ? (
-          <View style={S.searchBox}>
-            <Text style={{ fontSize: 12, marginRight: 4 }}>🔍</Text>
-            <TextInput
-              style={S.searchInput}
-              placeholder="Search"
-              placeholderTextColor={COLORS.midGray}
-              value={searchText}
-              onChangeText={setSearchText}
-            />
-            {searchText.length > 0 && (
-              <TouchableOpacity onPress={() => setSearchText('')}>
-                <Text style={{ color: COLORS.midGray, fontSize: 12 }}>✕</Text>
+        {/* ── Monitor Tabs ── */}
+        <View style={S.monitorTabBar}>
+          {MONITOR_TABS.map(tab => {
+            const active = activeMonitorTab === tab;
+            return (
+              <TouchableOpacity
+                key={tab}
+                style={[S.monitorTab, active && S.monitorTabActive]}
+                onPress={() => handleMonitorTabPress(tab)}
+                activeOpacity={0.75}
+              >
+                <Text style={[S.monitorTabText, active && S.monitorTabTextActive]}>{tab}</Text>
               </TouchableOpacity>
-            )}
-          </View>
-        ) : (
-          <View style={{ flex: 1 }} />
+            );
+          })}
+        </View>
+
+        {/* ── Top Control Row: Search (step 1) + Section Title + Step 3 actions ── */}
+        <View style={S.topControlRow}>
+          {/* Search — only on step 1 */}
+          {currentStep === 1 ? (
+            <View style={S.searchBox}>
+              <Text style={{ fontSize: 12, marginRight: 4 }}>🔍</Text>
+              <TextInput
+                style={S.searchInput}
+                placeholder="Search"
+                placeholderTextColor={COLORS.midGray}
+                value={searchText}
+                onChangeText={setSearchText}
+              />
+              {searchText.length > 0 && (
+                <TouchableOpacity onPress={() => setSearchText('')}>
+                  <Text style={{ color: COLORS.midGray, fontSize: 12 }}>✕</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          ) : (
+            <View style={{ flex: 1 }} />
+          )}
+
+          {/* Section label */}
+          <Text style={S.sectionLabel}>Setting Annual Budget</Text>
+
+          {/* Step 3 Save / Forward actions — inline right of title */}
+          {currentStep === 3 && (
+            <View style={S.step3Actions}>
+              <TouchableOpacity
+                style={S.saveBtn}
+                onPress={() => Alert.alert('Saved', 'Budget summary saved.')}
+                activeOpacity={0.85}
+              >
+                <Text style={S.saveBtnText}>Save  💾</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={S.forwardBtn}
+                onPress={() => Alert.alert('Forwarded', 'Budget sent to SK Chairperson.')}
+                activeOpacity={0.85}
+              >
+                <Text style={S.forwardBtnText}>Forward  ➤</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+        </View>
+
+        {/* ── Step Indicator ── */}
+        <View style={S.stepWrap}>
+          <StepIndicator currentStep={currentStep} onStepPress={setCurrentStep} />
+        </View>
+
+        {/* ── Table ── */}
+        {currentStep === 1 ? renderStep1() : renderSummaryTable()}
+
+        {/* ── Next Step Button (steps 1 and 2 only) ── */}
+        {currentStep < 3 && (
+          <TouchableOpacity
+            style={S.nextBtn}
+            onPress={() => setCurrentStep(s => s + 1)}
+            activeOpacity={0.85}
+          >
+            <Text style={S.nextBtnText}>
+              {currentStep === 1 ? 'Proceed to Review Summary →' : 'Proceed to Send to SK →'}
+            </Text>
+          </TouchableOpacity>
         )}
-
-        {/* Section label */}
-        <Text style={S.sectionLabel}>Setting Annual Budget</Text>
-
-        {/* Step 3 Save / Forward actions — inline right of title */}
-        {currentStep === 3 && (
-          <View style={S.step3Actions}>
-            <TouchableOpacity
-              style={S.saveBtn}
-              onPress={() => Alert.alert('Saved', 'Budget summary saved.')}
-              activeOpacity={0.85}
-            >
-              <Text style={S.saveBtnText}>Save  💾</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={S.forwardBtn}
-              onPress={() => Alert.alert('Forwarded', 'Budget sent to SK Chairperson.')}
-              activeOpacity={0.85}
-            >
-              <Text style={S.forwardBtnText}>Forward  ➤</Text>
-            </TouchableOpacity>
-          </View>
-        )}
-      </View>
-
-      {/* ── Step Indicator ── */}
-      <View style={S.stepWrap}>
-        <StepIndicator currentStep={currentStep} onStepPress={setCurrentStep} />
-      </View>
-
-      {/* ── Table ── */}
-      {currentStep === 1 ? renderStep1() : renderSummaryTable()}
-
-      {/* ── Next Step Button (steps 1 and 2 only) ── */}
-      {currentStep < 3 && (
-        <TouchableOpacity
-          style={S.nextBtn}
-          onPress={() => setCurrentStep(s => s + 1)}
-          activeOpacity={0.85}
-        >
-          <Text style={S.nextBtnText}>
-            {currentStep === 1 ? 'Proceed to Review Summary →' : 'Proceed to Send to SK →'}
-          </Text>
-        </TouchableOpacity>
-      )}
-    </ScrollView>
+      </ScrollView>
     </View>
   );
 
@@ -536,7 +542,7 @@ export default function LYDOMonitorBudgetScreen() {
       <Head>
         <title>LYDO Budget Monitor · SK Monitoring</title>
       </Head>
-      <SafeAreaView style={styles.safe} edges={isMobile ? ['left', 'right', 'bottom'] : ['top', 'left', 'right', 'bottom']}>
+      <SafeAreaView style={S.safe} edges={isMobile ? ['left', 'right', 'bottom'] : ['top', 'left', 'right', 'bottom']}>
         <StatusBar barStyle="light-content" backgroundColor={COLORS.navy} />
 
         {/* Notification Modal — lists documents sent by SK officials */}
@@ -588,7 +594,7 @@ export default function LYDOMonitorBudgetScreen() {
 
 // ─── STYLES ───────────────────────────────────────────────────────────────────
 const S = StyleSheet.create({
-  safe:   { flex: 1, backgroundColor: COLORS.navy },
+  safe: { flex: 1, backgroundColor: COLORS.navy },
   layout: { flex: 1, flexDirection: 'row' },
 
   sidebarOverlay: {
@@ -597,13 +603,13 @@ const S = StyleSheet.create({
   },
 
   // Main
-  main:        { flex: 1, backgroundColor: COLORS.offWhite, borderTopLeftRadius: 20 },
-  mainMobile:  { borderTopLeftRadius: 0 },
+  main: { flex: 1, backgroundColor: COLORS.offWhite, borderTopLeftRadius: 20 },
+  mainMobile: { borderTopLeftRadius: 0 },
   mainContent: { padding: isMobile ? 12 : 20, paddingBottom: 40 },
 
 
   // Desktop Header
-  header:    { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 20 },
+  header: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 20 },
   headerSub: { fontSize: 10, fontWeight: '600', color: COLORS.subText, letterSpacing: 2, textTransform: 'uppercase', marginBottom: 2 },
   headerTitle: { fontSize: 20, fontWeight: '900', color: COLORS.darkText, letterSpacing: 0.5 },
   headerDesc: { fontSize: 15, fontWeight: '700', color: COLORS.darkText, marginTop: 6, lineHeight: 17 },
@@ -619,12 +625,12 @@ const S = StyleSheet.create({
   datetimeTime: { fontVariant: ['tabular-nums'], color: '#133E75', fontSize: 14, fontWeight: '800' },
 
   // Bell
-  bellBtn:   { width: 40, height: 40, borderRadius: 20, backgroundColor: COLORS.cardBg, alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 6, elevation: 3 },
-  notifBadge:    { position: 'absolute', top: -2, right: -2, width: 16, height: 16, borderRadius: 8, backgroundColor: COLORS.gold, alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: COLORS.white },
-  notifBadgeText:{ fontSize: 8, fontWeight: '900', color: COLORS.navy },
+  bellBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: COLORS.cardBg, alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 6, elevation: 3 },
+  notifBadge: { position: 'absolute', top: -2, right: -2, width: 16, height: 16, borderRadius: 8, backgroundColor: COLORS.gold, alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: COLORS.white },
+  notifBadgeText: { fontSize: 8, fontWeight: '900', color: COLORS.navy },
 
   // Monitor Tabs
-  monitorTabBar: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: COLORS.lightGray, marginBottom: 14, overflowX: 'hidden', overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.30, shadowRadius: 3, elevation: 6,},
+  monitorTabBar: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: COLORS.lightGray, marginBottom: 14, overflowX: 'hidden', overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.30, shadowRadius: 3, elevation: 6, },
   monitorTab: { flex: 1, paddingHorizontal: isMobile ? 8 : 40, backgroundColor: COLORS.navy, paddingVertical: 10, borderBottomWidth: 0, borderBottomColor: 'transparent', marginBottom: -1, borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)', alignItems: 'center' },
   monitorTabActive: { backgroundColor: COLORS.gold, borderRadius: 4, borderBottomColor: COLORS.gold, borderColor: COLORS.gold, shadowColor: COLORS.gold, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.4, shadowRadius: 4, elevation: 3 },
   monitorTabText: { fontSize: isMobile ? 10 : 13, fontWeight: '600', color: COLORS.white },
@@ -670,24 +676,24 @@ const S = StyleSheet.create({
     paddingHorizontal: isMobile ? 8 : 16, paddingVertical: 14,
     borderWidth: 1, borderColor: COLORS.lightGray, elevation: 1,
   },
-  stepRow:     { flexDirection: 'row', alignItems: 'center' },
-  stepItem:    { flexDirection: 'row', alignItems: 'center', flex: 1 },
-  stepLabelRow:{ flexDirection: 'row', alignItems: 'center', gap: isMobile ? 4 : 6 },
-  stepCircle:  {
+  stepRow: { flexDirection: 'row', alignItems: 'center' },
+  stepItem: { flexDirection: 'row', alignItems: 'center', flex: 1 },
+  stepLabelRow: { flexDirection: 'row', alignItems: 'center', gap: isMobile ? 4 : 6 },
+  stepCircle: {
     width: isMobile ? 20 : 22, height: isMobile ? 20 : 22, borderRadius: isMobile ? 10 : 11,
     borderWidth: 2, borderColor: COLORS.midGray,
     backgroundColor: COLORS.white, alignItems: 'center', justifyContent: 'center',
   },
-  stepCircleActive:  { borderColor: COLORS.navy, backgroundColor: COLORS.navy },
-  stepCircleComplete:{ borderColor: COLORS.navy, backgroundColor: COLORS.navy },
-  stepNum:        { fontSize: isMobile ? 9 : 10, fontWeight: '700', color: COLORS.midGray },
-  stepNumActive:  { color: COLORS.white },
-  stepCheckmark:  { fontSize: isMobile ? 9 : 10, color: COLORS.white, fontWeight: '900' },
-  stepLabel:      { fontSize: isMobile ? 8 : 11, color: COLORS.midGray, fontWeight: '500' },
-  stepLabelActive:   { color: COLORS.navy, fontWeight: '800' },
+  stepCircleActive: { borderColor: COLORS.navy, backgroundColor: COLORS.navy },
+  stepCircleComplete: { borderColor: COLORS.navy, backgroundColor: COLORS.navy },
+  stepNum: { fontSize: isMobile ? 9 : 10, fontWeight: '700', color: COLORS.midGray },
+  stepNumActive: { color: COLORS.white },
+  stepCheckmark: { fontSize: isMobile ? 9 : 10, color: COLORS.white, fontWeight: '900' },
+  stepLabel: { fontSize: isMobile ? 8 : 11, color: COLORS.midGray, fontWeight: '500' },
+  stepLabelActive: { color: COLORS.navy, fontWeight: '800' },
   stepLabelComplete: { color: COLORS.navy, fontWeight: '700' },
   stepLineWrap: { flex: 1, paddingHorizontal: isMobile ? 3 : 6 },
-  stepLine:       { height: 1.5, backgroundColor: COLORS.midGray, flex: 1 },
+  stepLine: { height: 1.5, backgroundColor: COLORS.midGray, flex: 1 },
   stepLineFilled: { backgroundColor: COLORS.navy },
 
   // Next button
@@ -702,29 +708,29 @@ const S = StyleSheet.create({
 
   // Table
   tableContainer: { backgroundColor: COLORS.white, borderRadius: 12, overflow: 'hidden', borderWidth: 1, borderColor: COLORS.lightGray, elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 6 },
-  tableHeader:    { flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.white, paddingVertical: 9, paddingHorizontal: 10, borderBottomWidth: 1, borderBottomColor: COLORS.lightGray },
-  tableHeaderText:{ fontSize: isMobile ? 9 : 12, fontWeight: '700', color: COLORS.darkText },
-  tableRow:       { flexDirection: 'row', alignItems: 'center', paddingVertical: 9, paddingHorizontal: 10, borderBottomWidth: 1, borderBottomColor: COLORS.lightGray, backgroundColor: COLORS.white },
-  tableRowEven:   { backgroundColor: '#FAFAFA' },
+  tableHeader: { flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.white, paddingVertical: 9, paddingHorizontal: 10, borderBottomWidth: 1, borderBottomColor: COLORS.lightGray },
+  tableHeaderText: { fontSize: isMobile ? 9 : 12, fontWeight: '700', color: COLORS.darkText },
+  tableRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 9, paddingHorizontal: 10, borderBottomWidth: 1, borderBottomColor: COLORS.lightGray, backgroundColor: COLORS.white },
+  tableRowEven: { backgroundColor: '#FAFAFA' },
 
   // Step 1 columns
   colBarangay: { width: isMobile ? 85 : 180, paddingRight: 6 },
   colDocument: { flex: 1, paddingRight: 6 },
   colDateTime: { width: isMobile ? 60 : 110, alignItems: 'flex-end', paddingRight: 6 },
-  colAction:   { width: 48, alignItems: 'center' },
+  colAction: { width: 48, alignItems: 'center' },
 
   // Step 2/3 columns
   colBudget: { flex: 1, alignItems: 'flex-end', paddingRight: 8 },
 
   cellBarangay: { fontSize: isMobile ? 10 : 13, fontWeight: '600', color: COLORS.darkText },
   cellDocument: { fontSize: isMobile ? 9 : 12, color: COLORS.subText },
-  cellTime:     { fontSize: 9, color: COLORS.subText, textAlign: 'right' },
-  cellDate:     { fontSize: 9, color: COLORS.subText, textAlign: 'right' },
-  cellBudget:   { fontSize: isMobile ? 10 : 13, color: COLORS.darkText, fontWeight: '500', textAlign: 'right' },
+  cellTime: { fontSize: 9, color: COLORS.subText, textAlign: 'right' },
+  cellDate: { fontSize: 9, color: COLORS.subText, textAlign: 'right' },
+  cellBudget: { fontSize: isMobile ? 10 : 13, color: COLORS.darkText, fontWeight: '500', textAlign: 'right' },
 
-  viewBtn:     { backgroundColor: COLORS.navy, borderRadius: 6, paddingHorizontal: 10, paddingVertical: 5 },
+  viewBtn: { backgroundColor: COLORS.navy, borderRadius: 6, paddingHorizontal: 10, paddingVertical: 5 },
   viewBtnText: { fontSize: 10, fontWeight: '700', color: COLORS.white },
 
   emptyState: { alignItems: 'center', paddingVertical: 40 },
-  emptyText:  { fontSize: 14, color: COLORS.midGray },
+  emptyText: { fontSize: 14, color: COLORS.midGray },
 });

@@ -52,8 +52,8 @@
 // to change.
 // ─────────────────────────────────────────────────────────────────────────
 
-import React from 'react';
-import { View, Text, TouchableOpacity, Image, StyleSheet, Dimensions } from 'react-native';
+import { usePathname } from 'expo-router';
+import { Dimensions, Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -192,10 +192,10 @@ export const LogoutNavIcon = ({ color = '#fff', size = 16 }) => (
 export const NAV_ITEMS = [
   { tab: 'Dashboard', label: 'Dashboard', IconComponent: DashboardIcon, route: '/(tabs)/sk-dashboard' },
   { tab: 'Documents', label: 'Documents', IconComponent: DocumentsIcon, route: '/(tabs)/sk-document' },
-  { tab: 'Planning',  label: 'Planning',  IconComponent: PlanningIcon,  route: '/(tabs)/sk-planning' },
-  { tab: 'Portal',    label: 'Portal',    IconComponent: PortalIcon,    route: '/(tabs)/sk-portal' },
-  { tab: 'Logs',      label: 'Logs',      IconComponent: LogsIcon,      route: '/(tabs)/sk-logs' },
-  { tab: 'Account',   label: 'Account',   IconComponent: AccountIcon,   route: '/(tabs)/sk-account' },
+  { tab: 'Planning', label: 'Planning', IconComponent: PlanningIcon, route: '/(tabs)/sk-planning' },
+  { tab: 'Portal', label: 'Portal', IconComponent: PortalIcon, route: '/(tabs)/sk-portal' },
+  { tab: 'Logs', label: 'Logs', IconComponent: LogsIcon, route: '/(tabs)/sk-logs' },
+  { tab: 'Account', label: 'Account', IconComponent: AccountIcon, route: '/(tabs)/sk-account' },
 ];
 
 // ── LYDO nav config — LYDO side: Dashboard, Documents, Monitor, Barangay,
@@ -203,10 +203,41 @@ export const NAV_ITEMS = [
 export const LYDO_NAV_ITEMS = [
   { tab: 'Dashboard', label: 'Dashboard', IconComponent: DashboardIcon, route: '/(tabs)/lydo-dashboard' },
   { tab: 'Documents', label: 'Documents', IconComponent: DocumentsIcon, route: '/(tabs)/lydo-document' },
-  { tab: 'Monitor',   label: 'Monitor',   IconComponent: MonitorIcon,   route: '/(tabs)/lydo-monitor' },
-  { tab: 'Barangay',  label: 'Barangay',  IconComponent: BarangayIcon,  route: '/(tabs)/lydo-accounts' },
-  { tab: 'Logs',      label: 'Logs',      IconComponent: LogsIcon,      route: '/(tabs)/lydo-logs' },
+  { tab: 'Monitor', label: 'Monitor', IconComponent: MonitorIcon, route: '/(tabs)/lydo-monitor' },
+  { tab: 'Barangay', label: 'Barangay', IconComponent: BarangayIcon, route: '/(tabs)/lydo-accounts' },
+  { tab: 'Logs', label: 'Logs', IconComponent: LogsIcon, route: '/(tabs)/lydo-logs' },
 ];
+
+// ─── ACTIVE-TAB-FROM-ROUTE ──────────────────────────────────────────────────
+// Expo Router's usePathname() returns the resolved URL, which drops group
+// segments like "(tabs)" — e.g. route "/(tabs)/sk-dashboard" resolves to
+// pathname "/sk-dashboard". This pulls the last real segment out of a route
+// string (from NAV_ITEMS) or a pathname (from usePathname) so the two can be
+// compared on equal footing.
+const lastRouteSegment = (route) => {
+  if (!route) return '';
+  return route.split('/').filter((seg) => seg && !(seg.startsWith('(') && seg.endsWith(')'))).pop() || '';
+};
+
+// Matches the current pathname against navItems and returns the tab that
+// should be highlighted, or null if nothing matches. Tries an exact segment
+// match first, then falls back to the longest prefix match so sibling
+// screens under the same flow (e.g. "sk-document-management" or
+// "lydo-monitor-deadlines") still light up their parent tab.
+function deriveActiveTab(pathname, navItems) {
+  const pathSeg = lastRouteSegment(pathname);
+  if (!pathSeg) return null;
+
+  const segmented = navItems.map((item) => ({ item, seg: lastRouteSegment(item.route) }));
+
+  const exact = segmented.find(({ seg }) => seg === pathSeg);
+  if (exact) return exact.item.tab;
+
+  const prefixMatches = segmented.filter(({ seg }) => seg && pathSeg.startsWith(seg));
+  if (prefixMatches.length === 0) return null;
+  prefixMatches.sort((a, b) => b.seg.length - a.seg.length);
+  return prefixMatches[0].item.tab;
+}
 
 // ─── SIDEBAR COMPONENT ──────────────────────────────────────────────────────
 export default function Sidebar({
@@ -220,6 +251,13 @@ export default function Sidebar({
 }) {
   const isMobile = isMobileProp ?? SCREEN_WIDTH < 768;
   const insets = useSafeAreaInsets();
+  const pathname = usePathname();
+
+  // Prefer the tab derived from the actual current route, so the sidebar
+  // always reflects what page you're on even if a screen never wires up
+  // (or forgets to update) its own activeTab state. The activeTab prop is
+  // kept as a fallback for the rare route that doesn't map to any nav item.
+  const resolvedActiveTab = deriveActiveTab(pathname, navItems) ?? activeTab;
 
   // On mobile the drawer is an absolutely-positioned overlay that starts at
   // top:0, so it sits *behind* the status bar (notch, clock, battery) unless
@@ -243,7 +281,7 @@ export default function Sidebar({
       <View style={{ height: 24 }} />
 
       {navItems.map(({ tab, label, IconComponent }) => {
-        const active = activeTab === tab;
+        const active = resolvedActiveTab === tab;
         const iconColor = active ? COLORS.activeIcon : COLORS.inactiveIcon;
         return (
           <TouchableOpacity

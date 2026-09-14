@@ -37,28 +37,28 @@ const isMobile = SCREEN_WIDTH < 768;
 
 // ─── COLORS ───────────────────────────────────────────────────────────────────
 const COLORS = {
-  navy:      '#133E75',
-  gold:      '#E8C547',
-  white:     '#FFFFFF',
-  offWhite:  '#F7F5F2',
+  navy: '#133E75',
+  gold: '#E8C547',
+  white: '#FFFFFF',
+  offWhite: '#F7F5F2',
   lightGray: '#ECECEC',
-  midGray:   '#B0B0B0',
-  darkText:  '#1A1A1A',
-  subText:   '#666666',
-  cardBg:    '#FFFFFF',
-  red:       '#D32F2F',
-  blue:      '#1565C0',
-  teal:      '#00796B',
+  midGray: '#B0B0B0',
+  darkText: '#1A1A1A',
+  subText: '#666666',
+  cardBg: '#FFFFFF',
+  red: '#D32F2F',
+  blue: '#1565C0',
+  teal: '#00796B',
 };
 
 // ─── CONSTANTS ────────────────────────────────────────────────────────────────
-const NAV_TABS       = ['Dashboard', 'Documents', 'Planning', 'Portal', 'Logs', 'Account'];
-const DOCUMENT_TABS  = ['Folder', 'Document Management'];
-const STATUS_TABS    = ['All', 'Drafts', 'Saved', 'Submitted', 'Approved', 'Returned'];
+const NAV_TABS = ['Dashboard', 'Documents', 'Planning', 'Portal', 'Logs', 'Account'];
+const DOCUMENT_TABS = ['Folder', 'Document Management'];
+const STATUS_TABS = ['All', 'Drafts', 'Saved', 'Submitted', 'Approved', 'Returned'];
 // DRAFT_TYPES is built dynamically from the fetched document_category table.
 // "All Types" remains a fixed sentinel for the unfiltered view.
 const DRAFT_ALL_LABEL = 'All Types';
-const SORT_OPTIONS   = ['Newest', 'Oldest', 'Title A-Z', 'Title Z-A'];
+const SORT_OPTIONS = ['Newest', 'Oldest', 'Title A-Z', 'Title Z-A'];
 
 // ─── MOCK DATA ────────────────────────────────────────────────────────────────
 // (Data now fetched from Supabase based on barangay_id)
@@ -106,12 +106,19 @@ const SaveIcon = () => (
   </View>
 );
 
+// Archive icon
+const ArchiveIcon = () => (
+  <View style={styles.actionIconWrap}>
+    <Feather name="archive" size={isMobile ? 13 : 15} color={COLORS.subText} />
+  </View>
+);
+
 // ─── TYPE BADGE ───────────────────────────────────────────────────────────────
 const TypeBadge = ({ type }) => {
   const colorMap = {
-    Financial:   { bg: '#E8F5E9', text: '#1A6B38' },
-    Planning:    { bg: '#E3EDF9', text: '#2A4E8A' },
-    Governance:  { bg: '#F2EEF9', text: '#5A2EA0' },
+    Financial: { bg: '#E8F5E9', text: '#1A6B38' },
+    Planning: { bg: '#E3EDF9', text: '#2A4E8A' },
+    Governance: { bg: '#F2EEF9', text: '#5A2EA0' },
     Performance: { bg: '#FDF2EA', text: '#A04010' },
   };
   const c = colorMap[type] || { bg: COLORS.lightGray, text: COLORS.subText };
@@ -127,8 +134,8 @@ const COMMENT_PANEL_WIDTH = isMobile ? SCREEN_WIDTH : 320;
 
 const ReturnedDocumentViewer = ({ doc, onClose }) => {
   const { user } = useAuth();
-  const [fileUrl, setFileUrl]       = useState(doc.fileUrl || null);
-  const [loading, setLoading]       = useState(!doc.fileUrl);
+  const [fileUrl, setFileUrl] = useState(doc.fileUrl || null);
+  const [loading, setLoading] = useState(!doc.fileUrl);
   const [webLoading, setWebLoading] = useState(true);
 
   // Comment panel
@@ -145,7 +152,7 @@ const ReturnedDocumentViewer = ({ doc, onClose }) => {
   };
 
   // Comments
-  const [comments, setComments]           = useState([]);
+  const [comments, setComments] = useState([]);
   const [commentsLoading, setCommentsLoading] = useState(false);
 
   const fetchComments = useCallback(async () => {
@@ -170,7 +177,7 @@ const ReturnedDocumentViewer = ({ doc, onClose }) => {
   const getInitials = (u) => u ? `${u.first_name?.[0] || ''}${u.last_name?.[0] || ''}`.toUpperCase() : '??';
   const getFullName = (u) => u ? `${u.first_name || ''} ${u.last_name || ''}`.trim() || 'LYDO Officer' : 'LYDO Officer';
 
-  const resolvedCount   = comments.filter(c => c.is_resolved).length;
+  const resolvedCount = comments.filter(c => c.is_resolved).length;
   const unresolvedCount = comments.length - resolvedCount;
 
   useEffect(() => {
@@ -347,49 +354,49 @@ const ReturnedDocumentViewer = ({ doc, onClose }) => {
 };
 
 const rvStyles = StyleSheet.create({
-  safe:            { flex: 1, backgroundColor: COLORS.navy },
-  topBar:          { flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.navy, paddingHorizontal: 12, paddingVertical: 12, gap: 10 },
-  backBtn:         { padding: 6, borderRadius: 8, backgroundColor: 'rgba(255,255,255,0.12)' },
-  topMid:          { flex: 1 },
-  topTitle:        { fontSize: 14, fontWeight: '700', color: COLORS.white },
-  returnedBadge:   { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 },
+  safe: { flex: 1, backgroundColor: COLORS.navy },
+  topBar: { flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.navy, paddingHorizontal: 12, paddingVertical: 12, gap: 10 },
+  backBtn: { padding: 6, borderRadius: 8, backgroundColor: 'rgba(255,255,255,0.12)' },
+  topMid: { flex: 1 },
+  topTitle: { fontSize: 14, fontWeight: '700', color: COLORS.white },
+  returnedBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 },
   returnedBadgeText: { fontSize: 10, color: '#E87A30', fontWeight: '600' },
-  downloadBtn:     { padding: 6, borderRadius: 8, backgroundColor: 'rgba(255,255,255,0.12)' },
-  centerState:     { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', backgroundColor: COLORS.offWhite, gap: 12 },
-  loadingTxt:      { fontSize: 13, color: COLORS.subText },
+  downloadBtn: { padding: 6, borderRadius: 8, backgroundColor: 'rgba(255,255,255,0.12)' },
+  centerState: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', backgroundColor: COLORS.offWhite, gap: 12 },
+  loadingTxt: { fontSize: 13, color: COLORS.subText },
   webLoadingOverlay: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', backgroundColor: COLORS.offWhite, gap: 12 },
-  bottomBar:       { flexDirection: 'row', justifyContent: 'center', gap: 12, padding: 16, backgroundColor: COLORS.white, borderTopWidth: 1, borderTopColor: COLORS.lightGray },
-  commentBtn:      { flexDirection: 'row', alignItems: 'center', backgroundColor: '#E0E0E0', borderRadius: 24, paddingHorizontal: 28, paddingVertical: 12, borderWidth: 1.5, borderColor: COLORS.midGray },
-  commentTxt:      { fontSize: 14, fontWeight: '700', color: COLORS.darkText },
-  commentBadge:    { marginLeft: 8, backgroundColor: '#E87A30', borderRadius: 10, paddingHorizontal: 6, paddingVertical: 1 },
+  bottomBar: { flexDirection: 'row', justifyContent: 'center', gap: 12, padding: 16, backgroundColor: COLORS.white, borderTopWidth: 1, borderTopColor: COLORS.lightGray },
+  commentBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#E0E0E0', borderRadius: 24, paddingHorizontal: 28, paddingVertical: 12, borderWidth: 1.5, borderColor: COLORS.midGray },
+  commentTxt: { fontSize: 14, fontWeight: '700', color: COLORS.darkText },
+  commentBadge: { marginLeft: 8, backgroundColor: '#E87A30', borderRadius: 10, paddingHorizontal: 6, paddingVertical: 1 },
   commentBadgeTxt: { fontSize: 10, fontWeight: '800', color: COLORS.white },
-  panelScrim:      { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.25)', zIndex: 10 },
-  commentPanel:    { position: 'absolute', top: 0, bottom: 0, right: 0, zIndex: 20, backgroundColor: COLORS.white, borderLeftWidth: 1, borderLeftColor: COLORS.lightGray, shadowColor: '#000', shadowOffset: { width: -4, height: 0 }, shadowOpacity: 0.15, shadowRadius: 12, elevation: 16, flexDirection: 'column' },
-  panelTopBar:     { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 14, paddingTop: 14, paddingBottom: 10, borderBottomWidth: 1, borderBottomColor: COLORS.lightGray, backgroundColor: COLORS.white },
-  panelTitle:      { fontSize: 15, fontWeight: '800', color: COLORS.darkText },
-  panelSub:        { fontSize: 10, color: COLORS.subText, marginTop: 1 },
-  panelCloseBtn:   { width: 32, height: 32, borderRadius: 16, backgroundColor: COLORS.lightGray, alignItems: 'center', justifyContent: 'center' },
-  panelBadgeRow:   { flexDirection: 'row', gap: 6, paddingHorizontal: 14, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: COLORS.lightGray },
-  badge:           { borderRadius: 10, paddingHorizontal: 8, paddingVertical: 2 },
-  badgeOpen:       { backgroundColor: '#FEF3C7' },
-  badgeResolved:   { backgroundColor: '#DCFCE7' },
-  badgeTxt:        { fontSize: 10, fontWeight: '700', color: '#92400E' },
-  commentList:     { flex: 1, paddingHorizontal: 10, paddingTop: 10 },
-  emptyState:      { alignItems: 'center', paddingTop: 32, gap: 8, paddingHorizontal: 16 },
-  emptyTxt:        { fontSize: 13, fontWeight: '700', color: COLORS.midGray },
-  emptySub:        { fontSize: 11, color: COLORS.midGray, textAlign: 'center', lineHeight: 16 },
-  commentCard:         { backgroundColor: COLORS.white, borderRadius: 10, padding: 12, marginBottom: 10, borderWidth: 1, borderColor: COLORS.lightGray, elevation: 1, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 3 },
+  panelScrim: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.25)', zIndex: 10 },
+  commentPanel: { position: 'absolute', top: 0, bottom: 0, right: 0, zIndex: 20, backgroundColor: COLORS.white, borderLeftWidth: 1, borderLeftColor: COLORS.lightGray, shadowColor: '#000', shadowOffset: { width: -4, height: 0 }, shadowOpacity: 0.15, shadowRadius: 12, elevation: 16, flexDirection: 'column' },
+  panelTopBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 14, paddingTop: 14, paddingBottom: 10, borderBottomWidth: 1, borderBottomColor: COLORS.lightGray, backgroundColor: COLORS.white },
+  panelTitle: { fontSize: 15, fontWeight: '800', color: COLORS.darkText },
+  panelSub: { fontSize: 10, color: COLORS.subText, marginTop: 1 },
+  panelCloseBtn: { width: 32, height: 32, borderRadius: 16, backgroundColor: COLORS.lightGray, alignItems: 'center', justifyContent: 'center' },
+  panelBadgeRow: { flexDirection: 'row', gap: 6, paddingHorizontal: 14, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: COLORS.lightGray },
+  badge: { borderRadius: 10, paddingHorizontal: 8, paddingVertical: 2 },
+  badgeOpen: { backgroundColor: '#FEF3C7' },
+  badgeResolved: { backgroundColor: '#DCFCE7' },
+  badgeTxt: { fontSize: 10, fontWeight: '700', color: '#92400E' },
+  commentList: { flex: 1, paddingHorizontal: 10, paddingTop: 10 },
+  emptyState: { alignItems: 'center', paddingTop: 32, gap: 8, paddingHorizontal: 16 },
+  emptyTxt: { fontSize: 13, fontWeight: '700', color: COLORS.midGray },
+  emptySub: { fontSize: 11, color: COLORS.midGray, textAlign: 'center', lineHeight: 16 },
+  commentCard: { backgroundColor: COLORS.white, borderRadius: 10, padding: 12, marginBottom: 10, borderWidth: 1, borderColor: COLORS.lightGray, elevation: 1, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 3 },
   commentCardResolved: { backgroundColor: '#F9FAFB', borderColor: '#E5E7EB', opacity: 0.8 },
-  commentHeader:   { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 8, gap: 8 },
-  avatar:          { width: 32, height: 32, borderRadius: 16, backgroundColor: COLORS.navy, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
-  avatarResolved:  { backgroundColor: COLORS.midGray },
-  avatarTxt:       { fontSize: 11, fontWeight: '800', color: COLORS.white },
-  commentMeta:     { flex: 1 },
-  commentAuthor:   { fontSize: 12, fontWeight: '700', color: COLORS.darkText },
-  commentTime:     { fontSize: 10, color: COLORS.midGray, marginTop: 1 },
-  resolvedTag:     { flexDirection: 'row', alignItems: 'center', gap: 3 },
-  resolvedTagTxt:  { fontSize: 10, fontWeight: '700', color: '#166534' },
-  commentBody:         { fontSize: 12, color: COLORS.darkText, lineHeight: 18 },
+  commentHeader: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 8, gap: 8 },
+  avatar: { width: 32, height: 32, borderRadius: 16, backgroundColor: COLORS.navy, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+  avatarResolved: { backgroundColor: COLORS.midGray },
+  avatarTxt: { fontSize: 11, fontWeight: '800', color: COLORS.white },
+  commentMeta: { flex: 1 },
+  commentAuthor: { fontSize: 12, fontWeight: '700', color: COLORS.darkText },
+  commentTime: { fontSize: 10, color: COLORS.midGray, marginTop: 1 },
+  resolvedTag: { flexDirection: 'row', alignItems: 'center', gap: 3 },
+  resolvedTagTxt: { fontSize: 10, fontWeight: '700', color: '#166534' },
+  commentBody: { fontSize: 12, color: COLORS.darkText, lineHeight: 18 },
   commentBodyResolved: { color: COLORS.subText },
 });
 
@@ -425,15 +432,15 @@ export default function SKDocumentManagementScreen() {
   const [activeStatusTab, setActiveStatusTab] = useState(
     STATUS_TABS.includes(params?.initialTab) ? params.initialTab : 'All'
   );
-  const [searchText, setSearchText]           = useState('');
-  const [draftType, setDraftType]             = useState('All Types');
-  const [sortBy, setSortBy]                   = useState('Newest');
-  const [sidebarVisible, setSidebarVisible]   = useState(false);
+  const [searchText, setSearchText] = useState('');
+  const [draftType, setDraftType] = useState('All Types');
+  const [sortBy, setSortBy] = useState('Newest');
+  const [sidebarVisible, setSidebarVisible] = useState(false);
   const [typeDropdownOpen, setTypeDropdownOpen] = useState(false);
   const [yearDropdownOpen, setYearDropdownOpen] = useState(false);
   const [sortDropdownOpen, setSortDropdownOpen] = useState(false);
   const [selectedYear, setSelectedYear] = useState('All Years');
-  const [documents, setDocuments]             = useState([]);
+  const [documents, setDocuments] = useState([]);
   const [deleteModalVisible, setDeleteModalVisible] = useState(false);
   const [documentToDelete, setDocumentToDelete] = useState(null);
   const [deleting, setDeleting] = useState(false);
@@ -452,6 +459,9 @@ export default function SKDocumentManagementScreen() {
   const [editLoading, setEditLoading] = useState(false);
   const [selectedEditFile, setSelectedEditFile] = useState(null);
   const [uploadingEditFile, setUploadingEditFile] = useState(false);
+  const [showArchiveView, setShowArchiveView] = useState(false);
+  const [expandedArchiveId, setExpandedArchiveId] = useState(null);
+  const [archiving, setArchiving] = useState(false);
 
   const showAlert = (type, title, message) => {
     setAlertModal({ visible: true, type, title, message });
@@ -605,10 +615,10 @@ export default function SKDocumentManagementScreen() {
     setSidebarVisible(false);
     if (tab === 'Dashboard') router.push('/(tabs)/sk-dashboard');
     if (tab === 'Documents') router.push('/(tabs)/sk-document');
-    if (tab === 'Planning')  router.push('/(tabs)/sk-planning');
-    if (tab === 'Portal')    router.push('/(tabs)/sk-portal');
-    if (tab === 'Logs')      router.push('/(tabs)/sk-logs');
-    if (tab === 'Account')   router.push('/(tabs)/sk-account');
+    if (tab === 'Planning') router.push('/(tabs)/sk-planning');
+    if (tab === 'Portal') router.push('/(tabs)/sk-portal');
+    if (tab === 'Logs') router.push('/(tabs)/sk-logs');
+    if (tab === 'Account') router.push('/(tabs)/sk-account');
   };
 
   const formatDate = (dateStr) => {
@@ -942,12 +952,50 @@ export default function SKDocumentManagementScreen() {
     setForwarding(false);
   };
 
+  // Handle archive
+  const handleArchivePress = async (doc) => {
+    setArchiving(true);
+    try {
+      const { error } = await supabase
+        .from('documents')
+        .update({ status: 'archived' })
+        .eq('document_id', doc.id);
+
+      if (error) {
+        console.error('Error archiving document:', error);
+        showAlert('error', 'Archive Failed', 'Failed to archive the document. Please try again.');
+        setArchiving(false);
+        return;
+      }
+
+      await fetchDocuments();
+      await logActivity('Archive document', `Archived "${doc.title}"`);
+      showAlert('success', 'Document Archived', `"${doc.title}" has been moved to the archive.`);
+    } catch (error) {
+      console.error('Error:', error);
+      showAlert('error', 'Unexpected Error', 'An error occurred while archiving the document.');
+    }
+    setArchiving(false);
+  };
+
+  // Documents excluded from the main list once archived — shown only in the
+  // read-only Archive view below (mirrors lydo-document-templates.js).
+  const archivedDocs = useMemo(
+    () => documents
+      .filter(d => d.status === 'archived')
+      .sort((a, b) => new Date(b.lastModified) - new Date(a.lastModified)),
+    [documents]
+  );
+
   // Filtered + sorted documents
   const visibleDocs = useMemo(() => {
+    // Archived documents never appear in the main list.
+    const activeDocuments = documents.filter(d => d.status !== 'archived');
+
     // Filter by status tab (draft, saved, submitted, approved)
     const statusMap = { 'All': null, 'Drafts': 'draft', 'Saved': 'saved', 'Submitted': 'submitted', 'Approved': 'approved', 'Returned': 'returned' };
     const statusFilter = statusMap[activeStatusTab];
-    let docs = statusFilter !== null && statusFilter ? documents.filter(d => d.status === statusFilter) : documents;
+    let docs = statusFilter !== null && statusFilter ? activeDocuments.filter(d => d.status === statusFilter) : activeDocuments;
 
     // Filter by folder category
     if (draftType !== 'All Types') {
@@ -977,11 +1025,11 @@ export default function SKDocumentManagementScreen() {
 
     // Sort
     switch (sortBy) {
-      case 'Newest':    return [...docs].sort((a, b) => new Date(b.lastModified) - new Date(a.lastModified));
-      case 'Oldest':    return [...docs].sort((a, b) => new Date(a.lastModified) - new Date(b.lastModified));
+      case 'Newest': return [...docs].sort((a, b) => new Date(b.lastModified) - new Date(a.lastModified));
+      case 'Oldest': return [...docs].sort((a, b) => new Date(a.lastModified) - new Date(b.lastModified));
       case 'Title A-Z': return [...docs].sort((a, b) => a.title.localeCompare(b.title));
       case 'Title Z-A': return [...docs].sort((a, b) => b.title.localeCompare(a.title));
-      default:          return docs;
+      default: return docs;
     }
   }, [activeStatusTab, draftType, selectedYear, searchText, sortBy, documents]);
 
@@ -1018,295 +1066,386 @@ export default function SKDocumentManagementScreen() {
       >
         <MobileHeaderSpacer />
 
-      {/* Desktop Header */}
-      {!isMobile && (
-        <View style={styles.header}>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.headerSub}>SANGGUNIANG KABATAAN</Text>
-            <Text style={styles.headerTitle}>{barangayName.toUpperCase()}</Text>
-          </View>
-          <View style={styles.headerRight}>
-            <TouchableOpacity style={styles.bellBtn} onPress={notif.open} activeOpacity={0.7}>
-              <BellIcon count={notifCount} />
-            </TouchableOpacity>
-          </View>
-        </View>
-      )}
-
-
-
-      {/* Folder / Document Management Tab Bar */}
-      <View style={styles.filterRow}>
-        {/* Folder / Document Management tab bar */}
-        <View style={styles.docTabBar}>
-          {DOCUMENT_TABS.map(tab => {
-            const active = activeDocTab === tab;
-            return (
-              <TouchableOpacity
-                key={tab}
-                style={[styles.docTab, active && styles.docTabActive]}
-                onPress={() => {
-                  if (tab === 'Folder') {
-                    router.push({ pathname: '/(tabs)/sk-document' });
-                  }
-                }}
-                activeOpacity={0.8}
-              >
-                <Text style={[styles.docTabText, active && styles.docTabTextActive]}>
-                  {tab}
-                </Text>
+        {/* Desktop Header */}
+        {!isMobile && (
+          <View style={styles.header}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.headerSub}>SANGGUNIANG KABATAAN</Text>
+              <Text style={styles.headerTitle}>{barangayName.toUpperCase()}</Text>
+            </View>
+            <View style={styles.headerRight}>
+              <TouchableOpacity style={styles.bellBtn} onPress={notif.open} activeOpacity={0.7}>
+                <BellIcon count={notifCount} />
               </TouchableOpacity>
-            );
-          })}
-        </View>
-      </View>
-      {/* Search Bar */}
-      <View style={styles.searchRow}>
-        <View style={styles.searchBox}>
-          <Text style={styles.searchIcon}>🔍</Text>
-          <TextInput
-            style={styles.searchInput}
-            placeholder="Search"
-            placeholderTextColor={COLORS.midGray}
-            value={searchText}
-            onChangeText={setSearchText}
-          />
-          {searchText.length > 0 && (
-            <TouchableOpacity onPress={() => setSearchText('')}>
-              <Text style={{ color: COLORS.midGray, fontSize: 12 }}>✕</Text>
-            </TouchableOpacity>
-          )}
-        </View>
-      </View>
-      {/* Draft Type + Sorted By Row */}
-      <View style={styles.controlsRow}>
-        {/* Draft Type Dropdown */}
-        <View style={styles.dropdownWrap}>
-          <TouchableOpacity
-            style={styles.dropdownBtn}
-            onPress={() => { setTypeDropdownOpen(v => !v); setSortDropdownOpen(false); setYearDropdownOpen(false); }}
-            activeOpacity={0.8}
-          >
-            <Text style={styles.dropdownBtnText}>{draftType}</Text>
-            <Text style={styles.dropdownArrow}>{typeDropdownOpen ? '▲' : '▼'}</Text>
-          </TouchableOpacity>
-          {typeDropdownOpen && (
-            <View style={styles.dropdownMenu}>
-              {DRAFT_TYPES.map(opt => (
-                <TouchableOpacity
-                  key={opt}
-                  style={[styles.dropdownItem, draftType === opt && styles.dropdownItemActive]}
-                  onPress={() => { setDraftType(opt); setTypeDropdownOpen(false); }}
-                  activeOpacity={0.8}
-                >
-                  <Text style={[styles.dropdownItemText, draftType === opt && styles.dropdownItemTextActive]}>
-                    {opt}
-                  </Text>
-                  {draftType === opt && <Text style={styles.dropdownCheck}>✓</Text>}
-                </TouchableOpacity>
-              ))}
             </View>
-          )}
-        </View>
-
-        {/* Year Dropdown */}
-        <View style={styles.dropdownWrap}>
-          <TouchableOpacity
-            style={styles.dropdownBtn}
-            onPress={() => { setYearDropdownOpen(v => !v); setTypeDropdownOpen(false); setSortDropdownOpen(false); }}
-            activeOpacity={0.8}
-          >
-            <Text style={styles.dropdownBtnText}>{selectedYear}</Text>
-            <Text style={styles.dropdownArrow}>{yearDropdownOpen ? '▲' : '▼'}</Text>
-          </TouchableOpacity>
-          {yearDropdownOpen && (
-            <View style={styles.dropdownMenu}>
-              {['All Years', ...Array.from({ length: 6 }, (_, i) => String(new Date().getFullYear() - i))].map(opt => (
-                <TouchableOpacity
-                  key={opt}
-                  style={[styles.dropdownItem, selectedYear === opt && styles.dropdownItemActive]}
-                  onPress={() => { setSelectedYear(opt); setYearDropdownOpen(false); }}
-                  activeOpacity={0.8}
-                >
-                  <Text style={[styles.dropdownItemText, selectedYear === opt && styles.dropdownItemTextActive]}>
-                    {opt}
-                  </Text>
-                  {selectedYear === opt && <Text style={styles.dropdownCheck}>✓</Text>}
-                </TouchableOpacity>
-              ))}
-            </View>
-          )}
-        </View>
-
-        {/* Sorted By Dropdown */}
-        <View style={styles.dropdownWrap}>
-          <TouchableOpacity
-            style={styles.dropdownBtn}
-            onPress={() => { setSortDropdownOpen(v => !v); setTypeDropdownOpen(false); setYearDropdownOpen(false); }}
-            activeOpacity={0.8}
-          >
-            <Text style={styles.dropdownBtnLabel}>Sorted By  </Text>
-            <Text style={styles.dropdownBtnText}>{sortBy}</Text>
-            <Text style={styles.dropdownArrow}>{sortDropdownOpen ? '▲' : '▼'}</Text>
-          </TouchableOpacity>
-          {sortDropdownOpen && (
-            <View style={[styles.dropdownMenu, { right: 0, left: 'auto' }]}>
-              {SORT_OPTIONS.map(opt => (
-                <TouchableOpacity
-                  key={opt}
-                  style={[styles.dropdownItem, sortBy === opt && styles.dropdownItemActive]}
-                  onPress={() => { setSortBy(opt); setSortDropdownOpen(false); }}
-                  activeOpacity={0.8}
-                >
-                  <Text style={[styles.dropdownItemText, sortBy === opt && styles.dropdownItemTextActive]}>
-                    {opt}
-                  </Text>
-                  {sortBy === opt && <Text style={styles.dropdownCheck}>✓</Text>}
-                </TouchableOpacity>
-              ))}
-            </View>
-          )}
-        </View>
-      </View>
-
-      {/* Status Sub-Tabs (Drafts / Saved / Submitted / Approved) */}
-      <View style={styles.statusTabsRow}>
-        {STATUS_TABS.map(tab => {
-          const active = activeStatusTab === tab;
-          const statusMap = { 'Drafts': 'draft', 'Saved': 'saved', 'Submitted': 'submitted', 'Approved': 'approved', 'Returned': 'returned' };
-          const statusFilter = statusMap[tab];
-          const count = statusFilter ? documents.filter(d => d.status === statusFilter).length : documents.length;
-          return (
-            <TouchableOpacity
-              key={tab}
-              style={[styles.statusTab, active && styles.statusTabActive]}
-              onPress={() => setActiveStatusTab(tab)}
-              activeOpacity={0.8}
-            >
-              <Text style={[styles.statusTabText, active && styles.statusTabTextActive]}>
-                {tab}
-              </Text>
-              {active && (
-                <View style={styles.statusTabBadge}>
-                  <Text style={styles.statusTabBadgeText}>{count}</Text>
-                </View>
-              )}
-            </TouchableOpacity>
-          );
-        })}
-      </View>
-
-      {/* Document Table */}
-      <View style={styles.tableContainer}>
-        {/* Table Header */}
-        <View style={styles.tableHeader}>
-          <Text style={[styles.tableHeaderText, { flex: isMobile ? 2 : 3 }]}>Document Title</Text>
-          {!isMobile && <Text style={[styles.tableHeaderText, { flex: 1.2, textAlign: 'center' }]}>Type</Text>}
-          {!isMobile && <Text style={[styles.tableHeaderText, { flex: 1.5, textAlign: 'center' }]}>Created By</Text>}
-          <Text style={[styles.tableHeaderText, { flex: isMobile ? 1 : 1.5, textAlign: 'center' }]}>Last Modified</Text>
-          <Text style={[styles.tableHeaderText, { flex: 1, textAlign: 'center' }]}>Action</Text>
-        </View>
-
-        {/* Table Rows */}
-        {visibleDocs.length > 0 ? (
-          visibleDocs.map((doc, idx) => (
-            <View
-              key={doc.id}
-              style={[styles.tableRow, idx % 2 === 1 && styles.tableRowAlt]}
-            >
-              {/* Title */}
-              <View style={{ flex: isMobile ? 2 : 3, flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                {doc.fileUrl && doc.status === 'draft' && (
-                  <Text style={{ fontSize: 12 }}>📎</Text>
-                )}
-                <Text
-                  style={styles.docTitle}
-                  numberOfLines={isMobile ? 2 : 1}
-                >
-                  {doc.title}
-                </Text>
-              </View>
-
-              {/* Type badge (desktop only) */}
-              {!isMobile && (
-                <View style={{ flex: 1.2, alignItems: 'center' }}>
-                  <TypeBadge type={doc.type} />
-                </View>
-              )}
-
-              {/* Created By (desktop only) */}
-              {!isMobile && (
-                <Text style={[styles.docMeta, { flex: 1.5, textAlign: 'center' }]}>
-                  {doc.createdBy}
-                </Text>
-              )}
-
-              {/* Last Modified */}
-              <Text style={[styles.docMeta, { flex: isMobile ? 1 : 1.5, textAlign: 'center' }]}>
-                {formatDate(doc.lastModified)}
-              </Text>
-
-              {/* Actions */}
-              <View style={[styles.actionRow, { flex: 1 }]}>
-                {doc.status === 'saved' || doc.status === 'draft' ? (
-                  <>
-                    <TouchableOpacity activeOpacity={0.7} onPress={() => handleForwardPress(doc)}>
-                      <ForwardIcon />
-                    </TouchableOpacity>
-                    <TouchableOpacity activeOpacity={0.7} onPress={() => handleDownloadPress(doc)}>
-                      <SaveIcon />
-                    </TouchableOpacity>
-                    <TouchableOpacity activeOpacity={0.7} onPress={() => handleViewPress(doc)}>
-                      <ViewIcon />
-                    </TouchableOpacity>
-                  </>
-                ) : doc.status === 'submitted' ? (
-                  <TouchableOpacity activeOpacity={0.7} onPress={() => handleViewPress(doc)}>
-                    <ViewIcon />
-                  </TouchableOpacity>
-                ) : doc.status === 'returned' ? (
-                  <>
-                    <TouchableOpacity activeOpacity={0.7} onPress={() => handleEditPress(doc)}>
-                      <EditIcon />
-                    </TouchableOpacity>
-                    <TouchableOpacity activeOpacity={0.7} onPress={() => setReturnedViewerDoc(doc)}>
-                      <ViewIcon />
-                    </TouchableOpacity>
-                  </>
-                ) : doc.status === 'approved' ? (
-                  <>
-                    <TouchableOpacity activeOpacity={0.7} onPress={() => handleDownloadPress(doc)}>
-                      <SaveIcon />
-                    </TouchableOpacity>
-                    <TouchableOpacity activeOpacity={0.7} onPress={() => handleViewPress(doc)}>
-                      <ViewIcon />
-                    </TouchableOpacity>
-                  </>
-                ) : (
-                  <>
-                    <TouchableOpacity activeOpacity={0.7} onPress={() => {}}>
-                      <EditIcon />
-                    </TouchableOpacity>
-                    <TouchableOpacity activeOpacity={0.7} onPress={() => handleDeletePress(doc)}>
-                      <DeleteIcon />
-                    </TouchableOpacity>
-                    <TouchableOpacity activeOpacity={0.7} onPress={() => handleViewPress(doc)}>
-                      <ViewIcon />
-                    </TouchableOpacity>
-                  </>
-                )}
-              </View>
-            </View>
-          ))
-        ) : (
-          <View style={styles.emptyState}>
-            <Text style={styles.emptyIcon}>📄</Text>
-            <Text style={styles.emptyText}>No documents found.</Text>
-            <Text style={styles.emptySubText}>Try adjusting your filters or search term.</Text>
           </View>
         )}
-      </View>
-    </ScrollView>
+
+
+
+        {/* Folder / Document Management Tab Bar */}
+        <View style={styles.filterRow}>
+          {/* Folder / Document Management tab bar */}
+          <View style={styles.docTabBar}>
+            {DOCUMENT_TABS.map(tab => {
+              const active = activeDocTab === tab;
+              return (
+                <TouchableOpacity
+                  key={tab}
+                  style={[styles.docTab, active && styles.docTabActive]}
+                  onPress={() => {
+                    if (tab === 'Folder') {
+                      router.push({ pathname: '/(tabs)/sk-document' });
+                    }
+                  }}
+                  activeOpacity={0.8}
+                >
+                  <Text style={[styles.docTabText, active && styles.docTabTextActive]}>
+                    {tab}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </View>
+        {/* Search Bar */}
+        <View style={styles.searchRow}>
+          <View style={styles.searchBox}>
+            <Text style={styles.searchIcon}>🔍</Text>
+            <TextInput
+              style={styles.searchInput}
+              placeholder="Search"
+              placeholderTextColor={COLORS.midGray}
+              value={searchText}
+              onChangeText={setSearchText}
+            />
+            {searchText.length > 0 && (
+              <TouchableOpacity onPress={() => setSearchText('')}>
+                <Text style={{ color: COLORS.midGray, fontSize: 12 }}>✕</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+          <TouchableOpacity style={styles.archiveBtn} activeOpacity={0.8} onPress={() => setShowArchiveView(v => !v)}>
+            <Text style={styles.archiveBtnText}>
+              🗂 {showArchiveView ? 'Hide Archive' : `View Archive${archivedDocs.length > 0 ? ` (${archivedDocs.length})` : ''}`}
+            </Text>
+          </TouchableOpacity>
+        </View>
+        {/* Draft Type + Sorted By Row */}
+        <View style={styles.controlsRow}>
+          {/* Draft Type Dropdown */}
+          <View style={styles.dropdownWrap}>
+            <TouchableOpacity
+              style={styles.dropdownBtn}
+              onPress={() => { setTypeDropdownOpen(v => !v); setSortDropdownOpen(false); setYearDropdownOpen(false); }}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.dropdownBtnText}>{draftType}</Text>
+              <Text style={styles.dropdownArrow}>{typeDropdownOpen ? '▲' : '▼'}</Text>
+            </TouchableOpacity>
+            {typeDropdownOpen && (
+              <View style={styles.dropdownMenu}>
+                {DRAFT_TYPES.map(opt => (
+                  <TouchableOpacity
+                    key={opt}
+                    style={[styles.dropdownItem, draftType === opt && styles.dropdownItemActive]}
+                    onPress={() => { setDraftType(opt); setTypeDropdownOpen(false); }}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={[styles.dropdownItemText, draftType === opt && styles.dropdownItemTextActive]}>
+                      {opt}
+                    </Text>
+                    {draftType === opt && <Text style={styles.dropdownCheck}>✓</Text>}
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
+          </View>
+
+          {/* Year Dropdown */}
+          <View style={styles.dropdownWrap}>
+            <TouchableOpacity
+              style={styles.dropdownBtn}
+              onPress={() => { setYearDropdownOpen(v => !v); setTypeDropdownOpen(false); setSortDropdownOpen(false); }}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.dropdownBtnText}>{selectedYear}</Text>
+              <Text style={styles.dropdownArrow}>{yearDropdownOpen ? '▲' : '▼'}</Text>
+            </TouchableOpacity>
+            {yearDropdownOpen && (
+              <View style={styles.dropdownMenu}>
+                {['All Years', ...Array.from({ length: 6 }, (_, i) => String(new Date().getFullYear() - i))].map(opt => (
+                  <TouchableOpacity
+                    key={opt}
+                    style={[styles.dropdownItem, selectedYear === opt && styles.dropdownItemActive]}
+                    onPress={() => { setSelectedYear(opt); setYearDropdownOpen(false); }}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={[styles.dropdownItemText, selectedYear === opt && styles.dropdownItemTextActive]}>
+                      {opt}
+                    </Text>
+                    {selectedYear === opt && <Text style={styles.dropdownCheck}>✓</Text>}
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
+          </View>
+
+          {/* Sorted By Dropdown */}
+          <View style={styles.dropdownWrap}>
+            <TouchableOpacity
+              style={styles.dropdownBtn}
+              onPress={() => { setSortDropdownOpen(v => !v); setTypeDropdownOpen(false); setYearDropdownOpen(false); }}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.dropdownBtnLabel}>Sorted By  </Text>
+              <Text style={styles.dropdownBtnText}>{sortBy}</Text>
+              <Text style={styles.dropdownArrow}>{sortDropdownOpen ? '▲' : '▼'}</Text>
+            </TouchableOpacity>
+            {sortDropdownOpen && (
+              <View style={[styles.dropdownMenu, { right: 0, left: 'auto' }]}>
+                {SORT_OPTIONS.map(opt => (
+                  <TouchableOpacity
+                    key={opt}
+                    style={[styles.dropdownItem, sortBy === opt && styles.dropdownItemActive]}
+                    onPress={() => { setSortBy(opt); setSortDropdownOpen(false); }}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={[styles.dropdownItemText, sortBy === opt && styles.dropdownItemTextActive]}>
+                      {opt}
+                    </Text>
+                    {sortBy === opt && <Text style={styles.dropdownCheck}>✓</Text>}
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
+          </View>
+        </View>
+
+        {/* ── ARCHIVE VIEW ── */}
+        {showArchiveView ? (
+          <View style={styles.tableContainer}>
+            {/* Archive header */}
+            <View style={styles.archiveSectionHeader}>
+              <Text style={styles.archiveSectionTitle}>Archives</Text>
+              <View style={styles.archiveLockBadge}>
+                <Text style={styles.archiveLockText}>🔒 Read-only • Cannot be used for new submissions</Text>
+              </View>
+            </View>
+
+            {archivedDocs.length === 0 ? (
+              <View style={styles.emptyState}>
+                <Text style={styles.emptyIcon}>🗂</Text>
+                <Text style={styles.emptyText}>No archived documents yet</Text>
+              </View>
+            ) : (
+              archivedDocs.map((doc, idx) => (
+                <View key={doc.id}>
+                  <TouchableOpacity
+                    style={styles.archiveRow}
+                    onPress={() => setExpandedArchiveId(prev => prev === doc.id ? null : doc.id)}
+                    activeOpacity={0.75}
+                  >
+                    <View style={styles.archiveRowMain}>
+                      <Text style={styles.archiveRowName} numberOfLines={2}>{doc.title}</Text>
+                      <Text style={styles.archiveOldVersionText}>Archived</Text>
+                    </View>
+
+                    {/* Expanded detail */}
+                    {expandedArchiveId === doc.id && (
+                      <View style={styles.archiveExpandedDetail}>
+                        <View style={styles.archiveDetailRow}>
+                          <Text style={styles.archiveDetailLabel}>Type</Text>
+                          <Text style={styles.archiveDetailValue}>{doc.type}</Text>
+                        </View>
+                        <View style={styles.archiveDetailRow}>
+                          <Text style={styles.archiveDetailLabel}>Year</Text>
+                          <Text style={styles.archiveDetailValue}>{doc.year}</Text>
+                        </View>
+                        <View style={styles.archiveDetailRow}>
+                          <Text style={styles.archiveDetailLabel}>Created By</Text>
+                          <Text style={styles.archiveDetailValue}>{doc.createdBy}</Text>
+                        </View>
+                        <View style={styles.archiveDetailRow}>
+                          <Text style={styles.archiveDetailLabel}>Archived On</Text>
+                          <Text style={styles.archiveDetailValue}>{formatDate(doc.lastModified)}</Text>
+                        </View>
+                        <View style={[styles.archiveDetailRow, { gap: 8, marginTop: 8 }]}>
+                          <TouchableOpacity style={styles.archiveActionBtn} onPress={() => handleDownloadPress(doc)}>
+                            <Text style={styles.archiveActionBtnText}>⬇ Download</Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity style={[styles.archiveActionBtn, { backgroundColor: '#FDF0E6' }]} onPress={() => handleViewPress(doc)}>
+                            <Text style={[styles.archiveActionBtnText, { color: '#E87A30' }]}>👁 Preview</Text>
+                          </TouchableOpacity>
+                        </View>
+                      </View>
+                    )}
+                  </TouchableOpacity>
+                  {idx < archivedDocs.length - 1 && <View style={styles.divider} />}
+                </View>
+              ))
+            )}
+          </View>
+        ) : (
+          <>
+            {/* Status Sub-Tabs (Drafts / Saved / Submitted / Approved) */}
+            <View style={styles.statusTabsRow}>
+              {STATUS_TABS.map(tab => {
+                const active = activeStatusTab === tab;
+                const statusMap = { 'Drafts': 'draft', 'Saved': 'saved', 'Submitted': 'submitted', 'Approved': 'approved', 'Returned': 'returned' };
+                const statusFilter = statusMap[tab];
+                const activeDocuments = documents.filter(d => d.status !== 'archived');
+                const count = statusFilter ? activeDocuments.filter(d => d.status === statusFilter).length : activeDocuments.length;
+                return (
+                  <TouchableOpacity
+                    key={tab}
+                    style={[styles.statusTab, active && styles.statusTabActive]}
+                    onPress={() => setActiveStatusTab(tab)}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={[styles.statusTabText, active && styles.statusTabTextActive]}>
+                      {tab}
+                    </Text>
+                    {active && (
+                      <View style={styles.statusTabBadge}>
+                        <Text style={styles.statusTabBadgeText}>{count}</Text>
+                      </View>
+                    )}
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
+            {/* Document Table */}
+            <View style={styles.tableContainer}>
+              {/* Table Header */}
+              <View style={styles.tableHeader}>
+                <Text style={[styles.tableHeaderText, { flex: isMobile ? 2 : 3 }]}>Document Title</Text>
+                {!isMobile && <Text style={[styles.tableHeaderText, { flex: 1.2, textAlign: 'center' }]}>Type</Text>}
+                {!isMobile && <Text style={[styles.tableHeaderText, { flex: 1.5, textAlign: 'center' }]}>Created By</Text>}
+                <Text style={[styles.tableHeaderText, { flex: isMobile ? 1 : 1.5, textAlign: 'center' }]}>Last Modified</Text>
+                <Text style={[styles.tableHeaderText, { flex: 1, textAlign: 'center' }]}>Action</Text>
+              </View>
+
+              {/* Table Rows */}
+              {visibleDocs.length > 0 ? (
+                visibleDocs.map((doc, idx) => (
+                  <View
+                    key={doc.id}
+                    style={[styles.tableRow, idx % 2 === 1 && styles.tableRowAlt]}
+                  >
+                    {/* Title */}
+                    <View style={{ flex: isMobile ? 2 : 3, flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                      {doc.fileUrl && doc.status === 'draft' && (
+                        <Text style={{ fontSize: 12 }}>📎</Text>
+                      )}
+                      <Text
+                        style={styles.docTitle}
+                        numberOfLines={isMobile ? 2 : 1}
+                      >
+                        {doc.title}
+                      </Text>
+                    </View>
+
+                    {/* Type badge (desktop only) */}
+                    {!isMobile && (
+                      <View style={{ flex: 1.2, alignItems: 'center' }}>
+                        <TypeBadge type={doc.type} />
+                      </View>
+                    )}
+
+                    {/* Created By (desktop only) */}
+                    {!isMobile && (
+                      <Text style={[styles.docMeta, { flex: 1.5, textAlign: 'center' }]}>
+                        {doc.createdBy}
+                      </Text>
+                    )}
+
+                    {/* Last Modified */}
+                    <Text style={[styles.docMeta, { flex: isMobile ? 1 : 1.5, textAlign: 'center' }]}>
+                      {formatDate(doc.lastModified)}
+                    </Text>
+
+                    {/* Actions */}
+                    <View style={[styles.actionRow, { flex: 1 }]}>
+                      {doc.status === 'saved' || doc.status === 'draft' ? (
+                        <>
+                          <TouchableOpacity activeOpacity={0.7} onPress={() => handleForwardPress(doc)}>
+                            <ForwardIcon />
+                          </TouchableOpacity>
+                          <TouchableOpacity activeOpacity={0.7} onPress={() => handleDownloadPress(doc)}>
+                            <SaveIcon />
+                          </TouchableOpacity>
+                          <TouchableOpacity activeOpacity={0.7} onPress={() => handleViewPress(doc)}>
+                            <ViewIcon />
+                          </TouchableOpacity>
+                          <TouchableOpacity activeOpacity={0.7} onPress={() => handleArchivePress(doc)}>
+                            <ArchiveIcon />
+                          </TouchableOpacity>
+                        </>
+                      ) : doc.status === 'submitted' ? (
+                        <>
+                          <TouchableOpacity activeOpacity={0.7} onPress={() => handleViewPress(doc)}>
+                            <ViewIcon />
+                          </TouchableOpacity>
+                          <TouchableOpacity activeOpacity={0.7} onPress={() => handleArchivePress(doc)}>
+                            <ArchiveIcon />
+                          </TouchableOpacity>
+                        </>
+                      ) : doc.status === 'returned' ? (
+                        <>
+                          <TouchableOpacity activeOpacity={0.7} onPress={() => handleEditPress(doc)}>
+                            <EditIcon />
+                          </TouchableOpacity>
+                          <TouchableOpacity activeOpacity={0.7} onPress={() => setReturnedViewerDoc(doc)}>
+                            <ViewIcon />
+                          </TouchableOpacity>
+                          <TouchableOpacity activeOpacity={0.7} onPress={() => handleArchivePress(doc)}>
+                            <ArchiveIcon />
+                          </TouchableOpacity>
+                        </>
+                      ) : doc.status === 'approved' ? (
+                        <>
+                          <TouchableOpacity activeOpacity={0.7} onPress={() => handleDownloadPress(doc)}>
+                            <SaveIcon />
+                          </TouchableOpacity>
+                          <TouchableOpacity activeOpacity={0.7} onPress={() => handleViewPress(doc)}>
+                            <ViewIcon />
+                          </TouchableOpacity>
+                          <TouchableOpacity activeOpacity={0.7} onPress={() => handleArchivePress(doc)}>
+                            <ArchiveIcon />
+                          </TouchableOpacity>
+                        </>
+                      ) : (
+                        <>
+                          <TouchableOpacity activeOpacity={0.7} onPress={() => { }}>
+                            <EditIcon />
+                          </TouchableOpacity>
+                          <TouchableOpacity activeOpacity={0.7} onPress={() => handleDeletePress(doc)}>
+                            <DeleteIcon />
+                          </TouchableOpacity>
+                          <TouchableOpacity activeOpacity={0.7} onPress={() => handleViewPress(doc)}>
+                            <ViewIcon />
+                          </TouchableOpacity>
+                          <TouchableOpacity activeOpacity={0.7} onPress={() => handleArchivePress(doc)}>
+                            <ArchiveIcon />
+                          </TouchableOpacity>
+                        </>
+                      )}
+                    </View>
+                  </View>
+                ))
+              ) : (
+                <View style={styles.emptyState}>
+                  <Text style={styles.emptyIcon}>📄</Text>
+                  <Text style={styles.emptyText}>No documents found.</Text>
+                  <Text style={styles.emptySubText}>Try adjusting your filters or search term.</Text>
+                </View>
+              )}
+            </View>
+          </>
+        )}
+      </ScrollView>
     </View>
   );
 
@@ -1316,122 +1455,383 @@ export default function SKDocumentManagementScreen() {
         <title>Document Management · SK Monitoring</title>
       </Head>
       <SafeAreaView style={styles.safe} edges={isMobile ? ['left', 'right', 'bottom'] : ['top', 'left', 'right', 'bottom']}>
-      <StatusBar barStyle="light-content" backgroundColor={COLORS.navy} />
-      <NotificationModal
-        {...notif.modalProps}
-        onOpenRoute={(route) => {
-          notif.close();
-          setTimeout(() => router.push(route), 120);
-        }}
-      />
-      <View style={styles.layout}>
-        {isMobile && sidebarVisible && (
-          <TouchableOpacity
-            style={styles.sidebarOverlay}
-            activeOpacity={1}
-            onPress={() => setSidebarVisible(false)}
-          />
-        )}
-        {renderSidebar()}
-        {renderContent()}
+        <StatusBar barStyle="light-content" backgroundColor={COLORS.navy} />
+        <NotificationModal
+          {...notif.modalProps}
+          onOpenRoute={(route) => {
+            notif.close();
+            setTimeout(() => router.push(route), 120);
+          }}
+        />
+        <View style={styles.layout}>
+          {isMobile && sidebarVisible && (
+            <TouchableOpacity
+              style={styles.sidebarOverlay}
+              activeOpacity={1}
+              onPress={() => setSidebarVisible(false)}
+            />
+          )}
+          {renderSidebar()}
+          {renderContent()}
 
-        {/* ── Delete Confirmation Modal ── */}
-        <Modal
-          visible={deleteModalVisible}
-          animationType="fade"
-          transparent={true}
-          onRequestClose={() => setDeleteModalVisible(false)}
-        >
-          <View style={styles.modalOverlay}>
-            <View style={styles.modalContent}>
-              {/* Icon accent strip */}
-              <View style={styles.modalIconStrip}>
-                <View style={[styles.modalIconCircle, { backgroundColor: '#FEE2E2' }]}>
-                  <Feather name="trash-2" size={28} color={COLORS.red} />
+          {/* ── Delete Confirmation Modal ── */}
+          <Modal
+            visible={deleteModalVisible}
+            animationType="fade"
+            transparent={true}
+            onRequestClose={() => setDeleteModalVisible(false)}
+          >
+            <View style={styles.modalOverlay}>
+              <View style={styles.modalContent}>
+                {/* Icon accent strip */}
+                <View style={styles.modalIconStrip}>
+                  <View style={[styles.modalIconCircle, { backgroundColor: '#FEE2E2' }]}>
+                    <Feather name="trash-2" size={28} color={COLORS.red} />
+                  </View>
+                </View>
+                <View style={styles.modalBody}>
+                  <Text style={styles.modalTitle}>Delete Document</Text>
+                  <Text style={styles.modalBodyText}>
+                    You are about to permanently delete{' '}
+                    <Text style={styles.modalHighlight}>"{documentToDelete?.title}"</Text>.
+                    {'\n\n'}This action cannot be undone.
+                  </Text>
+                </View>
+                <View style={styles.modalDivider} />
+                <View style={styles.modalFooter}>
+                  <TouchableOpacity
+                    style={styles.modalCancelBtn}
+                    onPress={() => setDeleteModalVisible(false)}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={styles.modalCancelBtnText}>Cancel</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.modalActionBtn, styles.modalDeleteBtn, deleting && styles.modalBtnDisabled]}
+                    onPress={handleConfirmDelete}
+                    disabled={deleting}
+                    activeOpacity={0.8}
+                  >
+                    {deleting ? (
+                      <Text style={styles.modalActionBtnText}>Deleting…</Text>
+                    ) : (
+                      <>
+                        <Feather name="trash-2" size={14} color={COLORS.white} style={{ marginRight: 6 }} />
+                        <Text style={styles.modalActionBtnText}>Delete</Text>
+                      </>
+                    )}
+                  </TouchableOpacity>
                 </View>
               </View>
-              <View style={styles.modalBody}>
-                <Text style={styles.modalTitle}>Delete Document</Text>
-                <Text style={styles.modalBodyText}>
-                  You are about to permanently delete{' '}
-                  <Text style={styles.modalHighlight}>"{documentToDelete?.title}"</Text>.
-                  {'\n\n'}This action cannot be undone.
-                </Text>
-              </View>
-              <View style={styles.modalDivider} />
-              <View style={styles.modalFooter}>
-                <TouchableOpacity
-                  style={styles.modalCancelBtn}
-                  onPress={() => setDeleteModalVisible(false)}
-                  activeOpacity={0.8}
-                >
-                  <Text style={styles.modalCancelBtnText}>Cancel</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.modalActionBtn, styles.modalDeleteBtn, deleting && styles.modalBtnDisabled]}
-                  onPress={handleConfirmDelete}
-                  disabled={deleting}
-                  activeOpacity={0.8}
-                >
-                  {deleting ? (
-                    <Text style={styles.modalActionBtnText}>Deleting…</Text>
-                  ) : (
-                    <>
-                      <Feather name="trash-2" size={14} color={COLORS.white} style={{ marginRight: 6 }} />
-                      <Text style={styles.modalActionBtnText}>Delete</Text>
-                    </>
-                  )}
-                </TouchableOpacity>
+            </View>
+          </Modal>
+
+          {/* ── Forward Confirmation Modal ── */}
+          <Modal
+            visible={forwardModalVisible}
+            animationType="fade"
+            transparent={true}
+            onRequestClose={() => setForwardModalVisible(false)}
+          >
+            <View style={styles.modalOverlay}>
+              <View style={styles.modalContent}>
+                <View style={styles.modalIconStrip}>
+                  <View style={[styles.modalIconCircle, { backgroundColor: '#DBEAFE' }]}>
+                    <Feather name="send" size={26} color={COLORS.blue} />
+                  </View>
+                </View>
+                <View style={styles.modalBody}>
+                  <Text style={styles.modalTitle}>Forward to LYDO</Text>
+                  <Text style={styles.modalBodyText}>
+                    You are about to submit{' '}
+                    <Text style={styles.modalHighlight}>"{documentToForward?.title}"</Text>
+                    {' '}to LYDO for consultation.
+                    {'\n\n'}The document status will change to{' '}
+                    <Text style={[styles.modalHighlight, { color: COLORS.blue }]}>Submitted</Text>.
+                  </Text>
+                </View>
+                <View style={styles.modalDivider} />
+                <View style={styles.modalFooter}>
+                  <TouchableOpacity
+                    style={styles.modalCancelBtn}
+                    onPress={() => setForwardModalVisible(false)}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={styles.modalCancelBtnText}>Cancel</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.modalActionBtn, styles.modalForwardBtn, forwarding && styles.modalBtnDisabled]}
+                    onPress={handleConfirmForward}
+                    disabled={forwarding}
+                    activeOpacity={0.8}
+                  >
+                    {forwarding ? (
+                      <Text style={styles.modalActionBtnText}>Forwarding…</Text>
+                    ) : (
+                      <>
+                        <Feather name="send" size={14} color={COLORS.white} style={{ marginRight: 6 }} />
+                        <Text style={styles.modalActionBtnText}>Forward</Text>
+                      </>
+                    )}
+                  </TouchableOpacity>
+                </View>
               </View>
             </View>
-          </View>
-        </Modal>
+          </Modal>
 
-        {/* ── Forward Confirmation Modal ── */}
+          {/* ── Download Confirmation Modal ── */}
+          <Modal
+            visible={downloadModalVisible}
+            animationType="fade"
+            transparent={true}
+            onRequestClose={() => { setDownloadModalVisible(false); setDocumentToDownload(null); }}
+          >
+            <View style={styles.modalOverlay}>
+              <View style={styles.modalContent}>
+                <View style={styles.modalIconStrip}>
+                  <View style={[styles.modalIconCircle, { backgroundColor: '#DBEAFE' }]}>
+                    <Feather name="download" size={26} color={COLORS.blue} />
+                  </View>
+                </View>
+                <View style={styles.modalBody}>
+                  <Text style={styles.modalTitle}>Download Document</Text>
+                  <Text style={styles.modalBodyText}>
+                    Do you want to download{' '}
+                    <Text style={styles.modalHighlight}>"{documentToDownload?.title}"</Text>?
+
+                  </Text>
+                </View>
+                <View style={styles.modalDivider} />
+                <View style={styles.modalFooter}>
+                  <TouchableOpacity
+                    style={styles.modalCancelBtn}
+                    onPress={() => { setDownloadModalVisible(false); setDocumentToDownload(null); }}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={styles.modalCancelBtnText}>Cancel</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.modalActionBtn, { backgroundColor: COLORS.blue }]}
+                    onPress={handleDownloadConfirm}
+                    activeOpacity={0.8}
+                  >
+                    <Feather name="download" size={14} color={COLORS.white} style={{ marginRight: 6 }} />
+                    <Text style={styles.modalActionBtnText}>Download</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </View>
+          </Modal>
+
+          {/* ── Alert / Feedback Modal ── */}
+          {/* ── Document Viewer Modal ── */}
+          <Modal
+            visible={viewerModal.visible}
+            animationType="slide"
+            transparent={false}
+            onRequestClose={() => setViewerModal({ visible: false, fileUrl: null, title: '' })}
+          >
+            <SafeAreaView style={styles.safe} edges={isMobile ? ['left', 'right', 'bottom'] : ['top', 'left', 'right', 'bottom']}>
+              {/* Viewer Header */}
+              <View style={styles.viewerHeader}>
+                <TouchableOpacity
+                  style={styles.viewerBackBtn}
+                  onPress={() => setViewerModal({ visible: false, fileUrl: null, title: '' })}
+                  activeOpacity={0.8}
+                >
+                  <Feather name="arrow-left" size={20} color={COLORS.white} />
+                </TouchableOpacity>
+                <Text style={styles.viewerTitle} numberOfLines={1}>
+                  {viewerModal.title}
+                </Text>
+                {viewerModal.fileUrl && (
+                  <TouchableOpacity
+                    style={styles.viewerOpenBtn}
+                    onPress={() => {
+                      setViewerModal({ visible: false, fileUrl: null, title: '' });
+                      setDocumentToDownload({ fileUrl: viewerModal.fileUrl, title: viewerModal.title });
+                      setDownloadModalVisible(true);
+                    }}
+                    activeOpacity={0.8}
+                  >
+                    <Feather name="download" size={18} color={COLORS.gold} />
+                  </TouchableOpacity>
+                )}
+              </View>
+
+              {/* WebView / iframe */}
+              <View style={{ flex: 1, backgroundColor: COLORS.offWhite, overflow: 'hidden' }}>
+                {viewerModal.fileUrl && (
+                  Platform.OS === 'web' ? (
+                    <iframe
+                      src={`https://docs.google.com/gview?embedded=true&url=${encodeURIComponent(viewerModal.fileUrl)}`}
+                      style={{ flex: 1, width: '100%', height: '100%', border: 'none' }}
+                      title={viewerModal.title}
+                    />
+                  ) : (
+                    <WebView
+                      source={{
+                        uri: `https://docs.google.com/gview?embedded=true&url=${encodeURIComponent(viewerModal.fileUrl)}`,
+                      }}
+                      style={{ flex: 1 }}
+                      onLoadStart={() => setWebViewLoading(true)}
+                      onLoadEnd={() => setWebViewLoading(false)}
+                      onError={() => {
+                        setWebViewLoading(false);
+                        showAlert('error', 'Load Failed', 'Could not load the document. Try opening it externally.');
+                        setViewerModal({ visible: false, fileUrl: null, title: '' });
+                      }}
+                      startInLoadingState={true}
+                      renderLoading={() => (
+                        <View style={styles.viewerLoading}>
+                          <ActivityIndicator size="large" color={COLORS.navy} />
+                          <Text style={styles.viewerLoadingText}>Loading document…</Text>
+                        </View>
+                      )}
+                    />
+                  )
+                )}
+              </View>
+            </SafeAreaView>
+          </Modal>
+
+          {/* ── Alert / Feedback Modal ── */}
+          <Modal
+            visible={alertModal.visible}
+            animationType="fade"
+            transparent={true}
+            onRequestClose={hideAlert}
+          >
+            <View style={styles.modalOverlay}>
+              <View style={[styles.modalContent, styles.alertModalContent]}>
+                <View style={styles.modalIconStrip}>
+                  <View style={[styles.modalIconCircle, {
+                    backgroundColor:
+                      alertModal.type === 'success' ? '#D1FAE5' :
+                        alertModal.type === 'error' ? '#FEE2E2' :
+                          alertModal.type === 'info' ? '#DBEAFE' : '#FEF9C3',
+                  }]}>
+                    <Feather
+                      name={
+                        alertModal.type === 'success' ? 'check-circle' :
+                          alertModal.type === 'error' ? 'alert-circle' :
+                            alertModal.type === 'info' ? 'download' : 'info'
+                      }
+                      size={28}
+                      color={
+                        alertModal.type === 'success' ? '#059669' :
+                          alertModal.type === 'error' ? COLORS.red :
+                            alertModal.type === 'info' ? COLORS.blue : '#B45309'
+                      }
+                    />
+                  </View>
+                </View>
+                <View style={styles.modalBody}>
+                  <Text style={styles.modalTitle}>{alertModal.title}</Text>
+                  <Text style={styles.modalBodyText}>{alertModal.message}</Text>
+                </View>
+                <View style={styles.modalDivider} />
+                <View style={[styles.modalFooter, { justifyContent: 'center' }]}>
+                  <TouchableOpacity
+                    style={[styles.modalActionBtn, {
+                      backgroundColor:
+                        alertModal.type === 'success' ? '#059669' :
+                          alertModal.type === 'error' ? COLORS.red :
+                            alertModal.type === 'info' ? COLORS.blue : '#B45309',
+                      flex: 0, paddingHorizontal: 36,
+                    }]}
+                    onPress={hideAlert}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={styles.modalActionBtnText}>OK</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </View>
+          </Modal>
+        </View>
+
+        {/* ── Edit Returned Document Modal ── */}
         <Modal
-          visible={forwardModalVisible}
+          visible={editModalVisible}
           animationType="fade"
           transparent={true}
-          onRequestClose={() => setForwardModalVisible(false)}
+          onRequestClose={() => setEditModalVisible(false)}
         >
           <View style={styles.modalOverlay}>
             <View style={styles.modalContent}>
               <View style={styles.modalIconStrip}>
                 <View style={[styles.modalIconCircle, { backgroundColor: '#DBEAFE' }]}>
-                  <Feather name="send" size={26} color={COLORS.blue} />
+                  <Feather name="send" size={28} color={COLORS.blue} />
                 </View>
               </View>
               <View style={styles.modalBody}>
-                <Text style={styles.modalTitle}>Forward to LYDO</Text>
+                <Text style={styles.modalTitle}>Save & Forward to LYDO</Text>
                 <Text style={styles.modalBodyText}>
-                  You are about to submit{' '}
-                  <Text style={styles.modalHighlight}>"{documentToForward?.title}"</Text>
-                  {' '}to LYDO for consultation.
-                  {'\n\n'}The document status will change to{' '}
-                  <Text style={[styles.modalHighlight, { color: COLORS.blue }]}>Submitted</Text>.
+                  Replace the returned file and forward to LYDO.{'\n'}Select a new file to replace the current one.
                 </Text>
+
+                {/* Document Title (Read-only) */}
+                <View style={styles.editInputContainer}>
+                  <Text style={styles.editInputLabel}>Document Title:</Text>
+                  <View style={styles.editTitleDisplay}>
+                    <Text style={styles.editTitleText}>{documentToEdit?.title}</Text>
+                  </View>
+                </View>
+
+                {/* Current File */}
+                <View style={styles.editInputContainer}>
+                  <Text style={styles.editInputLabel}>Current File:</Text>
+                  <View style={styles.editFileDisplay}>
+                    <Feather name="file-text" size={16} color={COLORS.subText} />
+                    <Text style={styles.editFileName} numberOfLines={1}>
+                      {documentToEdit?.fileUrl ? documentToEdit.fileUrl.split('/').pop() : 'No file'}
+                    </Text>
+                  </View>
+                </View>
+
+                {/* New File Selection */}
+                <View style={styles.editInputContainer}>
+                  <Text style={styles.editInputLabel}>Replace with new file:</Text>
+                  <TouchableOpacity
+                    style={styles.editFilePickerBtn}
+                    onPress={pickEditFile}
+                    activeOpacity={0.8}
+                  >
+                    <Feather name="upload-cloud" size={18} color={COLORS.navy} />
+                    <Text style={styles.editFilePickerText}>
+                      {selectedEditFile ? selectedEditFile.name : 'Choose File (PDF, Word)'}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
               </View>
               <View style={styles.modalDivider} />
               <View style={styles.modalFooter}>
                 <TouchableOpacity
                   style={styles.modalCancelBtn}
-                  onPress={() => setForwardModalVisible(false)}
+                  onPress={() => { setEditModalVisible(false); setDocumentToEdit(null); setSelectedEditFile(null); }}
                   activeOpacity={0.8}
                 >
                   <Text style={styles.modalCancelBtnText}>Cancel</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
-                  style={[styles.modalActionBtn, styles.modalForwardBtn, forwarding && styles.modalBtnDisabled]}
-                  onPress={handleConfirmForward}
-                  disabled={forwarding}
+                  style={[
+                    styles.modalActionBtn,
+                    { backgroundColor: COLORS.blue },
+                    (editLoading || !selectedEditFile) && styles.modalBtnDisabled
+                  ]}
+                  onPress={handleConfirmEdit}
+                  disabled={editLoading || !selectedEditFile}
                   activeOpacity={0.8}
                 >
-                  {forwarding ? (
-                    <Text style={styles.modalActionBtnText}>Forwarding…</Text>
+                  {editLoading ? (
+                    <Text style={styles.modalActionBtnText}>
+                      {uploadingEditFile ? 'Uploading...' : 'Saving...'}
+                    </Text>
                   ) : (
                     <>
                       <Feather name="send" size={14} color={COLORS.white} style={{ marginRight: 6 }} />
-                      <Text style={styles.modalActionBtnText}>Forward</Text>
+                      <Text style={styles.modalActionBtnText}>Save & Forward</Text>
                     </>
                   )}
                 </TouchableOpacity>
@@ -1440,283 +1840,22 @@ export default function SKDocumentManagementScreen() {
           </View>
         </Modal>
 
-        {/* ── Download Confirmation Modal ── */}
-        <Modal
-          visible={downloadModalVisible}
-          animationType="fade"
-          transparent={true}
-          onRequestClose={() => { setDownloadModalVisible(false); setDocumentToDownload(null); }}
-        >
-          <View style={styles.modalOverlay}>
-            <View style={styles.modalContent}>
-              <View style={styles.modalIconStrip}>
-                <View style={[styles.modalIconCircle, { backgroundColor: '#DBEAFE' }]}>
-                  <Feather name="download" size={26} color={COLORS.blue} />
-                </View>
-              </View>
-              <View style={styles.modalBody}>
-                <Text style={styles.modalTitle}>Download Document</Text>
-                <Text style={styles.modalBodyText}>
-                  Do you want to download{' '}
-                  <Text style={styles.modalHighlight}>"{documentToDownload?.title}"</Text>?
-   
-                </Text>
-              </View>
-              <View style={styles.modalDivider} />
-              <View style={styles.modalFooter}>
-                <TouchableOpacity
-                  style={styles.modalCancelBtn}
-                  onPress={() => { setDownloadModalVisible(false); setDocumentToDownload(null); }}
-                  activeOpacity={0.8}
-                >
-                  <Text style={styles.modalCancelBtnText}>Cancel</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.modalActionBtn, { backgroundColor: COLORS.blue }]}
-                  onPress={handleDownloadConfirm}
-                  activeOpacity={0.8}
-                >
-                  <Feather name="download" size={14} color={COLORS.white} style={{ marginRight: 6 }} />
-                  <Text style={styles.modalActionBtnText}>Download</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          </View>
-        </Modal>
+        {/* ── Returned Document Viewer (with LYDO comment panel) ── */}
+        {returnedViewerDoc && (
+          <ReturnedDocumentViewer
+            doc={returnedViewerDoc}
+            onClose={() => setReturnedViewerDoc(null)}
+          />
+        )}
 
-        {/* ── Alert / Feedback Modal ── */}
-        {/* ── Document Viewer Modal ── */}
-        <Modal
-          visible={viewerModal.visible}
-          animationType="slide"
-          transparent={false}
-          onRequestClose={() => setViewerModal({ visible: false, fileUrl: null, title: '' })}
-        >
-          <SafeAreaView style={styles.safe} edges={isMobile ? ['left', 'right', 'bottom'] : ['top', 'left', 'right', 'bottom']}>
-            {/* Viewer Header */}
-            <View style={styles.viewerHeader}>
-              <TouchableOpacity
-                style={styles.viewerBackBtn}
-                onPress={() => setViewerModal({ visible: false, fileUrl: null, title: '' })}
-                activeOpacity={0.8}
-              >
-                <Feather name="arrow-left" size={20} color={COLORS.white} />
-              </TouchableOpacity>
-              <Text style={styles.viewerTitle} numberOfLines={1}>
-                {viewerModal.title}
-              </Text>
-              {viewerModal.fileUrl && (
-                <TouchableOpacity
-                  style={styles.viewerOpenBtn}
-                  onPress={() => {
-                    setViewerModal({ visible: false, fileUrl: null, title: '' });
-                    setDocumentToDownload({ fileUrl: viewerModal.fileUrl, title: viewerModal.title });
-                    setDownloadModalVisible(true);
-                  }}
-                  activeOpacity={0.8}
-                >
-                  <Feather name="download" size={18} color={COLORS.gold} />
-                </TouchableOpacity>
-              )}
-            </View>
-
-            {/* WebView / iframe */}
-            <View style={{ flex: 1, backgroundColor: COLORS.offWhite, overflow: 'hidden' }}>
-              {viewerModal.fileUrl && (
-                Platform.OS === 'web' ? (
-                  <iframe
-                    src={`https://docs.google.com/gview?embedded=true&url=${encodeURIComponent(viewerModal.fileUrl)}`}
-                    style={{ flex: 1, width: '100%', height: '100%', border: 'none' }}
-                    title={viewerModal.title}
-                  />
-                ) : (
-                  <WebView
-                    source={{
-                      uri: `https://docs.google.com/gview?embedded=true&url=${encodeURIComponent(viewerModal.fileUrl)}`,
-                    }}
-                    style={{ flex: 1 }}
-                    onLoadStart={() => setWebViewLoading(true)}
-                    onLoadEnd={() => setWebViewLoading(false)}
-                    onError={() => {
-                      setWebViewLoading(false);
-                      showAlert('error', 'Load Failed', 'Could not load the document. Try opening it externally.');
-                      setViewerModal({ visible: false, fileUrl: null, title: '' });
-                    }}
-                    startInLoadingState={true}
-                    renderLoading={() => (
-                      <View style={styles.viewerLoading}>
-                        <ActivityIndicator size="large" color={COLORS.navy} />
-                        <Text style={styles.viewerLoadingText}>Loading document…</Text>
-                      </View>
-                    )}
-                  />
-                )
-              )}
-            </View>
-          </SafeAreaView>
-        </Modal>
-
-        {/* ── Alert / Feedback Modal ── */}
-        <Modal
-          visible={alertModal.visible}
-          animationType="fade"
-          transparent={true}
-          onRequestClose={hideAlert}
-        >
-          <View style={styles.modalOverlay}>
-            <View style={[styles.modalContent, styles.alertModalContent]}>
-              <View style={styles.modalIconStrip}>
-                <View style={[styles.modalIconCircle, {
-                  backgroundColor:
-                    alertModal.type === 'success' ? '#D1FAE5' :
-                    alertModal.type === 'error'   ? '#FEE2E2' :
-                    alertModal.type === 'info'    ? '#DBEAFE' : '#FEF9C3',
-                }]}>
-                  <Feather
-                    name={
-                      alertModal.type === 'success' ? 'check-circle' :
-                      alertModal.type === 'error'   ? 'alert-circle' :
-                      alertModal.type === 'info'    ? 'download' : 'info'
-                    }
-                    size={28}
-                    color={
-                      alertModal.type === 'success' ? '#059669' :
-                      alertModal.type === 'error'   ? COLORS.red :
-                      alertModal.type === 'info'    ? COLORS.blue : '#B45309'
-                    }
-                  />
-                </View>
-              </View>
-              <View style={styles.modalBody}>
-                <Text style={styles.modalTitle}>{alertModal.title}</Text>
-                <Text style={styles.modalBodyText}>{alertModal.message}</Text>
-              </View>
-              <View style={styles.modalDivider} />
-              <View style={[styles.modalFooter, { justifyContent: 'center' }]}>
-                <TouchableOpacity
-                  style={[styles.modalActionBtn, {
-                    backgroundColor:
-                      alertModal.type === 'success' ? '#059669' :
-                      alertModal.type === 'error'   ? COLORS.red :
-                      alertModal.type === 'info'    ? COLORS.blue : '#B45309',
-                    flex: 0, paddingHorizontal: 36,
-                  }]}
-                  onPress={hideAlert}
-                  activeOpacity={0.8}
-                >
-                  <Text style={styles.modalActionBtnText}>OK</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          </View>
-        </Modal>
-      </View>
-
-      {/* ── Edit Returned Document Modal ── */}
-      <Modal
-        visible={editModalVisible}
-        animationType="fade"
-        transparent={true}
-        onRequestClose={() => setEditModalVisible(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalIconStrip}>
-              <View style={[styles.modalIconCircle, { backgroundColor: '#DBEAFE' }]}>
-                <Feather name="send" size={28} color={COLORS.blue} />
-              </View>
-            </View>
-            <View style={styles.modalBody}>
-              <Text style={styles.modalTitle}>Save & Forward to LYDO</Text>
-              <Text style={styles.modalBodyText}>
-                Replace the returned file and forward to LYDO.{'\n'}Select a new file to replace the current one.
-              </Text>
-
-              {/* Document Title (Read-only) */}
-              <View style={styles.editInputContainer}>
-                <Text style={styles.editInputLabel}>Document Title:</Text>
-                <View style={styles.editTitleDisplay}>
-                  <Text style={styles.editTitleText}>{documentToEdit?.title}</Text>
-                </View>
-              </View>
-
-              {/* Current File */}
-              <View style={styles.editInputContainer}>
-                <Text style={styles.editInputLabel}>Current File:</Text>
-                <View style={styles.editFileDisplay}>
-                  <Feather name="file-text" size={16} color={COLORS.subText} />
-                  <Text style={styles.editFileName} numberOfLines={1}>
-                    {documentToEdit?.fileUrl ? documentToEdit.fileUrl.split('/').pop() : 'No file'}
-                  </Text>
-                </View>
-              </View>
-
-              {/* New File Selection */}
-              <View style={styles.editInputContainer}>
-                <Text style={styles.editInputLabel}>Replace with new file:</Text>
-                <TouchableOpacity
-                  style={styles.editFilePickerBtn}
-                  onPress={pickEditFile}
-                  activeOpacity={0.8}
-                >
-                  <Feather name="upload-cloud" size={18} color={COLORS.navy} />
-                  <Text style={styles.editFilePickerText}>
-                    {selectedEditFile ? selectedEditFile.name : 'Choose File (PDF, Word)'}
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-            <View style={styles.modalDivider} />
-            <View style={styles.modalFooter}>
-              <TouchableOpacity
-                style={styles.modalCancelBtn}
-                onPress={() => { setEditModalVisible(false); setDocumentToEdit(null); setSelectedEditFile(null); }}
-                activeOpacity={0.8}
-              >
-                <Text style={styles.modalCancelBtnText}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[
-                  styles.modalActionBtn,
-                  { backgroundColor: COLORS.blue },
-                  (editLoading || !selectedEditFile) && styles.modalBtnDisabled
-                ]}
-                onPress={handleConfirmEdit}
-                disabled={editLoading || !selectedEditFile}
-                activeOpacity={0.8}
-              >
-                {editLoading ? (
-                  <Text style={styles.modalActionBtnText}>
-                    {uploadingEditFile ? 'Uploading...' : 'Saving...'}
-                  </Text>
-                ) : (
-                  <>
-                    <Feather name="send" size={14} color={COLORS.white} style={{ marginRight: 6 }} />
-                    <Text style={styles.modalActionBtnText}>Save & Forward</Text>
-                  </>
-                )}
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
-
-      {/* ── Returned Document Viewer (with LYDO comment panel) ── */}
-      {returnedViewerDoc && (
-        <ReturnedDocumentViewer
-          doc={returnedViewerDoc}
-          onClose={() => setReturnedViewerDoc(null)}
-        />
-      )}
-
-    </SafeAreaView>
+      </SafeAreaView>
     </>
   );
 }
 
 // ─── STYLES ───────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
-  safe:   { flex: 1, backgroundColor: COLORS.navy },
+  safe: { flex: 1, backgroundColor: COLORS.navy },
   layout: { flex: 1, flexDirection: 'row' },
 
   // ── Sidebar now rendered by the shared Sidebar module ──
@@ -1726,8 +1865,8 @@ const styles = StyleSheet.create({
   },
 
   // ── Main ──
-  main:        { flex: 1, backgroundColor: COLORS.offWhite, borderTopLeftRadius: 20 },
-  mainMobile:  { borderTopLeftRadius: 0 },
+  main: { flex: 1, backgroundColor: COLORS.offWhite, borderTopLeftRadius: 20 },
+  mainMobile: { borderTopLeftRadius: 0 },
   mainContent: { padding: 20, paddingBottom: 40 },
 
   // Mobile header (now provided by the shared MobileHeader component)
@@ -1737,7 +1876,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'flex-start',
     justifyContent: 'space-between', marginBottom: 12,
   },
-  headerSub:   { fontSize: 10, fontWeight: '600', color: COLORS.subText, letterSpacing: 2, textTransform: 'uppercase', marginBottom: 2 },
+  headerSub: { fontSize: 10, fontWeight: '600', color: COLORS.subText, letterSpacing: 2, textTransform: 'uppercase', marginBottom: 2 },
   headerTitle: {
     fontSize: 22, fontWeight: '900', color: COLORS.darkText, letterSpacing: 0.3,
     borderBottomWidth: 2, borderBottomColor: COLORS.lightGray, paddingBottom: 4, marginBottom: 6,
@@ -1778,10 +1917,19 @@ const styles = StyleSheet.create({
   docTabTextActive: { color: COLORS.darkText, fontWeight: '800' },
 
   // Search
-  searchRow: { marginBottom: 10 },
+  searchRow: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    flexWrap: 'wrap', gap: 8, marginBottom: 10,
+  },
+  archiveBtn: {
+    paddingHorizontal: 14, paddingVertical: 7,
+    backgroundColor: COLORS.white, borderRadius: 8,
+    borderWidth: 1, borderColor: COLORS.lightGray,
+  },
+  archiveBtnText: { color: COLORS.subText, fontSize: 13, fontWeight: '600' },
 
   // Category label
-  categoryRow:   { flexDirection: 'row', alignItems: 'center', marginBottom: 4 },
+  categoryRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 4 },
   categoryLabel: { fontSize: 12, fontWeight: '700', color: COLORS.darkText },
 
   // Filter Row
@@ -1796,7 +1944,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12, paddingVertical: 7,
     maxWidth: isMobile ? '100%' : 320,
   },
-  searchIcon:  { fontSize: 12, color: COLORS.midGray, marginRight: 4 },
+  searchIcon: { fontSize: 12, color: COLORS.midGray, marginRight: 4 },
   searchInput: { flex: 1, fontSize: 12, color: COLORS.darkText },
 
   // ── Controls Row (Draft Type + Sorted By) ──
@@ -1813,8 +1961,8 @@ const styles = StyleSheet.create({
     minWidth: isMobile ? 120 : 150,
   },
   dropdownBtnLabel: { fontSize: 11, color: COLORS.subText },
-  dropdownBtnText:  { flex: 1, fontSize: 12, fontWeight: '600', color: COLORS.darkText },
-  dropdownArrow:    { fontSize: 8, color: COLORS.subText },
+  dropdownBtnText: { flex: 1, fontSize: 12, fontWeight: '600', color: COLORS.darkText },
+  dropdownArrow: { fontSize: 8, color: COLORS.subText },
   dropdownMenu: {
     position: 'absolute', top: 42, left: 0, zIndex: 99,
     backgroundColor: COLORS.white, borderRadius: 8, overflow: 'hidden',
@@ -1827,10 +1975,10 @@ const styles = StyleSheet.create({
     paddingVertical: 10, paddingHorizontal: 14,
     borderBottomWidth: 1, borderBottomColor: COLORS.lightGray,
   },
-  dropdownItemActive:     { backgroundColor: '#EEF3FB' },
-  dropdownItemText:       { fontSize: 12, fontWeight: '600', color: COLORS.darkText },
+  dropdownItemActive: { backgroundColor: '#EEF3FB' },
+  dropdownItemText: { fontSize: 12, fontWeight: '600', color: COLORS.darkText },
   dropdownItemTextActive: { color: COLORS.navy, fontWeight: '800' },
-  dropdownCheck:          { fontSize: 12, color: COLORS.navy, fontWeight: '800' },
+  dropdownCheck: { fontSize: 12, color: COLORS.navy, fontWeight: '800' },
 
   // ── Status Sub-Tabs ──
   statusTabsRow: {
@@ -1845,7 +1993,7 @@ const styles = StyleSheet.create({
   statusTabActive: {
     borderBottomWidth: 2.5, borderBottomColor: COLORS.navy,
   },
-  statusTabText:       { fontSize: isMobile ? 11 : 13, fontWeight: '600', color: COLORS.midGray },
+  statusTabText: { fontSize: isMobile ? 11 : 13, fontWeight: '600', color: COLORS.midGray },
   statusTabTextActive: { color: COLORS.navy, fontWeight: '800' },
   statusTabBadge: {
     backgroundColor: COLORS.navy, borderRadius: 10,
@@ -1894,10 +2042,54 @@ const styles = StyleSheet.create({
   actionIconText: { fontSize: isMobile ? 14 : 16 },
 
   // Empty state
-  emptyState:   { alignItems: 'center', paddingVertical: 60 },
-  emptyIcon:    { fontSize: 36, marginBottom: 10 },
-  emptyText:    { fontSize: 14, fontWeight: '700', color: COLORS.darkText, marginBottom: 4 },
+  emptyState: { alignItems: 'center', paddingVertical: 60 },
+  emptyIcon: { fontSize: 36, marginBottom: 10 },
+  emptyText: { fontSize: 14, fontWeight: '700', color: COLORS.darkText, marginBottom: 4 },
   emptySubText: { fontSize: 12, color: COLORS.midGray },
+
+  // ── Archive View ──
+  divider: { height: 1, backgroundColor: COLORS.lightGray, marginHorizontal: 14 },
+  archiveSectionHeader: {
+    paddingHorizontal: 14, paddingTop: 14, paddingBottom: 10,
+    borderBottomWidth: 1, borderBottomColor: COLORS.lightGray,
+    backgroundColor: COLORS.offWhite,
+  },
+  archiveSectionTitle: {
+    fontSize: 15, fontWeight: '800', color: COLORS.darkText, marginBottom: 6,
+  },
+  archiveLockBadge: {
+    backgroundColor: '#FFF8E1', borderRadius: 6, borderWidth: 1,
+    borderColor: '#F9C74F', paddingHorizontal: 10, paddingVertical: 5,
+    alignSelf: 'flex-start',
+  },
+  archiveLockText: { fontSize: 11, color: '#7A5800', fontWeight: '600' },
+  archiveRow: {
+    paddingHorizontal: 14, paddingVertical: 14,
+  },
+  archiveRowMain: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12,
+  },
+  archiveRowName: {
+    flex: 1, fontSize: 12, color: COLORS.darkText, fontWeight: '600', lineHeight: 18,
+  },
+  archiveOldVersionText: {
+    fontSize: 11, fontWeight: '700', color: '#6D4C41',
+  },
+  archiveExpandedDetail: {
+    marginTop: 12, paddingTop: 12,
+    borderTopWidth: 1, borderTopColor: COLORS.lightGray,
+  },
+  archiveDetailRow: {
+    flexDirection: 'row', alignItems: 'center',
+    justifyContent: 'space-between', marginBottom: 8,
+  },
+  archiveDetailLabel: { fontSize: 11, color: COLORS.subText, fontWeight: '600' },
+  archiveDetailValue: { fontSize: 11, color: COLORS.darkText, fontWeight: '500' },
+  archiveActionBtn: {
+    flex: 1, paddingVertical: 8, borderRadius: 8,
+    backgroundColor: '#EEF2FB', alignItems: 'center',
+  },
+  archiveActionBtnText: { fontSize: 12, fontWeight: '700', color: '#5B8DD9' },
 
   // ── Modals ──
   modalOverlay: {
