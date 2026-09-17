@@ -1,21 +1,29 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  View, Text, TextInput, ScrollView, TouchableOpacity,
-  StyleSheet, StatusBar, Dimensions,
-  Modal, Image,
+  Animated,
+  Dimensions,
+  Modal,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text, TextInput,
+  TouchableOpacity,
+  View
 } from 'react-native';
 // SafeAreaView from core 'react-native' is a no-op on Android. Use the
 // context-aware version so insets work on both platforms.
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter, useFocusEffect } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import Head from 'expo-router/head';
-import { useNav } from './navContext';
-import { useAuth } from './authContext';
-import { supabase } from '../../utils/supabase';
-import { NotificationModal, useNotificationCenter, BellIcon } from './notificationCenter';
-import Sidebar from './../components/Sidebar';
 import { MagnifyingGlassIcon } from 'react-native-heroicons/outline';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import Svg, { Circle, Defs, LinearGradient, Stop } from 'react-native-svg';
+import { supabase } from '../../utils/supabase';
+import Sidebar from './../components/Sidebar';
+import { analyzeSentiment } from './../utils/sentiment';
+import { useAuth } from './authContext';
 import MobileHeader, { MobileHeaderSpacer } from './mobileHeader';
+import { useNav } from './navContext';
+import { BellIcon, NotificationModal, useNotificationCenter } from './notificationCenter';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const isMobile = SCREEN_WIDTH < 768;
@@ -50,6 +58,192 @@ const FEEDBACK_FILTERS = ['All', 'Recent', 'Unread'];
 
 
 
+// ─── SENTIMENT BADGE ──────────────────────────────────────────────────────────
+const SENTIMENT_META = {
+  positive: { label: 'Positive', bg: '#E8F5E9', border: '#A5D6A7', text: '#2E7D32', emoji: '😊', light: '#66BB6A' },
+  neutral:  { label: 'Neutral',  bg: '#ECECEC', border: '#CFCFCF', text: '#555555', emoji: '😐', light: '#9E9E9E' },
+  negative: { label: 'Negative', bg: '#FDECEA', border: '#F5B7AF', text: '#C0392B', emoji: '😕', light: '#E57368' },
+};
+
+const SentimentBadge = ({ label }) => {
+  const meta = SENTIMENT_META[label] || SENTIMENT_META.neutral;
+  return (
+    <View style={[styles.sentimentBadge, { backgroundColor: meta.bg, borderColor: meta.border }]}>
+      <Text style={[styles.sentimentBadgeText, { color: meta.text }]}>{meta.label}</Text>
+    </View>
+  );
+};
+
+// ─── SENTIMENT OVERVIEW CHART ───────────────────────────────────────────────
+// Gradient donut chart (react-native-svg) summarizing how many comments are
+// positive / neutral / negative, with tinted stat pills and a "mood" badge.
+const SENTIMENT_ORDER = ['positive', 'neutral', 'negative'];
+
+const DONUT_SIZE = 148;
+const DONUT_RADIUS = 56;
+const DONUT_STROKE = 20;
+const DONUT_CIRCUMFERENCE = 2 * Math.PI * DONUT_RADIUS;
+const DONUT_CENTER = DONUT_SIZE / 2;
+
+const dominantMood = (counts, total) => {
+  if (total === 0) return null;
+  const top = SENTIMENT_ORDER.reduce((a, b) => (counts[b] > counts[a] ? b : a));
+  const topPct = counts[top] / total;
+  if (counts.positive === counts.negative && counts.positive === counts.neutral) {
+    return { text: 'Mixed feedback', meta: SENTIMENT_META.neutral };
+  }
+  if (topPct >= 0.6) {
+    const word = top === 'positive' ? 'Mostly positive 🎉' : top === 'negative' ? 'Mostly negative ⚠️' : 'Mostly neutral';
+    return { text: word, meta: SENTIMENT_META[top] };
+  }
+  return { text: 'Mixed feedback', meta: SENTIMENT_META.neutral };
+};
+
+const SentimentDonut = ({ counts, total }) => {
+  let cumulative = 0;
+  const activeSegments = SENTIMENT_ORDER.filter(k => counts[k] > 0).length;
+
+  return (
+    <View style={styles.donutWrap}>
+      <Svg width={DONUT_SIZE} height={DONUT_SIZE} viewBox={`0 0 ${DONUT_SIZE} ${DONUT_SIZE}`}>
+        <Defs>
+          {SENTIMENT_ORDER.map(key => (
+            <LinearGradient key={key} id={`donutGrad-${key}`} x1="0%" y1="0%" x2="100%" y2="100%">
+              <Stop offset="0%" stopColor={SENTIMENT_META[key].light} />
+              <Stop offset="100%" stopColor={SENTIMENT_META[key].text} />
+            </LinearGradient>
+          ))}
+        </Defs>
+
+        {/* Track (shows if a category has 0 comments) */}
+        <Circle
+          cx={DONUT_CENTER}
+          cy={DONUT_CENTER}
+          r={DONUT_RADIUS}
+          stroke={COLORS.lightGray}
+          strokeWidth={DONUT_STROKE}
+          fill="none"
+        />
+        {SENTIMENT_ORDER.map(key => {
+          const count = counts[key];
+          if (!count) return null;
+          const fraction = count / total;
+          const dash = fraction * DONUT_CIRCUMFERENCE;
+          const dashOffset = -cumulative;
+          cumulative += dash;
+          return (
+            <Circle
+              key={key}
+              cx={DONUT_CENTER}
+              cy={DONUT_CENTER}
+              r={DONUT_RADIUS}
+              stroke={`url(#donutGrad-${key})`}
+              strokeWidth={DONUT_STROKE}
+              fill="none"
+              strokeDasharray={`${dash} ${DONUT_CIRCUMFERENCE - dash}`}
+              strokeDashoffset={dashOffset}
+              strokeLinecap={activeSegments > 1 ? 'butt' : 'round'}
+              rotation={-90}
+              originX={DONUT_CENTER}
+              originY={DONUT_CENTER}
+            />
+          );
+        })}
+      </Svg>
+      {/* Center label */}
+      <View style={styles.donutCenterLabel} pointerEvents="none">
+        <Text style={styles.donutCenterCount}>{total}</Text>
+        <Text style={styles.donutCenterCaption}>{total === 1 ? 'comment' : 'comments'}</Text>
+      </View>
+    </View>
+  );
+};
+
+const SentimentOverview = ({ feedbackList }) => {
+  const counts = useMemo(() => {
+    const c = { positive: 0, neutral: 0, negative: 0 };
+    feedbackList.forEach(f => {
+      const key = SENTIMENT_ORDER.includes(f.sentimentLabel) ? f.sentimentLabel : 'neutral';
+      c[key] += 1;
+    });
+    return c;
+  }, [feedbackList]);
+
+  const total = counts.positive + counts.neutral + counts.negative;
+  const mood = useMemo(() => dominantMood(counts, total), [counts, total]);
+
+  // Gentle fade + rise on mount so the card feels alive rather than static.
+  const fade = useRef(new Animated.Value(0)).current;
+  const rise = useRef(new Animated.Value(12)).current;
+  useEffect(() => {
+    if (total === 0) return;
+    Animated.parallel([
+      Animated.timing(fade, { toValue: 1, duration: 420, useNativeDriver: true }),
+      Animated.spring(rise, { toValue: 0, friction: 7, tension: 60, useNativeDriver: true }),
+    ]).start();
+  }, [total]);
+
+  if (total === 0) return null;
+
+  return (
+    <Animated.View
+      style={[
+        styles.sentimentChartCard,
+        { opacity: fade, transform: [{ translateY: rise }] },
+      ]}
+    >
+      <View style={styles.sentimentChartHeaderRow}>
+        <View>
+          <Text style={styles.sentimentChartTitle}>Sentiment Overview</Text>
+          <Text style={styles.sentimentChartSubtitle}>
+            {total} comment{total === 1 ? '' : 's'} analyzed
+          </Text>
+        </View>
+        {mood && (
+          <View style={[styles.moodBadge, { backgroundColor: mood.meta.bg, borderColor: mood.meta.border }]}>
+            <Text style={[styles.moodBadgeText, { color: mood.meta.text }]}>{mood.text}</Text>
+          </View>
+        )}
+      </View>
+
+      <View style={[styles.sentimentChartBody, isMobile && styles.sentimentChartBodyMobile]}>
+        <SentimentDonut counts={counts} total={total} />
+
+        <View style={styles.sentimentLegend}>
+          {SENTIMENT_ORDER.map(key => {
+            const meta = SENTIMENT_META[key];
+            const count = counts[key];
+            const pct = total > 0 ? Math.round((count / total) * 100) : 0;
+            return (
+              <View
+                key={key}
+                style={[styles.sentimentPill, { backgroundColor: meta.bg, borderColor: meta.border }]}
+              >
+                <Text style={styles.sentimentPillEmoji}>{meta.emoji}</Text>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.sentimentPillLabel, { color: meta.text }]}>{meta.label}</Text>
+                  <View style={styles.sentimentPillTrack}>
+                    <View
+                      style={[
+                        styles.sentimentPillFill,
+                        { width: `${pct}%`, backgroundColor: meta.text },
+                      ]}
+                    />
+                  </View>
+                </View>
+                <View style={styles.sentimentPillStats}>
+                  <Text style={[styles.sentimentPillPct, { color: meta.text }]}>{pct}%</Text>
+                  <Text style={styles.sentimentPillCount}>{count}</Text>
+                </View>
+              </View>
+            );
+          })}
+        </View>
+      </View>
+    </Animated.View>
+  );
+};
+
 // ─── FEEDBACK CARD ────────────────────────────────────────────────────────────
 const FeedbackCard = ({ item, onViewReply }) => (
   <View style={styles.feedbackCard}>
@@ -57,6 +251,18 @@ const FeedbackCard = ({ item, onViewReply }) => (
     <Text style={styles.feedbackCommentedBy}>
       Commented by <Text style={styles.feedbackAuthorName}>{item.name}</Text>
     </Text>
+
+    {/* Date & time */}
+    {(item.date || item.time) ? (
+      <View style={styles.feedbackTimestampRow}>
+        {item.date ? <Text style={styles.feedbackDateText}>{item.date}</Text> : null}
+        {item.time ? (
+          <View style={styles.feedbackTimePill}>
+            <Text style={styles.feedbackTimePillText}>{item.time}</Text>
+          </View>
+        ) : null}
+      </View>
+    ) : null}
 
     {/* On Document */}
     <Text style={styles.feedbackOnDocument}>
@@ -84,6 +290,7 @@ const FeedbackCard = ({ item, onViewReply }) => (
             <Text style={styles.repliedBadgeText}>Replied</Text>
           </View>
         ) : null}
+        {item.sentimentLabel ? <SentimentBadge label={item.sentimentLabel} /> : null}
       </View>
       <TouchableOpacity
         style={styles.viewReplyBtn}
@@ -190,6 +397,12 @@ export default function SKPortalFeedbackScreen() {
         });
       }
 
+      // Comments without a stored sentiment yet (e.g. sentiment_label is
+      // null) get scored locally so the badge always has something to show.
+      // Newly-computed scores are queued for a write-back below so future
+      // loads read the stored value instead of recomputing every time.
+      const sentimentWriteBacks = [];
+
       const formattedFeedback = feedback?.map(f => {
         const author = userMap[f.author_id] || {};
         const post = postMap[f.website_post_id] || {};
@@ -198,6 +411,16 @@ export default function SKPortalFeedbackScreen() {
         const middleInitial = author.middle_initial || '';
         const name = `${firstName} ${middleInitial ? middleInitial + '. ' : ''}${lastName}`.trim() || 'Anonymous';
 
+        let sentimentLabel = f.sentiment_label;
+        let sentimentScore = f.sentiment_score;
+
+        if (!sentimentLabel) {
+          const result = analyzeSentiment(f.content);
+          sentimentLabel = result.label;
+          sentimentScore = result.score;
+          sentimentWriteBacks.push({ comment_id: f.comment_id, ...result });
+        }
+
         return {
           id: f.comment_id,
           authorId: f.author_id,
@@ -205,13 +428,32 @@ export default function SKPortalFeedbackScreen() {
           document: post.title || 'Unknown Document',
           comment: f.content || '',
           date: f.created_at ? new Date(f.created_at).toLocaleDateString() : '',
+          time: f.created_at
+            ? new Date(f.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            : '',
           status: f.is_read ? 'Read' : 'Unread',
           reply: replyMap[f.comment_id] || '',
           postId: f.website_post_id,
+          sentimentLabel,
+          sentimentScore,
         };
       }) || [];
 
       setFeedbackList(formattedFeedback);
+
+      // Fire-and-forget write-back so newly-scored comments persist their
+      // sentiment_label / sentiment_score instead of recomputing every fetch.
+      if (sentimentWriteBacks.length > 0) {
+        sentimentWriteBacks.forEach(({ comment_id, label, score }) => {
+          supabase
+            .from('comments')
+            .update({ sentiment_label: label, sentiment_score: score })
+            .eq('comment_id', comment_id)
+            .then(({ error }) => {
+              if (error) console.error('Error saving sentiment:', error);
+            });
+        });
+      }
     } catch (error) {
       console.error('Error:', error);
     }
@@ -360,6 +602,18 @@ export default function SKPortalFeedbackScreen() {
                 <Text style={styles.modalUserDoc} numberOfLines={2}>
                   on "{selectedFeedback?.document}"
                 </Text>
+                {(selectedFeedback?.date || selectedFeedback?.time) ? (
+                  <View style={styles.modalTimestampRow}>
+                    {selectedFeedback?.date ? (
+                      <Text style={styles.modalDateText}>{selectedFeedback.date}</Text>
+                    ) : null}
+                    {selectedFeedback?.time ? (
+                      <View style={styles.modalTimePill}>
+                        <Text style={styles.modalTimePillText}>{selectedFeedback.time}</Text>
+                      </View>
+                    ) : null}
+                  </View>
+                ) : null}
               </View>
             </View>
 
@@ -545,6 +799,9 @@ export default function SKPortalFeedbackScreen() {
           )}
         </View>
       </View>
+
+      {/* ── Sentiment analytics chart ── */}
+      <SentimentOverview feedbackList={feedbackList} />
 
       {/* ── Feedback from the Portal label ── */}
       <Text style={styles.sectionLabel}>Feedback from the Portal</Text>
@@ -766,6 +1023,78 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
 
+  // ── Sentiment overview chart ──
+  sentimentChartCard: {
+    backgroundColor: COLORS.white,
+    borderRadius: 12,
+    borderWidth: 1, borderColor: COLORS.lightGray,
+    padding: isMobile ? 14 : 18,
+    marginBottom: 16,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05, shadowRadius: 4, elevation: 1,
+  },
+  sentimentChartTitle: {
+    fontSize: isMobile ? 13 : 15, fontWeight: '800', color: COLORS.darkText,
+  },
+  sentimentChartSubtitle: {
+    fontSize: isMobile ? 10 : 12, color: COLORS.subText, marginTop: 2, marginBottom: 14,
+  },
+  sentimentChartHeaderRow: {
+    flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between',
+    flexWrap: 'wrap', gap: 8,
+  },
+  moodBadge: {
+    borderRadius: 999, borderWidth: 1,
+    paddingHorizontal: 10, paddingVertical: 5,
+  },
+  moodBadgeText: { fontSize: 11, fontWeight: '800' },
+
+  sentimentChartBody: {
+    flexDirection: 'row', alignItems: 'center', gap: 24,
+    marginTop: 16,
+  },
+  sentimentChartBodyMobile: {
+    flexDirection: 'column', alignItems: 'stretch', gap: 18,
+  },
+
+  // Donut
+  donutWrap: {
+    width: DONUT_SIZE, height: DONUT_SIZE,
+    alignItems: 'center', justifyContent: 'center',
+    alignSelf: isMobile ? 'center' : 'flex-start',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1, shadowRadius: 10, elevation: 3,
+  },
+  donutCenterLabel: {
+    position: 'absolute', alignItems: 'center', justifyContent: 'center',
+  },
+  donutCenterCount: {
+    fontSize: 24, fontWeight: '900', color: COLORS.darkText,
+  },
+  donutCenterCaption: {
+    fontSize: 10, color: COLORS.subText, marginTop: 1,
+  },
+
+  // Legend — tinted stat pills
+  sentimentLegend: { flex: 1, gap: 10, width: '100%' },
+  sentimentPill: {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    borderWidth: 1, borderRadius: 12,
+    paddingHorizontal: 12, paddingVertical: 10,
+  },
+  sentimentPillEmoji: { fontSize: 18 },
+  sentimentPillLabel: {
+    fontSize: isMobile ? 12 : 13, fontWeight: '800', marginBottom: 5,
+  },
+  sentimentPillTrack: {
+    height: 5, borderRadius: 3,
+    backgroundColor: 'rgba(0,0,0,0.08)', overflow: 'hidden',
+  },
+  sentimentPillFill: { height: '100%', borderRadius: 3 },
+  sentimentPillStats: { alignItems: 'flex-end', minWidth: 40 },
+  sentimentPillPct: { fontSize: isMobile ? 13 : 14, fontWeight: '900' },
+  sentimentPillCount: { fontSize: 10, color: COLORS.subText, marginTop: 1 },
+
   // ── Feedback container ──
   feedbackContainer: {
     backgroundColor: COLORS.white,
@@ -815,6 +1144,20 @@ const styles = StyleSheet.create({
   feedbackAuthorName: {
     fontWeight: '700', color: COLORS.darkText,
   },
+  feedbackTimestampRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 6,
+  },
+  feedbackDateText: {
+    fontSize: isMobile ? 10 : 11, color: COLORS.midGray,
+  },
+  feedbackTimePill: {
+    backgroundColor: '#E7EEF9', borderRadius: 10,
+    paddingHorizontal: 7, paddingVertical: 2,
+    borderWidth: 1, borderColor: '#BFD3EE',
+  },
+  feedbackTimePillText: {
+    fontSize: isMobile ? 10 : 11, fontWeight: '800', color: COLORS.navy,
+  },
   feedbackOnDocument: {
     fontSize: isMobile ? 10 : 12, color: COLORS.subText, marginBottom: 6,
   },
@@ -850,6 +1193,11 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: '#A5D6A7',
   },
   repliedBadgeText: { fontSize: 9, fontWeight: '700', color: '#2E7D32' },
+  sentimentBadge: {
+    borderRadius: 4, paddingHorizontal: 6, paddingVertical: 2,
+    borderWidth: 1,
+  },
+  sentimentBadgeText: { fontSize: 9, fontWeight: '700' },
 
   // View & Reply button
   viewReplyBtn: {
@@ -919,6 +1267,20 @@ const styles = StyleSheet.create({
   },
   modalUserDoc: {
     fontSize: 11, color: COLORS.subText, lineHeight: 15,
+  },
+  modalTimestampRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 3,
+  },
+  modalDateText: {
+    fontSize: 10, color: COLORS.midGray,
+  },
+  modalTimePill: {
+    backgroundColor: '#E7EEF9', borderRadius: 10,
+    paddingHorizontal: 7, paddingVertical: 2,
+    borderWidth: 1, borderColor: '#BFD3EE',
+  },
+  modalTimePillText: {
+    fontSize: 10, fontWeight: '800', color: COLORS.navy,
   },
 
   // Comment
