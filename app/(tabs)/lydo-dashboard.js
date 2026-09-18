@@ -59,6 +59,7 @@ const getActivityType = (action) => {
   const lower = action.toLowerCase();
   if (lower.includes('approve') || lower.includes('forward')) return 'approved';
   if (lower.includes('return')) return 'returned';
+  if (lower.includes('remind')) return 'reminder';
   if (lower.includes('add') || lower.includes('create')) return 'create';
   return 'create';
 };
@@ -70,6 +71,7 @@ const getActivityIcon = (action) => {
   if (lower.includes('approve')) return '✔';
   if (lower.includes('forward')) return '▷';
   if (lower.includes('return')) return '↩';
+  if (lower.includes('remind')) return '📢';
   if (lower.includes('add template') || lower.includes('replace template')) return '➕';
   if (lower.includes('add account') || lower.includes('add barangay')) return '👤';
   return '✎';
@@ -138,6 +140,7 @@ const STAT_TONES = {
 const ACTIVITY_TONES = {
   approved: { chipBg: HERO.success50, chipColor: HERO.success600 },
   returned: { chipBg: HERO.warning50, chipColor: HERO.warning600 },
+  reminder: { chipBg: COLORS.blueLight, chipColor: COLORS.blue },
   create: { chipBg: HERO.primary50, chipColor: HERO.primary },
 };
 
@@ -592,6 +595,34 @@ export default function LYDOHomeScreen() {
   const [lydoActivities, setLydoActivities] = useState([]);
   const [missingDocsModalVisible, setMissingDocsModalVisible] = useState(false);
   const [missingDocsList, setMissingDocsList] = useState([]);
+  // Per-barangay breakdown of documents due soon / already overdue — powers
+  // the "Follow up near deadline submission" reminder task, the same way
+  // missingDocsList powers the "missing documents" reminder task.
+  const [nearDeadlineList, setNearDeadlineList] = useState([]);
+  // Subsets of missingDocsList / nearDeadlineList that haven't already been
+  // covered by a reminder LYDO previously sent to that barangay (checked
+  // against the `reminders` table's `meta.items` titles). These — not the
+  // raw lists above — drive the "Send Reminder" badge counts and who
+  // actually gets emailed, so a badge stays gone once a reminder truly went
+  // out instead of reappearing on every refetch/refocus. A barangay reappears
+  // automatically once it has a NEW missing document or deadline that wasn't
+  // part of its last reminder.
+  const [missingDocsPendingList, setMissingDocsPendingList] = useState([]);
+  const [nearDeadlinePendingList, setNearDeadlinePendingList] = useState([]);
+
+  // Reminder preview/confirmation modal — shown before a "Send Reminder"
+  // monitoring task actually goes out, so the LYDO officer can see exactly
+  // which barangays/SK officials will be notified and what the message says.
+  const [reminderModalVisible, setReminderModalVisible] = useState(false);
+  const [reminderModalData, setReminderModalData] = useState({
+    task: null, title: '', message: '', recipients: [], sending: false, sent: false,
+  });
+  // Which "Send Reminder" tasks (by badgeProp) have already been sent this
+  // visit — their badge is hidden immediately after sending rather than
+  // waiting for the underlying data to change. Cleared on every fresh
+  // focus/refetch of the dashboard, so a badge reappears on a later visit
+  // if the barangay still hasn't actually submitted.
+  const [remindedTasks, setRemindedTasks] = useState({});
 
   // Shared LYDO bell badge + dropdown (documents SK officials submitted for
   // review). See notificationCenter.js — reused by every LYDO screen.
@@ -625,6 +656,10 @@ export default function LYDOHomeScreen() {
   // Fetch data when screen is focused - always load latest
   useFocusEffect(
     React.useCallback(() => {
+      // A fresh focus/refetch supersedes any "just sent" badge suppression
+      // from a previous visit — badges should reflect the real, current
+      // counts again until the officer sends another reminder this visit.
+      setRemindedTasks({});
       const fetchData = async () => {
         try {
           // Get all barangays with their IDs
@@ -714,6 +749,7 @@ export default function LYDOHomeScreen() {
                   id: `${deadline.barangay_id}-${deadline.document_type}`,
                   title: deadline.description || deadline.document_type,
                   barangay: deadline.barangay,
+                  barangay_id: deadline.barangay_id,
                   status: 'Not Submitted',
                 });
               }
@@ -753,6 +789,10 @@ export default function LYDOHomeScreen() {
 
           // Track which barangays have unfulfilled deadlines (missing documents)
           const barangaysWithMissing = new Set();
+          // Per-barangay items that are due within the near-deadline window
+          // (or already overdue) and still unsubmitted — used by the
+          // "Follow up near deadline submission" reminder task below.
+          const nearDeadlineWithBrgy = [];
 
           allDeadlines?.forEach(deadline => {
             if (deadline.barangay_id && barangayStats[deadline.barangay_id]) {
@@ -777,9 +817,59 @@ export default function LYDOHomeScreen() {
                 } else if (deadlineDate <= threeDaysFromNow) {
                   barangayStats[deadline.barangay_id].hasNearDeadline = true;
                 }
+
+                if (!hasDocument && deadlineDate <= threeDaysFromNow) {
+                  const daysLeft = Math.round((deadlineDate - today) / (24 * 60 * 60 * 1000));
+                  nearDeadlineWithBrgy.push({
+                    id: `${deadline.barangay_id}-${deadline.document_type}-${deadline.deadline_date}`,
+                    title: deadline.description || deadline.document_type,
+                    barangay: deadline.barangays?.barangay_name || 'Unknown',
+                    barangay_id: deadline.barangay_id,
+                    deadline: deadline.deadline_date,
+                    daysLeft,
+                  });
+                }
               }
             }
           });
+
+          setNearDeadlineList(nearDeadlineWithBrgy);
+
+          // Work out which of the missing-doc / near-deadline items above
+          // have already been sent to their barangay in a previous reminder,
+          // so their "Send Reminder" badge doesn't come back just because we
+          // refetched — it should only reflect items LYDO hasn't reminded
+          // anyone about yet. `meta.items` on a reminders row is the exact
+          // list of item titles that reminder covered.
+          try {
+            const { data: sentReminders } = await supabase
+              .from('reminders')
+              .select('barangay_id, type, meta, created_at')
+              .in('type', ['missing_docs', 'deadline'])
+              .order('created_at', { ascending: false });
+
+            // Keep only the latest reminder per barangay+type (results are
+            // already newest-first, so the first one seen per key wins).
+            const lastCoveredTitles = {}; // `${barangay_id}-${type}` -> Set<title>
+            (sentReminders || []).forEach((r) => {
+              const key = `${r.barangay_id}-${r.type}`;
+              if (lastCoveredTitles[key]) return;
+              lastCoveredTitles[key] = new Set((r.meta?.items || []).map((i) => i.title));
+            });
+
+            const stillNeedsReminder = (item, type) => {
+              const covered = lastCoveredTitles[`${item.barangay_id}-${type}`];
+              return !covered || !covered.has(item.title);
+            };
+
+            setMissingDocsPendingList(missingDocsWithBrgy.filter((item) => stillNeedsReminder(item, 'missing_docs')));
+            setNearDeadlinePendingList(nearDeadlineWithBrgy.filter((item) => stillNeedsReminder(item, 'deadline')));
+          } catch (remErr) {
+            console.error('Error checking already-sent reminders:', remErr);
+            // Fall back to the unfiltered lists rather than hiding the task.
+            setMissingDocsPendingList(missingDocsWithBrgy);
+            setNearDeadlinePendingList(nearDeadlineWithBrgy);
+          }
 
           // Count barangays in each category
           let fullyCompliant = 0;
@@ -983,12 +1073,112 @@ export default function LYDOHomeScreen() {
 
   const handleLogout = () => { logout(); router.replace('/'); };
 
-  const handleSendReminder = () => Alert.alert('Reminder Sent', 'All non-compliant barangays have been notified.');
+  // Build what a "Send Reminder" task will actually send: who gets it
+  // (grouped by barangay) and the message body, so it can be shown to the
+  // LYDO officer for confirmation before anything goes out.
+  const buildReminderPreview = (task) => {
+    const isDeadlineTask = task.badgeProp === 'approachingDeadlines';
+    const sourceList = isDeadlineTask ? nearDeadlinePendingList : missingDocsPendingList;
+
+    const grouped = {};
+    sourceList.forEach((item) => {
+      // Group by barangay_id (falls back to the name if an item is somehow
+      // missing it) so the reminder we insert is addressed to the right
+      // barangay row, not just matched on display name.
+      const key = item.barangay_id != null ? String(item.barangay_id) : (item.barangay || 'unknown');
+      if (!grouped[key]) grouped[key] = { barangay_id: item.barangay_id, barangay: item.barangay || 'Unknown Barangay', items: [] };
+      grouped[key].items.push(item);
+    });
+
+    const recipients = Object.values(grouped).sort((a, b) => a.barangay.localeCompare(b.barangay));
+
+    const title = isDeadlineTask ? 'Deadline Reminder' : 'Missing Document Reminder';
+    const message = isDeadlineTask
+      ? 'Your SK has a submission deadline coming up. Please submit the document(s) below before the due date to avoid being marked overdue.'
+      : 'Your SK has not yet submitted the following required document(s). Please submit as soon as possible.';
+
+    return { task, title, message, recipients };
+  };
+
+  // Open the preview modal instead of sending immediately.
+  const openReminderPreview = (task) => {
+    const preview = buildReminderPreview(task);
+    setReminderModalData({ ...preview, sending: false, sent: false });
+    setReminderModalVisible(true);
+  };
+
+  const closeReminderModal = () => {
+    setReminderModalVisible(false);
+    // Give the close animation room to finish before the content resets, so
+    // the modal doesn't visibly flash back to its initial state mid-fade.
+    setTimeout(() => {
+      setReminderModalData({ task: null, title: '', message: '', recipients: [], sending: false, sent: false });
+    }, 250);
+  };
+
+  // Fires once the LYDO officer confirms the preview. Writes one row per
+  // barangay into the `reminders` table (see reminders.sql) — that table is
+  // what the SK app's notification bell (useNotificationCenter in
+  // notificationCenter.js) polls, so this is what actually gets the
+  // reminder onto the SK side, not just logged on the LYDO side.
+  const confirmSendReminder = async () => {
+    const { task, title, message, recipients } = reminderModalData;
+    if (!recipients.length) return;
+    setReminderModalData((prev) => ({ ...prev, sending: true }));
+
+    const type = task?.badgeProp === 'approachingDeadlines' ? 'deadline' : 'missing_docs';
+    const withBarangayId = recipients.filter((r) => r.barangay_id != null);
+    const skippedCount = recipients.length - withBarangayId.length;
+
+    try {
+      if (withBarangayId.length) {
+        const rows = withBarangayId.map((r) => ({
+          barangay_id: r.barangay_id,
+          created_by: user?.id,
+          type,
+          title,
+          message,
+          meta: {
+            items: r.items.map((i) => ({
+              title: i.title,
+              ...(typeof i.daysLeft === 'number' ? { daysLeft: i.daysLeft } : {}),
+            })),
+          },
+        }));
+        const { error } = await supabase.from('reminders').insert(rows);
+        if (error) throw error;
+      }
+
+      await supabase.from('lydo_activity_logs').insert({
+        action: 'Sent Reminder',
+        description: `Sent "${title}" to ${recipients.length} barangay${recipients.length !== 1 ? 's' : ''}: ${recipients.map((r) => r.barangay).join(', ')}`,
+        user_id: user?.id,
+      });
+    } catch (err) {
+      console.error('Error sending reminder:', err);
+      setReminderModalData((prev) => ({ ...prev, sending: false }));
+      Alert.alert(
+        'Reminder Not Sent',
+        `Something went wrong sending this reminder — it may not have reached SK.\n\n${err?.message || err?.details || 'Unknown error'}`
+      );
+      return;
+    }
+
+    if (skippedCount > 0) {
+      console.warn(`${skippedCount} recipient(s) had no barangay_id and were skipped when sending the reminder.`);
+    }
+
+    // Hide this task's badge immediately — the officer just acted on it.
+    if (task?.badgeProp) {
+      setRemindedTasks((prev) => ({ ...prev, [task.badgeProp]: true }));
+    }
+    setReminderModalData((prev) => ({ ...prev, sending: false, sent: true }));
+  };
 
   // Handle monitoring task button click
   const handleMonitoringTask = (task) => {
     if (task.actionType === 'reminder') {
-      handleSendReminder();
+      openReminderPreview(task);
     } else if (task.actionType === 'review' && task.viewFilter) {
       // Navigate to lydo-monitor with the appropriate filter
       router.push({
@@ -1072,6 +1262,112 @@ export default function LYDOHomeScreen() {
                   </View>
                 )}
               </ScrollView>
+            </View>
+          </View>
+        </Modal>
+
+        {/* Reminder Preview/Confirmation Modal — shown before a "Send
+            Reminder" monitoring task goes out, listing exactly which
+            barangays/SK officials will receive it and what it will say. */}
+        <Modal visible={reminderModalVisible} transparent animationType="fade" onRequestClose={closeReminderModal}>
+          <View style={reminderModalStyles.backdrop}>
+            <View style={reminderModalStyles.modal}>
+              <View style={reminderModalStyles.header}>
+                <View style={{ flex: 1 }}>
+                  <Text style={reminderModalStyles.title}>{reminderModalData.title || 'Reminder'}</Text>
+                  <Text style={reminderModalStyles.subtitle}>
+                    {reminderModalData.sent
+                      ? 'Reminder sent'
+                      : `Will be sent to ${reminderModalData.recipients.length} SK barangay${reminderModalData.recipients.length !== 1 ? 's' : ''}`}
+                  </Text>
+                </View>
+                <TouchableOpacity style={reminderModalStyles.closeBtn} onPress={closeReminderModal} activeOpacity={0.8}>
+                  <Text style={reminderModalStyles.closeText}>✕</Text>
+                </TouchableOpacity>
+              </View>
+              <View style={reminderModalStyles.divider} />
+
+              <ScrollView
+                style={reminderModalStyles.body}
+                contentContainerStyle={reminderModalStyles.bodyContent}
+                showsVerticalScrollIndicator={false}
+              >
+                {reminderModalData.sent ? (
+                  <View style={reminderModalStyles.sentState}>
+                    <Text style={reminderModalStyles.sentIcon}>✅</Text>
+                    <Text style={reminderModalStyles.sentText}>Reminder sent to SK officials</Text>
+                    <Text style={reminderModalStyles.sentSubText}>
+                      {reminderModalData.recipients.map((r) => r.barangay).join(', ')}
+                    </Text>
+                  </View>
+                ) : reminderModalData.recipients.length === 0 ? (
+                  <View style={reminderModalStyles.emptyState}>
+                    <Text style={reminderModalStyles.emptyText}>Nothing to send</Text>
+                    <Text style={reminderModalStyles.emptySubText}>
+                      No barangays are currently missing this requirement.
+                    </Text>
+                  </View>
+                ) : (
+                  <>
+                    <View style={reminderModalStyles.messageBox}>
+                      <Text style={reminderModalStyles.messageLabel}>Message to SK</Text>
+                      <Text style={reminderModalStyles.messageText}>{reminderModalData.message}</Text>
+                    </View>
+
+                    <Text style={reminderModalStyles.recipientsLabel}>
+                      Recipients ({reminderModalData.recipients.length})
+                    </Text>
+                    {reminderModalData.recipients.map((r, idx) => (
+                      <View
+                        key={r.barangay}
+                        style={[
+                          reminderModalStyles.recipientRow,
+                          idx < reminderModalData.recipients.length - 1 && reminderModalStyles.recipientRowBorder,
+                        ]}
+                      >
+                        <Text style={reminderModalStyles.recipientBarangay}>SK {r.barangay}</Text>
+                        {r.items.map((item) => (
+                          <Text key={item.id} style={reminderModalStyles.recipientItem}>
+                            • {item.title}
+                            {typeof item.daysLeft === 'number'
+                              ? item.daysLeft < 0
+                                ? ` (overdue ${Math.abs(item.daysLeft)}d)`
+                                : item.daysLeft === 0
+                                  ? ' (due today)'
+                                  : ` (due in ${item.daysLeft}d)`
+                              : ''}
+                          </Text>
+                        ))}
+                      </View>
+                    ))}
+                  </>
+                )}
+              </ScrollView>
+
+              {!reminderModalData.sent && reminderModalData.recipients.length > 0 && (
+                <View style={reminderModalStyles.footer}>
+                  <TouchableOpacity
+                    style={reminderModalStyles.cancelBtn}
+                    activeOpacity={0.8}
+                    onPress={closeReminderModal}
+                    disabled={reminderModalData.sending}
+                  >
+                    <Text style={reminderModalStyles.cancelBtnText}>Cancel</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[reminderModalStyles.sendBtn, reminderModalData.sending && { opacity: 0.7 }]}
+                    activeOpacity={0.8}
+                    onPress={confirmSendReminder}
+                    disabled={reminderModalData.sending}
+                  >
+                    {reminderModalData.sending ? (
+                      <ActivityIndicator color={COLORS.white} size="small" />
+                    ) : (
+                      <Text style={reminderModalStyles.sendBtnText}>Send Reminder</Text>
+                    )}
+                  </TouchableOpacity>
+                </View>
+              )}
             </View>
           </View>
         </Modal>
@@ -1256,8 +1552,15 @@ export default function LYDOHomeScreen() {
                       let badgeCount = 0;
                       if (task.badgeProp === 'proposalsForReview') badgeCount = proposalsForReview;
                       else if (task.badgeProp === 'forRevision') badgeCount = forRevision;
-                      else if (task.badgeProp === 'missingDocs') badgeCount = missingDocs;
-                      else if (task.badgeProp === 'approachingDeadlines') badgeCount = approachingDeadlines.filter(d => d.urgent).length;
+                      // Count barangays still owed a reminder, not just raw
+                      // missing-document/deadline totals — a barangay whose
+                      // current missing items were already covered by a
+                      // reminder we sent shouldn't keep the badge lit.
+                      else if (task.badgeProp === 'missingDocs') badgeCount = new Set(missingDocsPendingList.map(i => i.barangay_id)).size;
+                      else if (task.badgeProp === 'approachingDeadlines') badgeCount = new Set(nearDeadlinePendingList.map(i => i.barangay_id)).size;
+                      // A reminder was just sent for this task this visit —
+                      // suppress its badge until the next real refetch.
+                      if (remindedTasks[task.badgeProp]) badgeCount = 0;
 
                       return (
                         <View key={task.id} style={[styles.heroTaskRow, idx < MONITORING_TASKS_BASE.length - 1 && styles.heroTaskRowBorder]}>
@@ -1863,4 +2166,72 @@ const missingModalStyles = StyleSheet.create({
   statusNotSubmittedText: { color: '#DC2626' },
 });
 
-// Notification modal styles now live in notificationCenter.js (shared).
+const reminderModalStyles = StyleSheet.create({
+  backdrop: {
+    flex: 1, backgroundColor: 'rgba(0,0,0,0.65)',
+    justifyContent: 'center', alignItems: 'center', padding: 24,
+  },
+  modal: {
+    backgroundColor: COLORS.white, borderRadius: 16,
+    width: isMobile ? '92%' : 480,
+    maxHeight: isMobile ? '80%' : 560,
+    overflow: 'hidden', elevation: 20, shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.25, shadowRadius: 20,
+  },
+  header: {
+    flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between',
+    paddingHorizontal: 16, paddingVertical: 14, backgroundColor: COLORS.navy,
+  },
+  title: { fontSize: 16, fontWeight: '800', color: COLORS.white },
+  subtitle: { fontSize: 12, fontWeight: '600', color: 'rgba(255,255,255,0.75)', marginTop: 3 },
+  closeBtn: {
+    width: 28, height: 28, borderRadius: 14,
+    backgroundColor: 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center',
+    marginLeft: 12,
+  },
+  closeText: { fontSize: 12, fontWeight: '700', color: COLORS.white },
+  divider: { height: 1, backgroundColor: COLORS.lightGray },
+  body: { flexGrow: 0 },
+  bodyContent: { padding: 16 },
+  messageBox: {
+    backgroundColor: COLORS.offWhite, borderRadius: 12, padding: 12,
+    borderWidth: 1, borderColor: COLORS.lightGray, marginBottom: 16,
+  },
+  messageLabel: {
+    fontSize: 11, fontWeight: '700', color: COLORS.subText,
+    textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 6,
+  },
+  messageText: { fontSize: 13, color: COLORS.darkText, lineHeight: 19 },
+  recipientsLabel: {
+    fontSize: 11, fontWeight: '700', color: COLORS.subText,
+    textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 8,
+  },
+  recipientRow: { paddingVertical: 10, gap: 3 },
+  recipientRowBorder: { borderBottomWidth: 1, borderBottomColor: COLORS.lightGray },
+  recipientBarangay: { fontSize: 13.5, fontWeight: '700', color: COLORS.navy, marginBottom: 2 },
+  recipientItem: { fontSize: 12.5, color: COLORS.subText, lineHeight: 18 },
+  footer: {
+    flexDirection: 'row', gap: 10, padding: 16,
+    borderTopWidth: 1, borderTopColor: COLORS.lightGray,
+  },
+  cancelBtn: {
+    flex: 1, paddingVertical: 12, borderRadius: 10,
+    borderWidth: 1.5, borderColor: COLORS.lightGray,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  cancelBtnText: { fontSize: 13.5, fontWeight: '700', color: COLORS.subText },
+  sendBtn: {
+    flex: 1.4, paddingVertical: 12, borderRadius: 10,
+    backgroundColor: COLORS.navy,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  sendBtnText: { fontSize: 13.5, fontWeight: '700', color: COLORS.white },
+  emptyState: { alignItems: 'center', justifyContent: 'center', paddingVertical: 40 },
+  emptyText: { fontSize: 15, fontWeight: '700', color: COLORS.darkText, marginBottom: 4 },
+  emptySubText: { fontSize: 13, color: COLORS.subText, textAlign: 'center' },
+  sentState: { alignItems: 'center', justifyContent: 'center', paddingVertical: 36, paddingHorizontal: 12 },
+  sentIcon: { fontSize: 34, marginBottom: 10 },
+  sentText: { fontSize: 15, fontWeight: '800', color: COLORS.darkText, marginBottom: 6 },
+  sentSubText: { fontSize: 12.5, color: COLORS.subText, textAlign: 'center', lineHeight: 18 },
+});
+
+// Notification modal styles now live in notificationCenter.js (shared). 

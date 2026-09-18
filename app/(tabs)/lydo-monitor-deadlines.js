@@ -1,20 +1,27 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
-  View, Text, TextInput, ScrollView, TouchableOpacity,
-  StyleSheet, StatusBar, Dimensions,
-  Modal, Alert, Image, ActivityIndicator,
+  ActivityIndicator,
+  Alert,
+  Dimensions,
+  Modal,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text, TextInput,
+  TouchableOpacity,
+  View
 } from 'react-native';
 // SafeAreaView from core 'react-native' is a no-op on Android. Use the
 // context-aware version so insets work on both platforms.
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import Head from 'expo-router/head';
-import { useNav } from './navContext';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { supabase } from '../../utils/supabase';
 import Sidebar, { LYDO_NAV_ITEMS } from './../components/Sidebar';
 import { useAuth } from './authContext';
-import { supabase } from '../../utils/supabase';
-import { useLydoNotificationCenter, LydoNotificationModal, LydoBellIcon } from './notificationCenter';
 import MobileHeader, { MobileHeaderSpacer } from './mobileHeader';
+import { useNav } from './navContext';
+import { LydoBellIcon, LydoNotificationModal, useLydoNotificationCenter } from './notificationCenter';
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const isMobile = SCREEN_WIDTH < 768;
 
@@ -39,7 +46,7 @@ const COLORS = {
   noPubBg:   '#FFEBEE',
 };
 
-const MONITOR_TABS = ['Consultation', 'Budget', 'Report', 'Deadlines'];
+const MONITOR_TABS = ['Consultation','Report', 'Deadlines'];
 
 // ─── DOCUMENT TYPE OPTIONS ─────────────────────────────────────────────────────
 // These map to submission_deadlines.document_type (short code).

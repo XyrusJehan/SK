@@ -1,31 +1,39 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
-  View, Text, TextInput, ScrollView, TouchableOpacity,
-  StyleSheet, StatusBar, Dimensions,
-  Modal, Alert, Image, Platform, ActivityIndicator,
+  ActivityIndicator,
+  Alert,
+  Dimensions,
+  Modal,
+  Platform,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text, TextInput,
+  TouchableOpacity,
+  View
 } from 'react-native';
 // SafeAreaView from core 'react-native' is a no-op on Android. Use the
 // context-aware version so insets work on both platforms.
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import Head from 'expo-router/head';
-import { useNav } from './navContext';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import Sidebar, { LYDO_NAV_ITEMS } from './../components/Sidebar';
 import { useAuth } from './authContext';
-import { useLydoNotificationCenter, LydoNotificationModal, LydoBellIcon } from './notificationCenter';
 import MobileHeader, { MobileHeaderSpacer } from './mobileHeader';
+import { useNav } from './navContext';
+import { LydoBellIcon, LydoNotificationModal, useLydoNotificationCenter } from './notificationCenter';
 import {
-  fetchTransparencyReport,
-  fetchSubmissionReport,
-  saveComplianceDocument,
-  DOC_FULL_NAMES as API_DOC_FULL_NAMES,
-} from './reportsApi';
-import {
-  buildTransparencyReportHtml,
   buildSubmissionReportHtml,
-  uploadReportPdf,
+  buildTransparencyReportHtml,
   renderReportToBase64,
+  uploadReportPdf,
 } from './reportPdf';
+import {
+  DOC_FULL_NAMES as API_DOC_FULL_NAMES,
+  fetchSubmissionReport,
+  fetchTransparencyReport,
+  saveComplianceDocument,
+} from './reportsApi';
 // Renders the generated report HTML inside the preview modal below, on
 // native platforms (iOS/Android). react-native-webview does NOT support
 // web, so the PreviewFrame component further down uses a plain <iframe>
@@ -82,7 +90,7 @@ const COLORS = {
   noPubBg:   '#FFEBEE',
 };
 
-const MONITOR_TABS = ['Consultation', 'Budget', 'Report','Deadlines'];
+const MONITOR_TABS = ['Consultation', 'Report','Deadlines'];
 
 // ─── DROPDOWN OPTIONS ─────────────────────────────────────────────────────────
 const DOCUMENT_OPTIONS = ['ABYIP', 'CBYDP', 'SK Budget', 'Accomplishment'];

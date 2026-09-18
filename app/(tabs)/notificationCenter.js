@@ -26,6 +26,7 @@ const SEEN_KEYS = {
   templates: 'sk_notif_seen_templates',
   returned: 'sk_notif_seen_returned',
   deadlines: 'sk_notif_seen_deadlines',
+  reminders: 'sk_notif_seen_reminders',
 };
 
 const loadSeenCounts = async () => {
@@ -35,16 +36,18 @@ const loadSeenCounts = async () => {
       AsyncStorage.getItem(SEEN_KEYS.templates),
       AsyncStorage.getItem(SEEN_KEYS.returned),
       AsyncStorage.getItem(SEEN_KEYS.deadlines),
+      AsyncStorage.getItem(SEEN_KEYS.reminders),
     ]);
     return {
       approved: parseInt(entries[0] || '0', 10) || 0,
       templates: parseInt(entries[1] || '0', 10) || 0,
       returned: parseInt(entries[2] || '0', 10) || 0,
       deadlines: parseInt(entries[3] || '0', 10) || 0,
+      reminders: parseInt(entries[4] || '0', 10) || 0,
     };
   } catch (err) {
     console.error('Error loading seen counts:', err);
-    return { approved: 0, templates: 0, returned: 0, deadlines: 0 };
+    return { approved: 0, templates: 0, returned: 0, deadlines: 0, reminders: 0 };
   }
 };
 
@@ -55,6 +58,7 @@ const saveSeenCounts = async (counts) => {
       AsyncStorage.setItem(SEEN_KEYS.templates, String(counts.templates || 0)),
       AsyncStorage.setItem(SEEN_KEYS.returned, String(counts.returned || 0)),
       AsyncStorage.setItem(SEEN_KEYS.deadlines, String(counts.deadlines || 0)),
+      AsyncStorage.setItem(SEEN_KEYS.reminders, String(counts.reminders || 0)),
     ]);
   } catch (err) {
     console.error('Error saving seen counts:', err);
@@ -104,12 +108,14 @@ export function useNotificationCenter(barangayId) {
   const [seenTemplatesCount, setSeenTemplatesCount] = useState(0);
   const [seenReturnedCount, setSeenReturnedCount] = useState(0);
   const [seenDeadlinesCount, setSeenDeadlinesCount] = useState(0);
+  const [seenRemindersCount, setSeenRemindersCount] = useState(0);
   const [seenLoaded, setSeenLoaded] = useState(false);
 
   const [returnedDocuments, setReturnedDocuments] = useState([]);
   const [approvedDocuments, setApprovedDocuments] = useState([]);
   const [forwardedTemplates, setForwardedTemplates] = useState([]);
   const [approachingDeadlines, setApproachingDeadlines] = useState([]);
+  const [reminders, setReminders] = useState([]);
   const [returnedProposalsCount, setReturnedProposalsCount] = useState(0);
   const [deadlinesCount, setDeadlinesCount] = useState(0);
 
@@ -131,6 +137,7 @@ export function useNotificationCenter(barangayId) {
       setSeenTemplatesCount(stored.templates);
       setSeenReturnedCount(stored.returned);
       setSeenDeadlinesCount(stored.deadlines);
+      setSeenRemindersCount(stored.reminders);
       setSeenLoaded(true);
     })();
     return () => { cancelled = true; };
@@ -145,8 +152,9 @@ export function useNotificationCenter(barangayId) {
       templates: seenTemplatesCount,
       returned: seenReturnedCount,
       deadlines: seenDeadlinesCount,
+      reminders: seenRemindersCount,
     });
-  }, [seenLoaded, seenApprovedCount, seenTemplatesCount, seenReturnedCount, seenDeadlinesCount]);
+  }, [seenLoaded, seenApprovedCount, seenTemplatesCount, seenReturnedCount, seenDeadlinesCount, seenRemindersCount]);
 
   // Refresh whenever the screen comes into focus.
   useFocusEffect(
@@ -279,13 +287,48 @@ export function useNotificationCenter(barangayId) {
     return () => { cancelled = true; };
   }, [barangayId, refreshKey]);
 
+  // Fetch reminders LYDO has sent to this barangay (e.g. "you have missing
+  // documents" / "your deadline is coming up") from the "Send Reminder"
+  // monitoring tasks on the LYDO dashboard.
+  useEffect(() => {
+    if (!barangayId) return;
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const { data, error } = await supabase
+          .from('reminders')
+          .select('reminder_id, type, title, message, meta, created_at')
+          .eq('barangay_id', barangayId)
+          .order('created_at', { ascending: false })
+          .limit(50);
+
+        if (error || cancelled) return;
+
+        setReminders((data || []).map((r) => ({
+          id: r.reminder_id.toString(),
+          type: r.type,
+          title: r.title || 'Reminder from LYDO',
+          message: r.message || '',
+          items: r.meta?.items || [],
+          created_at: r.created_at,
+        })));
+      } catch (err) {
+        console.error('Error fetching reminders:', err);
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, [barangayId, refreshKey]);
+
   const seenReady = seenLoaded ? 1 : 0;
   const unviewedApproved = seenReady ? Math.max(0, approvedDocuments.length - seenApprovedCount) : 0;
   const unviewedTemplates = seenReady ? Math.max(0, forwardedTemplates.length - seenTemplatesCount) : 0;
   const unviewedReturned = seenReady ? Math.max(0, returnedProposalsCount - seenReturnedCount) : 0;
   const unviewedDeadlines = seenReady ? Math.max(0, deadlinesCount - seenDeadlinesCount) : 0;
+  const unviewedReminders = seenReady ? Math.max(0, reminders.length - seenRemindersCount) : 0;
 
-  const totalUnviewed = unviewedApproved + unviewedTemplates + unviewedReturned + unviewedDeadlines;
+  const totalUnviewed = unviewedApproved + unviewedTemplates + unviewedReturned + unviewedDeadlines + unviewedReminders;
 
   const open = useCallback(() => setVisible(true), []);
   const close = useCallback(() => setVisible(false), []);
@@ -295,14 +338,16 @@ export function useNotificationCenter(barangayId) {
     if (category === 'approved') setSeenApprovedCount(approvedDocuments.length);
     if (category === 'templates') setSeenTemplatesCount(forwardedTemplates.length);
     if (category === 'deadlines') setSeenDeadlinesCount(deadlinesCount);
-  }, [returnedProposalsCount, approvedDocuments.length, forwardedTemplates.length, deadlinesCount]);
+    if (category === 'reminders') setSeenRemindersCount(reminders.length);
+  }, [returnedProposalsCount, approvedDocuments.length, forwardedTemplates.length, deadlinesCount, reminders.length]);
 
   const onMarkAllRead = useCallback(() => {
     setSeenApprovedCount(approvedDocuments.length);
     setSeenTemplatesCount(forwardedTemplates.length);
     setSeenReturnedCount(returnedProposalsCount);
     setSeenDeadlinesCount(deadlinesCount);
-  }, [approvedDocuments.length, forwardedTemplates.length, returnedProposalsCount, deadlinesCount]);
+    setSeenRemindersCount(reminders.length);
+  }, [approvedDocuments.length, forwardedTemplates.length, returnedProposalsCount, deadlinesCount, reminders.length]);
 
   const modalProps = useMemo(() => ({
     visible,
@@ -311,17 +356,19 @@ export function useNotificationCenter(barangayId) {
     approvedDocuments,
     forwardedTemplates,
     approachingDeadlines,
+    reminders,
     unviewedCounts: {
       returned: unviewedReturned,
       approved: unviewedApproved,
       templates: unviewedTemplates,
       deadlines: unviewedDeadlines,
+      reminders: unviewedReminders,
     },
     onViewCategory,
     onMarkAllRead,
   }), [
-    visible, close, returnedDocuments, approvedDocuments, forwardedTemplates, approachingDeadlines,
-    unviewedReturned, unviewedApproved, unviewedTemplates, unviewedDeadlines, onViewCategory, onMarkAllRead,
+    visible, close, returnedDocuments, approvedDocuments, forwardedTemplates, approachingDeadlines, reminders,
+    unviewedReturned, unviewedApproved, unviewedTemplates, unviewedDeadlines, unviewedReminders, onViewCategory, onMarkAllRead,
   ]);
 
   return {
@@ -335,16 +382,19 @@ export function useNotificationCenter(barangayId) {
     approvedDocuments,
     forwardedTemplates,
     approachingDeadlines,
+    reminders,
     unviewedCounts: {
       returned: unviewedReturned,
       approved: unviewedApproved,
       templates: unviewedTemplates,
       deadlines: unviewedDeadlines,
+      reminders: unviewedReminders,
     },
     setSeenReturnedCount,
     setSeenApprovedCount,
     setSeenTemplatesCount,
     setSeenDeadlinesCount,
+    setSeenRemindersCount,
     onViewCategory,
     onMarkAllRead,
     modalProps,
@@ -364,14 +414,15 @@ export function NotificationModal({
   approvedDocuments,
   forwardedTemplates,
   approachingDeadlines,
-  unviewedCounts = { returned: 0, approved: 0, templates: 0, deadlines: 0 },
+  reminders,
+  unviewedCounts = { returned: 0, approved: 0, templates: 0, deadlines: 0, reminders: 0 },
   onMarkAllRead,
   onViewCategory,
   onOpenRoute,
 }) {
   const { width, height } = useWindowDimensions();
   const isMobile = width < 768;
-  const TABS = ['all', 'returned', 'approved', 'templates', 'deadlines'];
+  const TABS = ['all', 'returned', 'approved', 'templates', 'deadlines', 'reminders'];
   const [activeTab, setActiveTab] = useState('all');
 
   useEffect(() => {
@@ -446,15 +497,33 @@ export function NotificationModal({
       });
     });
 
+    (reminders || []).forEach((item) => {
+      const itemCount = (item.items || []).length;
+      items.push({
+        id: `reminder-${item.id}`,
+        type: 'reminders',
+        title: item.title || 'Reminder from LYDO',
+        subtitle: item.message
+          ? item.message
+          : itemCount > 0
+            ? `${itemCount} item${itemCount !== 1 ? 's' : ''} flagged`
+            : 'New reminder',
+        rawDate: item.created_at,
+        icon: '📢',
+        accentBg: '#DBEAFE',
+        iconColor: '#2563EB',
+      });
+    });
+
     return items.sort((a, b) => {
       const ta = a.rawDate ? toUtcDate(a.rawDate).getTime() : 0;
       const tb = b.rawDate ? toUtcDate(b.rawDate).getTime() : 0;
       return tb - ta;
     });
-  }, [returnedDocuments, approvedDocuments, forwardedTemplates, approachingDeadlines]);
+  }, [returnedDocuments, approvedDocuments, forwardedTemplates, approachingDeadlines, reminders]);
 
   const counts = React.useMemo(() => {
-    const c = { all: notifications.length, returned: 0, approved: 0, templates: 0, deadlines: 0 };
+    const c = { all: notifications.length, returned: 0, approved: 0, templates: 0, deadlines: 0, reminders: 0 };
     notifications.forEach((n) => { c[n.type] = (c[n.type] || 0) + 1; });
     return c;
   }, [notifications]);
@@ -464,7 +533,8 @@ export function NotificationModal({
     const approved = unviewedCounts.approved || 0;
     const templates = unviewedCounts.templates || 0;
     const deadlines = unviewedCounts.deadlines || 0;
-    return { all: returned + approved + templates + deadlines, returned, approved, templates, deadlines };
+    const reminders = unviewedCounts.reminders || 0;
+    return { all: returned + approved + templates + deadlines + reminders, returned, approved, templates, deadlines, reminders };
   }, [unviewedCounts]);
 
   const filteredNotifications = React.useMemo(() => {
@@ -515,6 +585,8 @@ export function NotificationModal({
         return '/(tabs)/sk-portal';
       case 'deadlines':
         return '/(tabs)/sk-document-management?initialTab=Saved';
+      case 'reminders':
+        return '/(tabs)/sk-document-management';
       default:
         return '/(tabs)/sk-document-management';
     }
@@ -534,7 +606,8 @@ export function NotificationModal({
       : activeTab === 'returned' ? 'Returned'
         : activeTab === 'approved' ? 'Approved'
           : activeTab === 'templates' ? 'Templates'
-            : 'Deadlines';
+            : activeTab === 'deadlines' ? 'Deadlines'
+              : 'Reminders';
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
@@ -617,7 +690,8 @@ export function NotificationModal({
                     : tab === 'returned' ? 'Returned'
                       : tab === 'approved' ? 'Approved'
                         : tab === 'templates' ? 'Templates'
-                          : 'Deadlines';
+                          : tab === 'deadlines' ? 'Deadlines'
+                            : 'Reminders';
                 const totalInTab = counts[tab] || 0;
                 const unviewedInTab = badgeCounts[tab] || 0;
 
@@ -677,7 +751,7 @@ export function NotificationModal({
                 <Text style={notifModalStyles.emptyText}>{"You're all caught up"}</Text>
                 <Text style={notifModalStyles.emptySubText}>
                   {activeTab === 'all'
-                    ? 'No updates from LYDO right now. New returned documents, approvals, templates, and deadline reminders will appear here.'
+                    ? 'No updates from LYDO right now. New returned documents, approvals, templates, deadline reminders, and reminders sent by LYDO will appear here.'
                     : `No ${activeLabel.toLowerCase()} updates right now.`}
                 </Text>
               </View>
@@ -709,13 +783,23 @@ export function NotificationModal({
                       </View>
                       <View style={notifModalStyles.notifContent}>
                         <Text style={notifModalStyles.notifTitle} numberOfLines={2}>{item.title}</Text>
-                        <View style={notifModalStyles.notifBadgeRow}>
-                          <View style={[notifModalStyles.statusPill, { backgroundColor: item.accentBg }]}>
-                            <Text style={[notifModalStyles.statusPillText, { color: item.iconColor }]}>
-                              {item.subtitle}
-                            </Text>
+                        {item.type === 'reminders' ? (
+                          // Reminders carry LYDO's full message text, not a short
+                          // status label — wrap it as body copy instead of forcing
+                          // it into the fixed-height status pill built for labels
+                          // like "Approved by LYDO" (which overflowed the card).
+                          <Text style={notifModalStyles.notifSubtitleWrap} numberOfLines={3}>
+                            {item.subtitle}
+                          </Text>
+                        ) : (
+                          <View style={notifModalStyles.notifBadgeRow}>
+                            <View style={[notifModalStyles.statusPill, { backgroundColor: item.accentBg }]}>
+                              <Text style={[notifModalStyles.statusPillText, { color: item.iconColor }]}>
+                                {item.subtitle}
+                              </Text>
+                            </View>
                           </View>
-                        </View>
+                        )}
                         <View style={notifModalStyles.notifMetaRow}>
                           {rel ? (
                             <>
@@ -898,6 +982,10 @@ const notifModalStyles = StyleSheet.create({
   },
   statusPillText: {
     fontSize: 11.5, fontWeight: '700',
+  },
+  notifSubtitleWrap: {
+    fontSize: 12.5, fontWeight: '500', color: SUB_TEXT,
+    lineHeight: 17, marginBottom: 5,
   },
   notifMetaRow: {
     flexDirection: 'row', alignItems: 'center', gap: 5, flexWrap: 'wrap',

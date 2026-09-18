@@ -1,20 +1,25 @@
 import { useFocusEffect } from 'expo-router';
 import Head from 'expo-router/head';
-import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  View, Text, TextInput, ScrollView, TouchableOpacity,
-  StyleSheet, StatusBar, Dimensions, Image,
+  Dimensions,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text, TextInput,
+  TouchableOpacity,
+  View
 } from 'react-native';
 // SafeAreaView from core 'react-native' is a no-op on Android. Use the
 // context-aware version so insets work on both platforms.
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { useNav } from './navContext';
-import Sidebar, { LYDO_NAV_ITEMS } from './../components/Sidebar';
-import MobileHeader, { MobileHeaderSpacer } from './mobileHeader';
-import { useAuth } from './authContext';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { supabase } from '../../utils/supabase';
-import { useLydoNotificationCenter, LydoNotificationModal, LydoBellIcon } from './notificationCenter';
+import Sidebar, { LYDO_NAV_ITEMS } from './../components/Sidebar';
+import { useAuth } from './authContext';
+import MobileHeader, { MobileHeaderSpacer } from './mobileHeader';
+import { useNav } from './navContext';
+import { LydoBellIcon, LydoNotificationModal, useLydoNotificationCenter } from './notificationCenter';
 
 // Supabase returns timestamps without a timezone suffix (e.g. '2026-05-28 03:50:28').
 // JS treats that as local time, not UTC, causing an 8-hour display error in PHT.
@@ -58,6 +63,7 @@ const ACTION_CONFIG = {
   'Add/replace template':{ bg: '#FFF8E1', text: '#F57F17', border: '#FFE082' },
   'Add account':         { bg: '#E0F7FA', text: '#00695C', border: '#80CBC4' },
   'Add barangay':        { bg: '#F3E5F5', text: '#7B1FA2', border: '#CE93D8' },
+  'Sent Reminder':       { bg: '#DBEAFE', text: '#2563EB', border: '#93C5FD' },
 };
 
 const LEGEND_ITEMS = [
@@ -67,6 +73,7 @@ const LEGEND_ITEMS = [
   { label: 'Add/replace template',color: '#F57F17' },
   { label: 'Add account',         color: '#00695C' },
   { label: 'Add barangay',        color: '#7B1FA2' },
+  { label: 'Sent Reminder',       color: '#2563EB' },
 ];
 
 const ACTION_FILTER_OPTIONS = [
@@ -80,6 +87,7 @@ const ACTION_FILTER_OPTIONS = [
   'Add/replace template',
   'Add account',
   'Add barangay',
+  'Sent Reminder',
 ];
 
 const DATE_RANGES = ['All time', 'Today', 'This week', 'This month', 'Last 3 months'];

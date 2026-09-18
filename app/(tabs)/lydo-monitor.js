@@ -1,5 +1,5 @@
 import { Feather } from '@expo/vector-icons';
-import { useFocusEffect, useRouter, useLocalSearchParams } from 'expo-router';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import Head from 'expo-router/head';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
@@ -7,7 +7,6 @@ import {
   Alert,
   Animated,
   Dimensions,
-  Image,
   KeyboardAvoidingView,
   Linking,
   Modal,
@@ -17,17 +16,17 @@ import {
   StyleSheet,
   Text, TextInput,
   TouchableOpacity,
-  View,
+  View
 } from 'react-native';
 // SafeAreaView from core 'react-native' is a no-op on Android. Use the
 // context-aware version so insets work on both platforms.
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { supabase } from '../../utils/supabase';
-import { useAuth } from './authContext';
-import { useNav } from './navContext';
 import Sidebar, { LYDO_NAV_ITEMS } from './../components/Sidebar';
-import { useLydoNotificationCenter, LydoNotificationModal, LydoBellIcon } from './notificationCenter';
+import { useAuth } from './authContext';
 import MobileHeader, { MobileHeaderSpacer } from './mobileHeader';
+import { useNav } from './navContext';
+import { LydoBellIcon, LydoNotificationModal, useLydoNotificationCenter } from './notificationCenter';
 
 // ─── Mark matching deadline(s) as met when a document is approved ─────────────
 // `documents.document_type` is a full title like
@@ -124,21 +123,9 @@ const COLORS = {
 };
 
 const NAV_TABS     = ['Dashboard', 'Documents', 'Monitor', 'Barangay', 'Logs'];
-const MONITOR_TABS = ['Consultation', 'Budget', 'Report', 'Deadlines'];
+const MONITOR_TABS = ['Consultation', 'Report', 'Deadlines'];
 
-const TABLE_DATA = {
-  Budget: [
-    { id: '1', barangay: 'Barangay Antipolo',   document: 'Annual Budget Proposal 2026',    time: '9:00 AM',  feedbackDate: '1/05/2026', approvedDate: '1/08/2026' },
-    { id: '2', barangay: 'Barangay San Isidro', document: 'Supplemental Budget Request Q1', time: '10:30 AM', feedbackDate: '1/06/2026', approvedDate: null },
-    { id: '3', barangay: 'Barangay Banot',      document: 'SK Fund Utilization Report',     time: '2:00 PM',  feedbackDate: '1/07/2026', approvedDate: null },
-    { id: '4', barangay: 'Barangay Mamala',     document: 'Capital Outlay Budget 2026',     time: '4:00 PM',  feedbackDate: '1/08/2026', approvedDate: '1/10/2026' },
-  ],
-  Report: [
-    { id: '1', barangay: 'Barangay Taquico',  document: 'Q4 2025 Accomplishment Report',                 time: '8:00 AM',  feedbackDate: '1/10/2026', approvedDate: null },
-    { id: '2', barangay: 'Barangay Bayongon', document: 'Activity Documentation — Linggo ng Kabataan',  time: '11:00 AM', feedbackDate: '1/11/2026', approvedDate: '1/14/2026' },
-    { id: '3', barangay: 'Barangay Apasan',   document: 'Minutes of the Meeting — January Session',     time: '1:00 PM',  feedbackDate: '1/12/2026', approvedDate: null },
-  ],
-};
+
 
 // ─── 3-DOT MENU ───────────────────────────────────────────────────────────────
 const ThreeDotMenu = ({ onSave, onEdit, onReturn }) => {

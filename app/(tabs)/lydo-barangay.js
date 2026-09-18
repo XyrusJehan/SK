@@ -1,20 +1,26 @@
-import React, { useState, useEffect, useContext, useRef } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
-  View, Text, TextInput, ScrollView, TouchableOpacity,
-  StyleSheet, StatusBar, Dimensions,
-  Alert, Image, ActivityIndicator,
+  ActivityIndicator,
+  Alert,
+  Dimensions,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text, TextInput,
+  TouchableOpacity,
+  View
 } from 'react-native';
 // SafeAreaView from core 'react-native' is a no-op on Android. Use the
 // context-aware version so insets work on both platforms.
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import Head from 'expo-router/head';
-import { useNav } from './navContext';
-import Sidebar, { LYDO_NAV_ITEMS } from './../components/Sidebar';
-import MobileHeader, { MobileHeaderSpacer } from './mobileHeader';
-import { useAuth } from './authContext';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { supabase } from '../../utils/supabase';
-import { useLydoNotificationCenter, LydoNotificationModal, LydoBellIcon } from './notificationCenter';
+import Sidebar, { LYDO_NAV_ITEMS } from './../components/Sidebar';
+import { useAuth } from './authContext';
+import MobileHeader, { MobileHeaderSpacer } from './mobileHeader';
+import { useNav } from './navContext';
+import { LydoBellIcon, LydoNotificationModal, useLydoNotificationCenter } from './notificationCenter';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const isMobile = SCREEN_WIDTH < 768;
@@ -675,9 +681,9 @@ const styles = StyleSheet.create({
 
   // ── Toolbar ──────────────────────────────────────────────────────────────────
   toolbar:       { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 14 },
-  createBtn:     { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#7BAFD4', borderRadius: 20, paddingHorizontal: 18, paddingVertical: 6, shadowColor: '#7BAFD4', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.35, shadowRadius: 6, elevation: 3 },
-  createBtnPlus: { fontSize: 18, fontWeight: '300', color: COLORS.white, lineHeight: 20 },
-  createBtnText: { fontSize: 14, fontWeight: '500', color: COLORS.white },
+  createBtn:     { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: COLORS.navy, borderRadius: 8, paddingHorizontal: 14, paddingVertical: 7 },
+  createBtnPlus: { fontSize: 13, fontWeight: '700', color: COLORS.white, lineHeight: 16 },
+  createBtnText: { fontSize: 13, fontWeight: '700', color: COLORS.white },
   searchWrap:    { flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.white, borderRadius: 20, borderWidth: 1, borderColor: COLORS.lightGray, paddingHorizontal: 10, paddingVertical: 6, width: isMobile ? 160 : 220 },
   searchIcon:    { fontSize: 12, marginRight: 4 },
   searchInput:   { flex: 1, fontSize: 11, color: COLORS.darkText, padding: 0 },

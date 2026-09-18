@@ -795,13 +795,7 @@ export default function LYDODocumentsScreen({ navigation }) {
                   }}
                   activeOpacity={0.8}
                 >
-                  {/* Mini folder icon */}
-                  <View style={styles.addFolderBtnIconWrap}>
-                    <View style={styles.addFolderBtnFolderTab} />
-                    <View style={styles.addFolderBtnFolderBody}>
-                      <Text style={styles.addFolderBtnPlus}>+</Text>
-                    </View>
-                  </View>
+                  <Text style={styles.addFolderBtnPlus}>+</Text>
                   <Text style={styles.addFolderBtnText}>Add Folder</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
@@ -815,7 +809,8 @@ export default function LYDODocumentsScreen({ navigation }) {
                   }}
                   activeOpacity={0.8}
                 >
-                  <Text style={styles.addFolderBtnText}>➕ Document Type</Text>
+                  <Text style={styles.addFolderBtnPlus}>+</Text>
+                  <Text style={styles.addFolderBtnText}>Document Type</Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -1719,32 +1714,14 @@ const styles = StyleSheet.create({
   addFolderButtonsWrap: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   addFolderButtonsWrapMobile: { flexWrap: 'wrap' },
   addFolderBtn: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
-    backgroundColor: HERO.primary,
-    paddingVertical: 9, paddingHorizontal: 16,
-    borderRadius: HERO.radiusFull,
-    ...HERO.shadowSm,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4,
+    backgroundColor: COLORS.navy,
+    paddingVertical: 7, paddingHorizontal: 14,
+    borderRadius: 8,
   },
   addFolderBtnMobile: { flexGrow: 1, flexBasis: '47%' },
-  addFolderBtnIconWrap: {
-    width: 22, height: 18,
-    justifyContent: 'flex-end',
-  },
-  addFolderBtnFolderTab: {
-    position: 'absolute', top: 0, left: 0,
-    width: 9, height: 5,
-    backgroundColor: 'rgba(255,255,255,0.5)',
-    borderTopLeftRadius: 2, borderTopRightRadius: 3,
-  },
-  addFolderBtnFolderBody: {
-    position: 'absolute', top: 3, left: 0,
-    width: 22, height: 15,
-    backgroundColor: 'rgba(255,255,255,0.25)',
-    borderRadius: 3, borderTopRightRadius: 3, borderTopLeftRadius: 1,
-    alignItems: 'center', justifyContent: 'center',
-  },
   addFolderBtnPlus: {
-    fontSize: 12, fontWeight: '900', color: COLORS.white, lineHeight: 14,
+    fontSize: 15, fontWeight: '700', color: COLORS.white, lineHeight: 16,
   },
   addFolderBtnText: { fontSize: 13, fontWeight: '700', color: COLORS.white, letterSpacing: 0.2 },
 

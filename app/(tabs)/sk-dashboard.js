@@ -896,6 +896,7 @@ export default function HomeScreen({ navigation }) {
           approvedDocuments={notificationCenter.approvedDocuments}
           forwardedTemplates={notificationCenter.forwardedTemplates}
           approachingDeadlines={notificationCenter.approachingDeadlines}
+          reminders={notificationCenter.reminders}
           unviewedCounts={notificationCenter.unviewedCounts}
           onViewCategory={notificationCenter.onViewCategory}
           onMarkAllRead={notificationCenter.onMarkAllRead}
