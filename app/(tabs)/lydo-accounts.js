@@ -1190,9 +1190,9 @@ const styles = StyleSheet.create({
 
   // ── Toolbar ──────────────────────────────────────────────────────────────────
   toolbar: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 14 },
-  createBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#7BAFD4', borderRadius: 20, paddingHorizontal: 18, paddingVertical: 6, shadowColor: '#7BAFD4', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.35, shadowRadius: 6, elevation: 3 },
-  createBtnPlus: { fontSize: 18, fontWeight: '300', color: COLORS.white, lineHeight: 20 },
-  createBtnText: { fontSize: 14, fontWeight: '500', color: COLORS.white },
+  createBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: COLORS.navy, borderRadius: 8, paddingHorizontal: 14, paddingVertical: 7 },
+  createBtnPlus: { fontSize: 13, fontWeight: '700', color: COLORS.white, lineHeight: 16 },
+  createBtnText: { fontSize: 13, fontWeight: '700', color: COLORS.white },
   searchWrap: { flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.white, borderRadius: 20, borderWidth: 1, borderColor: COLORS.lightGray, paddingHorizontal: 10, paddingVertical: 6, width: isMobile ? 160 : 220 },
   searchIcon: { fontSize: 12, marginRight: 4 },
   searchInput: { flex: 1, fontSize: 11, color: COLORS.darkText, padding: 0 },
