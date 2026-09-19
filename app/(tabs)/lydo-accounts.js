@@ -23,8 +23,11 @@ import MobileHeader, { MobileHeaderSpacer } from './mobileHeader';
 import { useNav } from './navContext';
 import { LydoBellIcon, LydoNotificationModal, useLydoNotificationCenter } from './notificationCenter';
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
+const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const isMobile = SCREEN_WIDTH < 768;
+const MODAL_MAX_HEIGHT = SCREEN_HEIGHT * 0.88;
+// Cap for just the scrollable body (header/footer are fixed outside this).
+const MODAL_BODY_MAX_HEIGHT = SCREEN_HEIGHT * 0.6;
 
 // Sum of the fixed column widths below (colBrgy..colPassword) — used so the
 // header + rows share one scrollable width and stay column-aligned.
@@ -455,7 +458,7 @@ const CreateAccountModal = ({ visible, onClose, onSave, barangays }) => {
           <Text style={M.title}>CREATE ACCOUNT FOR SANGGUNIANG KABATAAN OFFICIALS</Text>
         </View>
 
-        <ScrollView showsVerticalScrollIndicator={false} style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 4 }}>
+        <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: MODAL_BODY_MAX_HEIGHT }} contentContainerStyle={{ paddingBottom: 4 }}>
           <View style={M.modalBody}>
 
             {/* ── Two-column form ── */}
@@ -574,7 +577,7 @@ const CreateAccountModal = ({ visible, onClose, onSave, barangays }) => {
 const M = StyleSheet.create({
   // Overlay & modal shell
   overlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center', zIndex: 99999 },
-  modal: { backgroundColor: COLORS.offWhite, borderRadius: 16, width: isMobile ? '96%' : 660, maxHeight: '88%', flexShrink: 1, shadowColor: '#000', shadowOffset: { width: 0, height: 12 }, shadowOpacity: 0.4, shadowRadius: 28, elevation: 28, overflow: 'hidden' },
+  modal: { backgroundColor: COLORS.offWhite, borderRadius: 16, width: isMobile ? '96%' : 660, maxHeight: MODAL_MAX_HEIGHT, flexShrink: 1, shadowColor: '#000', shadowOffset: { width: 0, height: 12 }, shadowOpacity: 0.4, shadowRadius: 28, elevation: 28, overflow: 'hidden' },
 
   // Modal header band
   modalHeader: { backgroundColor: COLORS.navy, paddingHorizontal: 20, paddingTop: 18, paddingBottom: 16 },
