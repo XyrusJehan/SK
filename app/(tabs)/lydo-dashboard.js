@@ -1,22 +1,31 @@
-import React, { useState, useEffect } from 'react';
+import { useFocusEffect, useRouter } from 'expo-router';
+import Head from 'expo-router/head';
+import React, { useEffect, useState } from 'react';
 import {
-  View,
-  Text,
-  ScrollView,
-  TouchableOpacity,
-  StyleSheet,
-  SafeAreaView,
-  StatusBar,
+  ActivityIndicator,
   Alert,
   Dimensions,
-  Image,
   Modal,
-  ActivityIndicator,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
 } from 'react-native';
-import { useRouter } from 'expo-router';
-import { useNav } from './navContext';
 import { useAuth } from './authContext';
+import { useNav } from './navContext';
+// NOTE: SafeAreaView from core 'react-native' only applies inset padding on
+// iOS — it's a documented no-op on Android, which is why content (and the
+// mobile sidebar drawer) rendered underneath the status bar there. The
+// context-aware version below works correctly on both platforms.
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { supabase } from '../../utils/supabase';
+import AnnualComplianceGraph from '../components/AnnualComplianceGraph';
+import TopBarangaysRanking from '../components/TopBarangaysRanking';
+import Sidebar, { LYDO_NAV_ITEMS } from './../components/Sidebar';
+import MobileHeader, { MobileHeaderSpacer } from './mobileHeader';
+import { LydoBellIcon, LydoNotificationModal, useLydoNotificationCenter } from './notificationCenter';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const isMobile = SCREEN_WIDTH < 768;
@@ -44,162 +53,127 @@ const toPhilippineTime = (dateStr, options) => {
   return d.toLocaleTimeString('en-PH', { timeZone: 'Asia/Manila', ...options });
 };
 
+// Helper to get activity type based on action
+const getActivityType = (action) => {
+  if (!action) return 'create';
+  const lower = action.toLowerCase();
+  if (lower.includes('approve') || lower.includes('forward')) return 'approved';
+  if (lower.includes('return')) return 'returned';
+  if (lower.includes('remind')) return 'reminder';
+  if (lower.includes('add') || lower.includes('create')) return 'create';
+  return 'create';
+};
+
+// Helper to get activity icon based on action
+const getActivityIcon = (action) => {
+  if (!action) return '✎';
+  const lower = action.toLowerCase();
+  if (lower.includes('approve')) return '✔';
+  if (lower.includes('forward')) return '▷';
+  if (lower.includes('return')) return '↩';
+  if (lower.includes('remind')) return '📢';
+  if (lower.includes('add template') || lower.includes('replace template')) return '➕';
+  if (lower.includes('add account') || lower.includes('add barangay')) return '👤';
+  return '✎';
+};
+
 // ─── NAV TABS ─────────────────────────────────────────────────────────────────
 const NAV_TABS = ['Dashboard', 'Documents', 'Monitor', 'Barangay', 'Logs'];
 
-const CAL_MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
-const CAL_DOWS = ['SUN','MON','TUE','WED','THU','FRI','SAT'];
-
-// ─── SIDEBAR NAV ICONS (pure React Native Views — no react-native-svg) ────────
-
-// Dashboard: 2×2 grid of rounded squares
-const DashboardIcon = ({ color = '#fff', size = 16 }) => {
-  const s = size * 0.38, gap = size * 0.12, r = size * 0.12;
-  const box = { width: s, height: s, borderRadius: r, backgroundColor: color };
-  return (
-    <View style={{ width: size, height: size, justifyContent: 'center', alignItems: 'center' }}>
-      <View style={{ flexDirection: 'row', gap }}><View style={box} /><View style={box} /></View>
-      <View style={{ height: gap }} />
-      <View style={{ flexDirection: 'row', gap }}><View style={box} /><View style={box} /></View>
-    </View>
-  );
-};
-
-// Documents: file shape with fold + two lines
-const DocumentsIcon = ({ color = '#fff', size = 16 }) => {
-  const w = size * 0.6, h = size * 0.78, fold = size * 0.22;
-  return (
-    <View style={{ width: size, height: size, justifyContent: 'center', alignItems: 'center' }}>
-      <View style={{ width: w, height: h, justifyContent: 'flex-end', paddingBottom: size * 0.08, paddingHorizontal: size * 0.1 }}>
-        <View style={{ position: 'absolute', left: 0, right: 0, top: fold, bottom: 0, borderWidth: 1.5, borderColor: color, borderRadius: size * 0.08 }} />
-        <View style={{ position: 'absolute', top: 0, right: 0, width: fold, height: fold, backgroundColor: color, borderBottomLeftRadius: size * 0.06 }} />
-        <View style={{ position: 'absolute', top: 0, left: 0, width: w - fold, height: fold, borderTopWidth: 1.5, borderLeftWidth: 1.5, borderColor: color, borderTopLeftRadius: size * 0.08 }} />
-        <View style={{ height: 1.5, backgroundColor: color, borderRadius: 1, marginBottom: size * 0.1, width: '80%' }} />
-        <View style={{ height: 1.5, backgroundColor: color, borderRadius: 1, width: '55%' }} />
-      </View>
-    </View>
-  );
-};
-
-// Monitor: simple globe — circle + horizontal line + vertical oval hint
-const MonitorIcon = ({ color = '#fff', size = 16 }) => (
-  <View style={{ width: size, height: size, justifyContent: 'center', alignItems: 'center' }}>
-    <View style={{ width: size * 0.82, height: size * 0.82, borderRadius: size * 0.41, borderWidth: 1.5, borderColor: color, justifyContent: 'center', alignItems: 'center', overflow: 'hidden' }}>
-      <View style={{ position: 'absolute', height: 1.5, width: '100%', backgroundColor: color }} />
-      <View style={{ width: size * 0.38, height: size * 0.78, borderRadius: size * 0.19, borderWidth: 1.5, borderColor: color, backgroundColor: 'transparent' }} />
-    </View>
-  </View>
-);
-
-// Barangay: building/institution icon — base + columns hint
-const BarangayIcon = ({ color = '#fff', size = 16 }) => {
-  const bw = 1.5;
-  return (
-    <View style={{ width: size, height: size, justifyContent: 'center', alignItems: 'center' }}>
-      {/* roof / triangle top */}
-      <View style={{ width: size * 0.82, height: size * 0.22, borderLeftWidth: bw, borderRightWidth: bw, borderTopWidth: bw, borderColor: color, borderTopLeftRadius: size * 0.06, borderTopRightRadius: size * 0.06 }} />
-      {/* body */}
-      <View style={{ width: size * 0.82, height: size * 0.52, borderLeftWidth: bw, borderRightWidth: bw, borderBottomWidth: bw, borderColor: color, flexDirection: 'row', justifyContent: 'space-around', alignItems: 'center', paddingHorizontal: size * 0.08, paddingBottom: size * 0.06 }}>
-        {[0, 1, 2].map(i => (
-          <View key={i} style={{ width: size * 0.1, height: size * 0.36, backgroundColor: color, borderRadius: size * 0.03 }} />
-        ))}
-      </View>
-    </View>
-  );
-};
-
-// Logs: clipboard with lines
-const LogsIcon = ({ color = '#fff', size = 16 }) => (
-  <View style={{ width: size, height: size, justifyContent: 'center', alignItems: 'center' }}>
-    <View style={{ width: size * 0.75, height: size * 0.85, borderWidth: 1.5, borderColor: color, borderRadius: size * 0.1, paddingHorizontal: size * 0.1, paddingVertical: size * 0.1, justifyContent: 'space-around' }}>
-      <View style={{ position: 'absolute', top: -size * 0.08, alignSelf: 'center', width: size * 0.3, height: size * 0.14, backgroundColor: color, borderRadius: size * 0.04 }} />
-      {[0, 1, 2].map(i => (
-        <View key={i} style={{ flexDirection: 'row', alignItems: 'center', gap: size * 0.08, marginTop: i === 0 ? size * 0.1 : 0 }}>
-          <View style={{ width: size * 0.1, height: size * 0.1, borderRadius: size * 0.05, backgroundColor: color }} />
-          <View style={{ flex: 1, height: 1.5, backgroundColor: color, borderRadius: 1 }} />
-        </View>
-      ))}
-    </View>
-  </View>
-);
-
-// Logout: door with arrow
-const LogoutNavIcon = ({ color = '#fff', size = 16 }) => (
-  <View style={{ width: size, height: size, justifyContent: 'center', alignItems: 'center' }}>
-    <View style={{ position: 'absolute', left: 0, top: 0, width: size * 0.55, height: size, borderWidth: 1.5, borderColor: color, borderRadius: size * 0.08 }} />
-    <View style={{ position: 'absolute', right: size * 0.02, width: size * 0.52, height: 1.8, backgroundColor: color, borderRadius: 1 }} />
-    <View style={{ position: 'absolute', right: size * 0.02, width: size * 0.2, height: size * 0.2, borderTopWidth: 1.8, borderRightWidth: 1.8, borderColor: color, transform: [{ rotate: '45deg' }], marginTop: -size * 0.01 }} />
-  </View>
-);
+const CAL_MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+const CAL_DOWS = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
 
 // ─── COLORS ───────────────────────────────────────────────────────────────────
 const COLORS = {
-  navy:       '#133E75',
-  navyDark:   '#0D2B52',
-  white:      '#FFFFFF',
-  offWhite:   '#F7F5F2',
-  lightGray:  '#ECECEC',
-  midGray:    '#B0B8C4',
-  darkText:   '#1A2332',
-  subText:    '#6B7A8F',
-  green:      '#22C55E',
+  navy: '#133E75',
+  navyDark: '#0D2B52',
+  white: '#FFFFFF',
+  offWhite: '#F7F5F2',
+  lightGray: '#ECECEC',
+  midGray: '#B0B8C4',
+  darkText: '#1A2332',
+  subText: '#6B7A8F',
+  green: '#22C55E',
   greenLight: '#DCFCE7',
-  orange:     '#F97316',
-  orangeLight:'#FEF3C7',
-  red:        '#EF4444',
-  redLight:   '#FEE2E2',
-  blue:       '#3B82F6',
-  blueLight:  '#DBEAFE',
-  yellow:     '#EAB308',
-  yellowLight:'#FEF9C3',
-  cardBg:     '#FFFFFF',
-  borderColor:'#E0DDD9',
+  orange: '#F97316',
+  orangeLight: '#FEF3C7',
+  red: '#EF4444',
+  redLight: '#FEE2E2',
+  blue: '#3B82F6',
+  blueLight: '#DBEAFE',
+  yellow: '#EAB308',
+  yellowLight: '#FEF9C3',
+  cardBg: '#FFFFFF',
+  borderColor: '#E0DDD9',
+};
+
+// ─── HEROUI-INSPIRED DESIGN TOKENS ────────────────────────────────────────────
+// Mirrors HeroUI's default theme (neutral "default" scale + semantic colors +
+// radius scale) so RN components read as HeroUI Cards/Chips/Buttons even
+// though the actual HeroUI package can't run on React Native. The app's navy
+// is kept as "primary" so this stays on-brand with the rest of the screen.
+// (Same token set as sk-dashboard.js — kept in sync across both screens.)
+const HERO = {
+  primary: COLORS.navy, primary50: '#EEF3FA', primary100: '#DCE7F4', primary600: '#0F2F58',
+  secondary: '#9353D3', secondary50: '#F2EAFA', secondary100: '#E4D4F4', secondary600: '#6F2DA8',
+  success: '#17C964', success50: '#EFFCF4', success100: '#D7F5E3', success600: '#12A150',
+  warning: '#F5A524', warning50: '#FEF7EC', warning100: '#FCEACB', warning600: '#B45309',
+  danger: '#F31260', danger50: '#FEF0F4',
+  default50: '#FAFAFA', default100: '#F4F4F5', default200: '#E4E4E7', default300: '#D4D4D8',
+  default500: '#71717A', foreground: '#11181C', white: '#FFFFFF',
+  radiusSm: 8, radiusMd: 12, radiusLg: 16, radiusXl: 22, radiusFull: 999,
+  shadowSm: { shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 3, elevation: 2 },
+  shadowMd: { shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.10, shadowRadius: 10, elevation: 6 },
+};
+
+// Chip background / icon color / accent border per tone, for the top stat
+// cards row — same bg50 + color600 pairing as QUICK_ACTION_TONES.
+const STAT_TONES = {
+  primary: { chipBg: HERO.primary50, chipColor: HERO.primary, accent: HERO.primary },
+  success: { chipBg: HERO.success50, chipColor: HERO.success600, accent: HERO.success },
+  warning: { chipBg: HERO.warning50, chipColor: HERO.warning600, accent: HERO.warning },
+  danger: { chipBg: HERO.danger50, chipColor: HERO.danger, accent: HERO.danger },
+};
+
+// Chip background / icon color per activity type, used by the Recent
+// Activity list — same tone pattern as STAT_TONES / QUICK_ACTION_TONES.
+const ACTIVITY_TONES = {
+  approved: { chipBg: HERO.success50, chipColor: HERO.success600 },
+  returned: { chipBg: HERO.warning50, chipColor: HERO.warning600 },
+  reminder: { chipBg: COLORS.blueLight, chipColor: COLORS.blue },
+  create: { chipBg: HERO.primary50, chipColor: HERO.primary },
 };
 
 // ─── MOCK / STATIC DATA ───────────────────────────────────────────────────────
-const MONITORING_TASKS = [
-  { id: '1', description: 'Remind barangays with missing documents', action: 'Send Reminder', actionType: 'reminder' },
-  { id: '2', description: 'Review submitted proposals of SK', action: 'Review Now', actionType: 'review', badge: 3 },
-  { id: '3', description: 'Follow up near deadline submission', action: 'Send Reminder', actionType: 'reminder' },
-  { id: '4', description: 'Review returned proposals of SK', action: 'Review Now', actionType: 'review' },
+// Badge values will be dynamically updated in the render
+const MONITORING_TASKS_BASE = [
+  { id: '1', description: 'Remind barangays with missing documents', action: 'Send Reminder', actionType: 'reminder', badgeProp: 'missingDocs' },
+  { id: '2', description: 'Review submitted proposals of SK', action: 'Review Now', actionType: 'review', badgeProp: 'proposalsForReview', viewFilter: 'submitted' },
+  { id: '3', description: 'Follow up near deadline submission', action: 'Send Reminder', actionType: 'reminder', badgeProp: 'approachingDeadlines' },
+  { id: '4', description: 'Review returned proposals of SK', action: 'Review Now', actionType: 'review', badgeProp: 'forRevision', viewFilter: 'revision' },
 ];
 
+// Tones map to the HeroUI-inspired semantic palette (HERO) rather than raw
+// hex per action — same bg50 + color600 pairing used by the HeroUI-style
+// chips elsewhere in the app.
+const QUICK_ACTION_TONES = {
+  primary: { chipBg: HERO.primary50, chipColor: HERO.primary },
+  warning: { chipBg: HERO.warning50, chipColor: HERO.warning600 },
+  danger: { chipBg: HERO.danger50, chipColor: HERO.danger },
+  default: { chipBg: HERO.default100, chipColor: HERO.default500 },
+};
+
 const QUICK_ACTIONS = [
-  { id: 'consultation', label: 'Consultation', badge: 5, color: COLORS.navy, icon: '💬', route: '/(tabs)/lydo-monitor' },
-  { id: 'budget', label: 'View Budget', color: '#1A2332', icon: '📊', route: '/(tabs)/lydo-monitor-budget' },
-  { id: 'export', label: 'Export  Reports', color: COLORS.navy, icon: '⬇', route: '/(tabs)/lydo-monitor-report' },
-  { id: 'calendar', label: 'View Deadline Calendar', color: '#F97316', icon: '📅', route: null },
-  { id: 'missing', label: 'View Missing Documents', color: '#EF4444', icon: '📄', route: null },
-  { id: 'archive', label: 'View Archive', color: '#6B7A8F', icon: '🗃', route: null },
-  { id: 'task', label: 'Create Task', color: COLORS.navy, icon: null, route: null, fullWidth: true },
+  { id: 'consultation', label: 'Consultation', badgeProp: 'proposalsForReview', tone: 'primary', icon: '💬', route: '/(tabs)/lydo-monitor', viewFilter: 'submitted' },
+  { id: 'budget', label: 'View Budget', tone: 'primary', icon: '📊', route: '/(tabs)/lydo-monitor-budget' },
+  { id: 'export', label: 'Export  Reports', tone: 'primary', icon: '⬇', route: '/(tabs)/lydo-monitor-report' },
+  { id: 'calendar', label: 'View Deadline Calendar', tone: 'warning', icon: '📅', route: null },
+  { id: 'missing', label: 'View Missing Documents', tone: 'danger', icon: '📄', action: 'showMissingDocs' },
+  { id: 'archive', label: 'View Archive', tone: 'default', icon: '🗃', route: null },
+  { id: 'task', label: 'Create Task', tone: 'primary', icon: null, route: null, fullWidth: true },
 ];
 
 // ─── ICON COMPONENTS ──────────────────────────────────────────────────────────
-const BellIcon = ({ hasNotif }) => (
-  <View style={ic.bellWrapper}>
-    <View style={ic.bellBody} />
-    <View style={ic.bellBottom} />
-    {hasNotif && <View style={ic.bellDot} />}
-  </View>
-);
-
-const MenuIcon = () => (
-  <View style={ic.menuIconContainer}>
-    <View style={ic.menuLine} />
-    <View style={ic.menuLine} />
-    <View style={ic.menuLine} />
-  </View>
-);
-
-const ic = StyleSheet.create({
-  menuIconContainer: { width: 20, height: 16, justifyContent: 'space-between' },
-  menuLine: { width: 20, height: 2, backgroundColor: COLORS.navy, borderRadius: 1 },
-  bellWrapper: { width: 20, height: 22, alignItems: 'center' },
-  bellBody: { width: 14, height: 12, borderRadius: 7, borderWidth: 2, borderColor: '#8B0000', marginTop: 4 },
-  bellBottom: { width: 8, height: 4, borderBottomLeftRadius: 4, borderBottomRightRadius: 4, backgroundColor: '#8B0000', marginTop: -1 },
-  bellDot: { position: 'absolute', top: 0, right: 1, width: 7, height: 7, borderRadius: 4, backgroundColor: '#E8C547', borderWidth: 1.5, borderColor: COLORS.white },
-});
-
 // ─── SEGMENTED DONUT CHART (SVG-free, stacked arc rings) ─────────────────────
 //
 // Strategy: render a full circle for each segment, clipped by rotating a
@@ -212,8 +186,8 @@ const ic = StyleSheet.create({
 // accurately reflects proportions.
 const DonutChart = ({ submitted, awaiting, incomplete, total }) => {
   const safeTotal = total > 0 ? total : 1;
-  const submittedPct  = Math.round((submitted  / safeTotal) * 100);
-  const awaitingPct   = Math.round((awaiting   / safeTotal) * 100);
+  const submittedPct = Math.round((submitted / safeTotal) * 100);
+  const awaitingPct = Math.round((awaiting / safeTotal) * 100);
   const incompletePct = Math.max(0, 100 - submittedPct - awaitingPct);
 
   // Determine dominant color per quadrant (top/right/bottom/left) by
@@ -230,10 +204,10 @@ const DonutChart = ({ submitted, awaiting, incomplete, total }) => {
     <View style={{ alignItems: 'center', justifyContent: 'center' }}>
       {/* Segmented ring — 4-border CSS pie trick */}
       <View style={[styles.donutOuter, {
-        borderTopColor:    getQuadrantColor(0),
-        borderRightColor:  getQuadrantColor(25),
+        borderTopColor: getQuadrantColor(0),
+        borderRightColor: getQuadrantColor(25),
         borderBottomColor: getQuadrantColor(50),
-        borderLeftColor:   getQuadrantColor(75),
+        borderLeftColor: getQuadrantColor(75),
       }]}>
         <View style={styles.donutInner}>
           <Text style={styles.donutPercent}>{submittedPct}%</Text>
@@ -243,9 +217,9 @@ const DonutChart = ({ submitted, awaiting, incomplete, total }) => {
 
       {/* Proportional bar under the ring */}
       <View style={styles.donutBar}>
-        {submittedPct  > 0 && <View style={[styles.donutBarSeg, { flex: submittedPct,  backgroundColor: COLORS.green  }]} />}
-        {awaitingPct   > 0 && <View style={[styles.donutBarSeg, { flex: awaitingPct,   backgroundColor: COLORS.yellow }]} />}
-        {incompletePct > 0 && <View style={[styles.donutBarSeg, { flex: incompletePct, backgroundColor: COLORS.red    }]} />}
+        {submittedPct > 0 && <View style={[styles.donutBarSeg, { flex: submittedPct, backgroundColor: COLORS.green }]} />}
+        {awaitingPct > 0 && <View style={[styles.donutBarSeg, { flex: awaitingPct, backgroundColor: COLORS.yellow }]} />}
+        {incompletePct > 0 && <View style={[styles.donutBarSeg, { flex: incompletePct, backgroundColor: COLORS.red }]} />}
       </View>
     </View>
   );
@@ -408,6 +382,15 @@ function CalendarModal({ visible, onClose }) {
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <View style={calStyles.backdrop}>
         <View style={calStyles.modal}>
+          <View style={calStyles.modalHeader}>
+            <View>
+              <Text style={calStyles.modalEyebrow}>COMPLIANCE CALENDAR</Text>
+              <Text style={calStyles.modalTitle}>Annual Compliance Monitoring</Text>
+            </View>
+            <TouchableOpacity style={calStyles.closeBtn} onPress={onClose} activeOpacity={0.75}>
+              <Text style={calStyles.closeBtnText}>✕</Text>
+            </TouchableOpacity>
+          </View>
           <View style={calStyles.body}>
 
             {/* ── Left: Calendar Panel ── */}
@@ -423,20 +406,20 @@ function CalendarModal({ visible, onClose }) {
               </View>
 
               <View style={calStyles.legendRow}>
-                <View style={calStyles.legendItem}>
-                  <View style={[calStyles.legendDot, { backgroundColor: '#22C55E' }]} />
-                  <Text style={calStyles.legendText}>Met</Text>
+                <View style={[calStyles.legendChip, { backgroundColor: HERO.success50 }]}>
+                  <View style={[calStyles.legendDot, { backgroundColor: HERO.success }]} />
+                  <Text style={[calStyles.legendText, { color: HERO.success600 }]}>Met</Text>
                 </View>
-                <View style={calStyles.legendItem}>
-                  <View style={[calStyles.legendDot, { backgroundColor: '#E8A020' }]} />
-                  <Text style={calStyles.legendText}>Pending</Text>
+                <View style={[calStyles.legendChip, { backgroundColor: HERO.warning50 }]}>
+                  <View style={[calStyles.legendDot, { backgroundColor: HERO.warning }]} />
+                  <Text style={[calStyles.legendText, { color: HERO.warning600 }]}>Pending</Text>
                 </View>
-                <View style={calStyles.legendItem}>
+                <View style={[calStyles.legendChip, { backgroundColor: HERO.default100 }]}>
                   <View style={calStyles.legendSplitDot}>
                     <View style={calStyles.legendSplitTop} />
                     <View style={calStyles.legendSplitBottom} />
                   </View>
-                  <Text style={calStyles.legendText}>Partially met</Text>
+                  <Text style={[calStyles.legendText, { color: HERO.default500 }]}>Partially met</Text>
                 </View>
               </View>
 
@@ -566,28 +549,28 @@ function CalendarModal({ visible, onClose }) {
             </View>
 
           </View>
-          <TouchableOpacity style={calStyles.closeBtn} onPress={onClose} activeOpacity={0.8}>
-            <Text style={calStyles.closeBtnText}>✕</Text>
-          </TouchableOpacity>
         </View>
       </View>
     </Modal>
   );
 }
 
-// ─── STAT CARD ────────────────────────────────────────────────────────────────
-const StatCard = ({ icon, value, label, sub, iconBg, iconColor, borderColor }) => (
-  <View style={[styles.statCard, borderColor ? { borderTopWidth: 3, borderTopColor: borderColor } : {}]}>
-    <View style={styles.statCardTop}>
-      <View style={[styles.statIconBox, { backgroundColor: iconBg || COLORS.blueLight }]}>
-        <Text style={[styles.statIcon, { color: iconColor || COLORS.blue }]}>{icon}</Text>
+// Notification modal now lives in notificationCenter.js as LydoNotificationModal (shared).
+
+// ─── STAT CARD (HeroUI-inspired) ─────────────────────────────────────────────
+const StatCard = ({ icon, value, label, sub, tone = 'primary' }) => {
+  const t = STAT_TONES[tone] || STAT_TONES.primary;
+  return (
+    <View style={[styles.heroStatCard, { borderTopColor: t.accent }]}>
+      <View style={[styles.heroStatIconWrap, { backgroundColor: t.chipBg }]}>
+        <Text style={styles.heroStatIcon}>{icon}</Text>
       </View>
+      <Text style={[styles.heroStatValue, { color: t.chipColor }]}>{value}</Text>
+      <Text style={styles.heroStatLabel}>{label}</Text>
+      {sub ? <Text style={styles.heroStatSub}>{sub}</Text> : null}
     </View>
-    <Text style={styles.statValue}>{value}</Text>
-    <Text style={styles.statLabel}>{label}</Text>
-    {sub ? <Text style={styles.statSub}>{sub}</Text> : null}
-  </View>
-);
+  );
+};
 
 // ─── MAIN COMPONENT ───────────────────────────────────────────────────────────
 export default function LYDOHomeScreen() {
@@ -605,9 +588,45 @@ export default function LYDOHomeScreen() {
   const [approved, setApproved] = useState(0);
   const [missingDocs, setMissingDocs] = useState(0);
   const [currentTime, setCurrentTime] = useState('');
-  const [notifCount] = useState(2);
   const [progressData, setProgressData] = useState({ submitted: 0, awaiting: 0, incomplete: 0, total: 0 });
   const [approachingDeadlines, setApproachingDeadlines] = useState([]);
+  const [proposalsForReview, setProposalsForReview] = useState(0);
+  const [consultationsCount, setConsultationsCount] = useState(0);
+  const [lydoActivities, setLydoActivities] = useState([]);
+  const [missingDocsModalVisible, setMissingDocsModalVisible] = useState(false);
+  const [missingDocsList, setMissingDocsList] = useState([]);
+  // Per-barangay breakdown of documents due soon / already overdue — powers
+  // the "Follow up near deadline submission" reminder task, the same way
+  // missingDocsList powers the "missing documents" reminder task.
+  const [nearDeadlineList, setNearDeadlineList] = useState([]);
+  // Subsets of missingDocsList / nearDeadlineList that haven't already been
+  // covered by a reminder LYDO previously sent to that barangay (checked
+  // against the `reminders` table's `meta.items` titles). These — not the
+  // raw lists above — drive the "Send Reminder" badge counts and who
+  // actually gets emailed, so a badge stays gone once a reminder truly went
+  // out instead of reappearing on every refetch/refocus. A barangay reappears
+  // automatically once it has a NEW missing document or deadline that wasn't
+  // part of its last reminder.
+  const [missingDocsPendingList, setMissingDocsPendingList] = useState([]);
+  const [nearDeadlinePendingList, setNearDeadlinePendingList] = useState([]);
+
+  // Reminder preview/confirmation modal — shown before a "Send Reminder"
+  // monitoring task actually goes out, so the LYDO officer can see exactly
+  // which barangays/SK officials will be notified and what the message says.
+  const [reminderModalVisible, setReminderModalVisible] = useState(false);
+  const [reminderModalData, setReminderModalData] = useState({
+    task: null, title: '', message: '', recipients: [], sending: false, sent: false,
+  });
+  // Which "Send Reminder" tasks (by badgeProp) have already been sent this
+  // visit — their badge is hidden immediately after sending rather than
+  // waiting for the underlying data to change. Cleared on every fresh
+  // focus/refetch of the dashboard, so a badge reappears on a later visit
+  // if the barangay still hasn't actually submitted.
+  const [remindedTasks, setRemindedTasks] = useState({});
+
+  // Shared LYDO bell badge + dropdown (documents SK officials submitted for
+  // review). See notificationCenter.js — reused by every LYDO screen.
+  const notif = useLydoNotificationCenter();
 
   useEffect(() => {
     if (user && user.role !== 'lydo') router.replace('/');
@@ -634,92 +653,342 @@ export default function LYDOHomeScreen() {
     return () => clearInterval(interval);
   }, []);
 
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const { data: brgyData } = await supabase
-          .from('barangays')
-          .select('barangay_id', { count: 'exact' });
-        if (brgyData) setTotalBarangays(brgyData.length || 0);
+  // Fetch data when screen is focused - always load latest
+  useFocusEffect(
+    React.useCallback(() => {
+      // A fresh focus/refetch supersedes any "just sent" badge suppression
+      // from a previous visit — badges should reflect the real, current
+      // counts again until the officer sends another reminder this visit.
+      setRemindedTasks({});
+      const fetchData = async () => {
+        try {
+          // Get all barangays with their IDs
+          const { data: brgyData, count: brgyCount } = await supabase
+            .from('barangays')
+            .select('barangay_id', { count: 'exact' });
+          if (brgyCount) setTotalBarangays(brgyCount);
 
-        // Fetch compliance data from documents table
-        const { data: docsData } = await supabase
-          .from('documents')
-          .select('status');
+          // Get full barangay data for compliance calculation
+          const { data: allBarangays } = await supabase
+            .from('barangays')
+            .select('barangay_id');
 
-        if (docsData) {
-          const total = docsData.length;
-          setTotalDocuments(total);
+          const barangayList = allBarangays || [];
 
-          const submitted = docsData.filter(d => d.status === 'submitted').length;
-          const approvedCount = docsData.filter(d => d.status === 'approved').length;
-          const returned = docsData.filter(d => d.status === 'returned').length;
-          const drafts = docsData.filter(d => d.status === 'draft' || d.status === 'saved').length;
+          // Fetch compliance data from documents table
+          const { data: docsData } = await supabase
+            .from('documents')
+            .select('status');
 
-          setApproved(approvedCount);
-          setForRevision(returned);
-          setMissingDocs(total - submitted - approvedCount - returned);
+          if (docsData) {
+            const total = docsData.length;
+            setTotalDocuments(total);
 
-          // Submission Progress: submitted+approved = submitted, returned = incomplete, rest = awaiting
-          const submittedTotal = submitted + approvedCount;
-          const incompleteTotal = returned;
-          const awaitingTotal = Math.max(0, total - submittedTotal - incompleteTotal);
-          setProgressData({
-            submitted: submittedTotal,
-            awaiting: awaitingTotal,
-            incomplete: incompleteTotal,
-            total: total || 1, // avoid division by zero
-          });
-        }
+            const submitted = docsData.filter(d => d.status === 'submitted').length;
+            const approvedCount = docsData.filter(d => d.status === 'approved').length;
+            const returned = docsData.filter(d => d.status === 'returned').length;
+            const drafts = docsData.filter(d => d.status === 'draft' || d.status === 'saved').length;
 
-        // Set compliance data based on actual barangays
-        const totalBrgy = brgyData?.length || 0;
-        setComplianceData([
-          { label: 'Fully Compliant', count: 0, color: COLORS.green },
-          { label: 'With Missing Documents', count: 0, color: COLORS.orange },
-          { label: 'Near Deadline', count: 0, color: COLORS.yellow },
-          { label: 'Overdue', count: 0, color: COLORS.red },
-        ]);
+            setApproved(approvedCount);
+            setForRevision(returned);
+            setMissingDocs(total - submitted - approvedCount - returned);
 
-        const { data: docsData2 } = await supabase
-          .from('documents')
-          .select(`document_id, title, status, created_at, saved_at, submitted_at, barangay:barangays(barangay_name)`)
-          .order('created_at', { ascending: false })
-          .limit(10);
+            // Submission Progress: submitted+approved = submitted, returned = incomplete, rest = awaiting
+            const submittedTotal = submitted + approvedCount;
+            const incompleteTotal = returned;
+            const awaitingTotal = Math.max(0, total - submittedTotal - incompleteTotal);
+            setProgressData({
+              submitted: submittedTotal,
+              awaiting: awaitingTotal,
+              incomplete: incompleteTotal,
+              total: total || 1, // avoid division by zero
+            });
+          }
 
-        if (docsData) {
-          const formatted = docsData.map(doc => {
-            let actionLabel = 'Created document';
-            let actionType = 'create';
-            let icon = '✎';
-            if (doc.status === 'submitted' || doc.status === 'approved') {
-              actionLabel = doc.status === 'approved' ? 'Approved Annual Budget' : 'Sent the ABYIP Template';
-              actionType = 'approved';
-              icon = doc.status === 'approved' ? '✔' : '▷';
-            } else if (doc.status === 'returned') {
-              actionLabel = 'Returned ABYIP Proposal';
-              actionType = 'returned';
-              icon = '↩';
+          // Calculate compliance data based on actual barangay document status
+          // Fetch all documents with barangay info
+          const { data: allDocs } = await supabase
+            .from('documents')
+            .select('document_id, status, title, document_type, barangay_id, barangays(barangay_name)');
+
+          // Fetch all deadlines to determine required documents
+          const { data: allDeadlines } = await supabase
+            .from('submission_deadlines')
+            .select('deadline_id, document_type, description, deadline_date, barangay_id, is_met, barangays(barangay_name)');
+
+          // Get missing documents: barangays that haven't submitted based on deadlines
+          const missingDocsWithBrgy = [];
+
+          // Group deadlines by document type and barangay
+          const deadlineMap = {};
+          (allDeadlines || []).forEach(d => {
+            const key = `${d.barangay_id}-${d.document_type}`;
+            if (!deadlineMap[key]) {
+              deadlineMap[key] = {
+                barangay_id: d.barangay_id,
+                barangay: d.barangays?.barangay_name || 'Unknown',
+                document_type: d.document_type,
+                description: d.description,
+                is_met: d.is_met,
+              };
             }
-            const date = doc.submitted_at || doc.saved_at || doc.created_at;
-            return {
-              id: doc.document_id,
-              label: actionLabel,
-              barangay: doc.barangay?.barangay_name || 'Unknown Barangay',
-              time: toPhilippineTime(date, { hour: '2-digit', minute: '2-digit' }),
-              date: toPhilippineDate(date, { month: 'long', day: 'numeric', year: 'numeric' }),
-              type: actionType,
-              icon,
+          });
+
+          // For each deadline, check if the document was submitted
+          Object.values(deadlineMap).forEach(deadline => {
+            if (!deadline.is_met) {
+              // Check if there's a submitted/approved document for this barangay and document type
+              const submittedDoc = (allDocs || []).find(doc =>
+                doc.barangay_id === deadline.barangay_id &&
+                doc.document_type === deadline.document_type &&
+                (doc.status === 'submitted' || doc.status === 'approved')
+              );
+
+              if (!submittedDoc) {
+                missingDocsWithBrgy.push({
+                  id: `${deadline.barangay_id}-${deadline.document_type}`,
+                  title: deadline.description || deadline.document_type,
+                  barangay: deadline.barangay,
+                  barangay_id: deadline.barangay_id,
+                  status: 'Not Submitted',
+                });
+              }
+            }
+          });
+
+          setMissingDocsList(missingDocsWithBrgy);
+
+          const barangayStats = {};
+
+          // Initialize stats for each barangay
+          barangayList.forEach(brgy => {
+            barangayStats[brgy.barangay_id] = {
+              hasSubmitted: false,
+              hasApproved: false,
+              hasMissing: false,
+              hasOverdue: false,
+              hasNearDeadline: false,
             };
           });
-          setActivities(formatted);
+
+          // Check document statuses per barangay
+          allDocs?.forEach(doc => {
+            if (doc.barangay_id && barangayStats[doc.barangay_id]) {
+              if (doc.status === 'submitted' || doc.status === 'approved') {
+                barangayStats[doc.barangay_id].hasSubmitted = true;
+              }
+              if (doc.status === 'approved') {
+                barangayStats[doc.barangay_id].hasApproved = true;
+              }
+            }
+          });
+
+          // Check deadline status per barangay - use deadlines to determine missing documents
+          const today = new Date();
+          const threeDaysFromNow = new Date(today.getTime() + (3 * 24 * 60 * 60 * 1000));
+
+          // Track which barangays have unfulfilled deadlines (missing documents)
+          const barangaysWithMissing = new Set();
+          // Per-barangay items that are due within the near-deadline window
+          // (or already overdue) and still unsubmitted — used by the
+          // "Follow up near deadline submission" reminder task below.
+          const nearDeadlineWithBrgy = [];
+
+          allDeadlines?.forEach(deadline => {
+            if (deadline.barangay_id && barangayStats[deadline.barangay_id]) {
+              const deadlineDate = new Date(deadline.deadline_date);
+
+              // Check if this deadline is not met (missing document)
+              if (!deadline.is_met) {
+                // Check if there's a submitted/approved document for this deadline
+                const hasDocument = (allDocs || []).some(doc =>
+                  doc.barangay_id === deadline.barangay_id &&
+                  doc.document_type === deadline.document_type &&
+                  (doc.status === 'submitted' || doc.status === 'approved')
+                );
+
+                if (!hasDocument) {
+                  barangayStats[deadline.barangay_id].hasMissing = true;
+                  barangaysWithMissing.add(deadline.barangay_id);
+                }
+
+                if (deadlineDate < today) {
+                  barangayStats[deadline.barangay_id].hasOverdue = true;
+                } else if (deadlineDate <= threeDaysFromNow) {
+                  barangayStats[deadline.barangay_id].hasNearDeadline = true;
+                }
+
+                if (!hasDocument && deadlineDate <= threeDaysFromNow) {
+                  const daysLeft = Math.round((deadlineDate - today) / (24 * 60 * 60 * 1000));
+                  nearDeadlineWithBrgy.push({
+                    id: `${deadline.barangay_id}-${deadline.document_type}-${deadline.deadline_date}`,
+                    title: deadline.description || deadline.document_type,
+                    barangay: deadline.barangays?.barangay_name || 'Unknown',
+                    barangay_id: deadline.barangay_id,
+                    deadline: deadline.deadline_date,
+                    daysLeft,
+                  });
+                }
+              }
+            }
+          });
+
+          setNearDeadlineList(nearDeadlineWithBrgy);
+
+          // Work out which of the missing-doc / near-deadline items above
+          // have already been sent to their barangay in a previous reminder,
+          // so their "Send Reminder" badge doesn't come back just because we
+          // refetched — it should only reflect items LYDO hasn't reminded
+          // anyone about yet. `meta.items` on a reminders row is the exact
+          // list of item titles that reminder covered.
+          try {
+            const { data: sentReminders } = await supabase
+              .from('reminders')
+              .select('barangay_id, type, meta, created_at')
+              .in('type', ['missing_docs', 'deadline'])
+              .order('created_at', { ascending: false });
+
+            // Keep only the latest reminder per barangay+type (results are
+            // already newest-first, so the first one seen per key wins).
+            const lastCoveredTitles = {}; // `${barangay_id}-${type}` -> Set<title>
+            (sentReminders || []).forEach((r) => {
+              const key = `${r.barangay_id}-${r.type}`;
+              if (lastCoveredTitles[key]) return;
+              lastCoveredTitles[key] = new Set((r.meta?.items || []).map((i) => i.title));
+            });
+
+            const stillNeedsReminder = (item, type) => {
+              const covered = lastCoveredTitles[`${item.barangay_id}-${type}`];
+              return !covered || !covered.has(item.title);
+            };
+
+            setMissingDocsPendingList(missingDocsWithBrgy.filter((item) => stillNeedsReminder(item, 'missing_docs')));
+            setNearDeadlinePendingList(nearDeadlineWithBrgy.filter((item) => stillNeedsReminder(item, 'deadline')));
+          } catch (remErr) {
+            console.error('Error checking already-sent reminders:', remErr);
+            // Fall back to the unfiltered lists rather than hiding the task.
+            setMissingDocsPendingList(missingDocsWithBrgy);
+            setNearDeadlinePendingList(nearDeadlineWithBrgy);
+          }
+
+          // Count barangays in each category
+          let fullyCompliant = 0;
+          let withMissingDocs = 0;
+          let nearDeadline = 0;
+          let overdue = 0;
+
+          Object.values(barangayStats).forEach(stats => {
+            if (stats.hasSubmitted || stats.hasApproved) {
+              if (!stats.hasMissing && !stats.hasOverdue && !stats.hasNearDeadline) {
+                fullyCompliant++;
+              }
+            }
+            if (stats.hasMissing) {
+              withMissingDocs++;
+            }
+            if (stats.hasNearDeadline && !stats.hasOverdue) {
+              nearDeadline++;
+            }
+            if (stats.hasOverdue) {
+              overdue++;
+            }
+          });
+
+          setComplianceData([
+            { label: 'Fully Compliant', count: fullyCompliant, color: COLORS.green },
+            { label: 'With Missing Documents', count: withMissingDocs, color: COLORS.orange },
+            { label: 'Near Deadline', count: nearDeadline, color: COLORS.yellow },
+            { label: 'Overdue', count: overdue, color: COLORS.red },
+          ]);
+
+          // Fetch proposals awaiting review (submitted status) - these need LYDO review
+          const { count: submittedCount } = await supabase
+            .from('documents')
+            .select('*', { count: 'exact', head: true })
+            .eq('status', 'submitted');
+          setProposalsForReview(submittedCount || 0);
+
+          // Fetch consultations/meetings that need attention
+          const { count: consultCount } = await supabase
+            .from('consultations')
+            .select('*', { count: 'exact', head: true })
+            .eq('status', 'pending');
+          setConsultationsCount(consultCount || 0);
+
+          const { data: docsData2 } = await supabase
+            .from('documents')
+            .select(`document_id, title, status, created_at, saved_at, submitted_at, barangay:barangays(barangay_name)`)
+            .order('created_at', { ascending: false })
+            .limit(10);
+
+          if (docsData) {
+            const formatted = docsData.map(doc => {
+              let actionLabel = 'Created document';
+              let actionType = 'create';
+              let icon = '✎';
+              if (doc.status === 'submitted' || doc.status === 'approved') {
+                actionLabel = doc.status === 'approved' ? 'Approved Annual Budget' : 'Sent the ABYIP Template';
+                actionType = 'approved';
+                icon = doc.status === 'approved' ? '✔' : '▷';
+              } else if (doc.status === 'returned') {
+                actionLabel = 'Returned ABYIP Proposal';
+                actionType = 'returned';
+                icon = '↩';
+              }
+              const date = doc.submitted_at || doc.saved_at || doc.created_at;
+              return {
+                id: doc.document_id,
+                label: actionLabel,
+                barangay: doc.barangay?.barangay_name || 'Unknown Barangay',
+                time: toPhilippineTime(date, { hour: '2-digit', minute: '2-digit' }),
+                date: toPhilippineDate(date, { month: 'long', day: 'numeric', year: 'numeric' }),
+                type: actionType,
+                icon,
+              };
+            });
+            setActivities(formatted);
+          }
+
+          // Fetch LYDO activity logs for Recent Activity section
+          const { data: lydoLogs, error: lydoLogsError } = await supabase
+            .from('lydo_activity_logs')
+            .select(`
+              id,
+              action,
+              description,
+              created_at,
+              performed_by:users!lydo_activity_logs_user_id_fkey (
+                first_name,
+                last_name
+              )
+            `)
+            .order('created_at', { ascending: false })
+            .limit(10);
+
+          if (lydoLogsError) {
+            console.error('Error fetching LYDO activity logs:', lydoLogsError);
+          } else if (lydoLogs) {
+            const formattedLogs = lydoLogs.map(log => ({
+              id: log.id,
+              label: log.action || 'Action',
+              description: log.description || '',
+              performedBy: log.performed_by
+                ? `${log.performed_by.first_name} ${log.performed_by.last_name}`
+                : 'LYDO Officer',
+              time: toPhilippineTime(log.created_at, { hour: '2-digit', minute: '2-digit' }),
+              date: toPhilippineDate(log.created_at, { month: 'long', day: 'numeric', year: 'numeric' }),
+              type: getActivityType(log.action),
+              icon: getActivityIcon(log.action),
+            }));
+            setLydoActivities(formattedLogs);
+          }
+        } catch (e) {
+          console.error(e);
         }
-      } catch (e) {
-        console.error(e);
-      }
-    };
-    fetchData();
-  }, []);
+      };
+      fetchData();
+    }, [])
+  );
 
   // ── Approaching Deadline card — org-wide, grouped across all barangays ──
   // Each submission_deadlines row is per-barangay, so a single logical
@@ -727,66 +996,68 @@ export default function LYDOHomeScreen() {
   // group those rows by document_type + description + deadline_date and
   // roll them up into submitted/pending counts, matching how the card is
   // meant to be read (e.g. "Submitted: 7/11").
-  useEffect(() => {
-    // Parse a Postgres `date` (YYYY-MM-DD) as a UTC midnight instant, to
-    // avoid local-timezone drift shifting the day by ±1.
-    const parseDateOnly = (dateStr) => {
-      const [y, m, d] = dateStr.toString().slice(0, 10).split('-').map(Number);
-      return Date.UTC(y, m - 1, d);
-    };
+  useFocusEffect(
+    React.useCallback(() => {
+      // Parse a Postgres `date` (YYYY-MM-DD) as a UTC midnight instant, to
+      // avoid local-timezone drift shifting the day by ±1.
+      const parseDateOnly = (dateStr) => {
+        const [y, m, d] = dateStr.toString().slice(0, 10).split('-').map(Number);
+        return Date.UTC(y, m - 1, d);
+      };
 
-    const fetchApproachingDeadlines = async () => {
-      try {
-        const { data, error } = await supabase
-          .from('submission_deadlines')
-          .select('deadline_id, document_type, description, deadline_date, is_met')
-          .order('deadline_date', { ascending: true });
+      const fetchApproachingDeadlines = async () => {
+        try {
+          const { data, error } = await supabase
+            .from('submission_deadlines')
+            .select('deadline_id, document_type, description, deadline_date, is_met')
+            .order('deadline_date', { ascending: true });
 
-        if (error) throw error;
+          if (error) throw error;
 
-        const groups = {};
-        (data || []).forEach((row) => {
-          const key = `${row.document_type}|${row.description}|${row.deadline_date}`;
-          if (!groups[key]) {
-            groups[key] = {
-              id: key,
-              title: row.description || row.document_type,
-              deadline_date: row.deadline_date,
-              total: 0,
-              submitted: 0,
-            };
-          }
-          groups[key].total += 1;
-          if (row.is_met) groups[key].submitted += 1;
-        });
+          const groups = {};
+          (data || []).forEach((row) => {
+            const key = `${row.document_type}|${row.description}|${row.deadline_date}`;
+            if (!groups[key]) {
+              groups[key] = {
+                id: key,
+                title: row.description || row.document_type,
+                deadline_date: row.deadline_date,
+                total: 0,
+                submitted: 0,
+              };
+            }
+            groups[key].total += 1;
+            if (row.is_met) groups[key].submitted += 1;
+          });
 
-        const todayUtc = Date.UTC(new Date().getFullYear(), new Date().getMonth(), new Date().getDate());
-        const approaching = Object.values(groups)
-          .filter((g) => g.submitted < g.total) // only deadlines still pending somewhere
-          .map((g) => {
-            const deadlineUtc = parseDateOnly(g.deadline_date);
-            const daysLeft = Math.round((deadlineUtc - todayUtc) / (24 * 60 * 60 * 1000));
-            return {
-              id: g.id,
-              title: g.title,
-              deadline: new Date(deadlineUtc).toLocaleDateString('en-PH', { timeZone: 'UTC', month: 'long', day: 'numeric', year: 'numeric' }),
-              daysLeft,
-              submitted: g.submitted,
-              total: g.total,
-              pending: g.total - g.submitted,
-              urgent: daysLeft <= 3,
-            };
-          })
-          .sort((a, b) => a.daysLeft - b.daysLeft);
+          const todayUtc = Date.UTC(new Date().getFullYear(), new Date().getMonth(), new Date().getDate());
+          const approaching = Object.values(groups)
+            .filter((g) => g.submitted < g.total) // only deadlines still pending somewhere
+            .map((g) => {
+              const deadlineUtc = parseDateOnly(g.deadline_date);
+              const daysLeft = Math.round((deadlineUtc - todayUtc) / (24 * 60 * 60 * 1000));
+              return {
+                id: g.id,
+                title: g.title,
+                deadline: new Date(deadlineUtc).toLocaleDateString('en-PH', { timeZone: 'UTC', month: 'long', day: 'numeric', year: 'numeric' }),
+                daysLeft,
+                submitted: g.submitted,
+                total: g.total,
+                pending: g.total - g.submitted,
+                urgent: daysLeft <= 3,
+              };
+            })
+            .sort((a, b) => a.daysLeft - b.daysLeft);
 
-        setApproachingDeadlines(approaching);
-      } catch (err) {
-        console.error('Error fetching approaching deadlines:', err);
-      }
-    };
+          setApproachingDeadlines(approaching);
+        } catch (err) {
+          console.error('Error fetching approaching deadlines:', err);
+        }
+      };
 
-    fetchApproachingDeadlines();
-  }, []);
+      fetchApproachingDeadlines();
+    }, [])
+  );
 
   const today = toPhilippineDate(new Date(), { weekday: undefined, month: 'long', day: 'numeric', year: 'numeric' });
 
@@ -796,59 +1067,126 @@ export default function LYDOHomeScreen() {
     if (tab === 'Dashboard') router.push('/(tabs)/lydo-dashboard');
     else if (tab === 'Documents') router.push('/(tabs)/lydo-document');
     else if (tab === 'Monitor') router.push('/(tabs)/lydo-monitor');
-        if (tab === 'Barangay') router.push('/(tabs)/lydo-accounts');
+    if (tab === 'Barangay') router.push('/(tabs)/lydo-accounts');
     if (tab === 'Logs') router.push('/(tabs)/lydo-logs');
   };
 
   const handleLogout = () => { logout(); router.replace('/'); };
 
-  const handleSendReminder = () => Alert.alert('Reminder Sent', 'All non-compliant barangays have been notified.');
+  // Build what a "Send Reminder" task will actually send: who gets it
+  // (grouped by barangay) and the message body, so it can be shown to the
+  // LYDO officer for confirmation before anything goes out.
+  const buildReminderPreview = (task) => {
+    const isDeadlineTask = task.badgeProp === 'approachingDeadlines';
+    const sourceList = isDeadlineTask ? nearDeadlinePendingList : missingDocsPendingList;
 
-  // ── SIDEBAR ──
-  const NAV_ITEMS = [
-    { tab: 'Dashboard', IconComponent: DashboardIcon },
-    { tab: 'Documents', IconComponent: DocumentsIcon },
-    { tab: 'Monitor',   IconComponent: MonitorIcon   },
-    { tab: 'Barangay',  IconComponent: BarangayIcon  },
-    { tab: 'Logs',      IconComponent: LogsIcon      },
-  ];
+    const grouped = {};
+    sourceList.forEach((item) => {
+      // Group by barangay_id (falls back to the name if an item is somehow
+      // missing it) so the reminder we insert is addressed to the right
+      // barangay row, not just matched on display name.
+      const key = item.barangay_id != null ? String(item.barangay_id) : (item.barangay || 'unknown');
+      if (!grouped[key]) grouped[key] = { barangay_id: item.barangay_id, barangay: item.barangay || 'Unknown Barangay', items: [] };
+      grouped[key].items.push(item);
+    });
 
-  const renderSidebar = () => (
-    <View style={styles.sidebar}>
-      <View style={styles.logoPill}>
-        <Image
-          source={require('./../../assets/images/lydo-logo.png')}
-          style={styles.logoImage}
-          resizeMode="contain"
-        />
-      </View>
-      <View style={styles.sidebarSpacer} />
-      {NAV_ITEMS.map(({ tab, IconComponent }) => {
-        const active = activeTab === tab;
-        const iconColor = active ? '#133E75' : 'rgba(255,255,255,0.85)';
-        return (
-          <TouchableOpacity
-            key={tab}
-            style={[styles.navItem, active && styles.navItemActive]}
-            onPress={() => handleNav(tab)}
-            activeOpacity={0.8}
-          >
-            <View style={styles.navItemInner}>
-              <IconComponent color={iconColor} size={16} />
-              <Text style={[styles.navLabel, active && styles.navLabelActive]}>{tab}</Text>
-            </View>
-          </TouchableOpacity>
-        );
-      })}
-      <View style={{ flex: 1 }} />
-      <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout} activeOpacity={0.8}>
-        <View style={styles.navItemInner}>
-          <LogoutNavIcon color="rgba(255,255,255,0.85)" size={16} />
-          <Text style={styles.logoutText}>Logout</Text>
-        </View>
-      </TouchableOpacity>
-    </View>
-  );
+    const recipients = Object.values(grouped).sort((a, b) => a.barangay.localeCompare(b.barangay));
+
+    const title = isDeadlineTask ? 'Deadline Reminder' : 'Missing Document Reminder';
+    const message = isDeadlineTask
+      ? 'Your SK has a submission deadline coming up. Please submit the document(s) below before the due date to avoid being marked overdue.'
+      : 'Your SK has not yet submitted the following required document(s). Please submit as soon as possible.';
+
+    return { task, title, message, recipients };
+  };
+
+  // Open the preview modal instead of sending immediately.
+  const openReminderPreview = (task) => {
+    const preview = buildReminderPreview(task);
+    setReminderModalData({ ...preview, sending: false, sent: false });
+    setReminderModalVisible(true);
+  };
+
+  const closeReminderModal = () => {
+    setReminderModalVisible(false);
+    // Give the close animation room to finish before the content resets, so
+    // the modal doesn't visibly flash back to its initial state mid-fade.
+    setTimeout(() => {
+      setReminderModalData({ task: null, title: '', message: '', recipients: [], sending: false, sent: false });
+    }, 250);
+  };
+
+  // Fires once the LYDO officer confirms the preview. Writes one row per
+  // barangay into the `reminders` table (see reminders.sql) — that table is
+  // what the SK app's notification bell (useNotificationCenter in
+  // notificationCenter.js) polls, so this is what actually gets the
+  // reminder onto the SK side, not just logged on the LYDO side.
+  const confirmSendReminder = async () => {
+    const { task, title, message, recipients } = reminderModalData;
+    if (!recipients.length) return;
+    setReminderModalData((prev) => ({ ...prev, sending: true }));
+
+    const type = task?.badgeProp === 'approachingDeadlines' ? 'deadline' : 'missing_docs';
+    const withBarangayId = recipients.filter((r) => r.barangay_id != null);
+    const skippedCount = recipients.length - withBarangayId.length;
+
+    try {
+      if (withBarangayId.length) {
+        const rows = withBarangayId.map((r) => ({
+          barangay_id: r.barangay_id,
+          created_by: user?.id,
+          type,
+          title,
+          message,
+          meta: {
+            items: r.items.map((i) => ({
+              title: i.title,
+              ...(typeof i.daysLeft === 'number' ? { daysLeft: i.daysLeft } : {}),
+            })),
+          },
+        }));
+        const { error } = await supabase.from('reminders').insert(rows);
+        if (error) throw error;
+      }
+
+      await supabase.from('lydo_activity_logs').insert({
+        action: 'Sent Reminder',
+        description: `Sent "${title}" to ${recipients.length} barangay${recipients.length !== 1 ? 's' : ''}: ${recipients.map((r) => r.barangay).join(', ')}`,
+        user_id: user?.id,
+      });
+    } catch (err) {
+      console.error('Error sending reminder:', err);
+      setReminderModalData((prev) => ({ ...prev, sending: false }));
+      Alert.alert(
+        'Reminder Not Sent',
+        `Something went wrong sending this reminder — it may not have reached SK.\n\n${err?.message || err?.details || 'Unknown error'}`
+      );
+      return;
+    }
+
+    if (skippedCount > 0) {
+      console.warn(`${skippedCount} recipient(s) had no barangay_id and were skipped when sending the reminder.`);
+    }
+
+    // Hide this task's badge immediately — the officer just acted on it.
+    if (task?.badgeProp) {
+      setRemindedTasks((prev) => ({ ...prev, [task.badgeProp]: true }));
+    }
+    setReminderModalData((prev) => ({ ...prev, sending: false, sent: true }));
+  };
+
+  // Handle monitoring task button click
+  const handleMonitoringTask = (task) => {
+    if (task.actionType === 'reminder') {
+      openReminderPreview(task);
+    } else if (task.actionType === 'review' && task.viewFilter) {
+      // Navigate to lydo-monitor with the appropriate filter
+      router.push({
+        pathname: '/(tabs)/lydo-monitor',
+        params: { viewFilter: task.viewFilter },
+      });
+    }
+  };
 
   const activityIconColor = (type) => {
     if (type === 'approved') return COLORS.green;
@@ -857,269 +1195,482 @@ export default function LYDOHomeScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.safe}>
-      <StatusBar barStyle="light-content" backgroundColor={COLORS.navy} />
-      <CalendarModal visible={calendarVisible} onClose={() => setCalendarVisible(false)} />
-      <View style={styles.layout}>
-        {/* Sidebar overlay (mobile) */}
-        {isMobile && sidebarVisible && (
-          <TouchableOpacity style={styles.sidebarOverlay} activeOpacity={1} onPress={() => setSidebarVisible(false)} />
-        )}
-        {isMobile ? (sidebarVisible && renderSidebar()) : renderSidebar()}
+    <>
+      <Head>
+        <title>LYDO Dashboard · SK Monitoring</title>
+      </Head>
+      <SafeAreaView style={styles.safe} edges={isMobile ? ['left', 'right', 'bottom'] : ['top', 'left', 'right', 'bottom']}>
+        <StatusBar barStyle="light-content" backgroundColor={COLORS.navy} />
+        <CalendarModal visible={calendarVisible} onClose={() => setCalendarVisible(false)} />
 
-        {/* ── MAIN CONTENT ── */}
-        <ScrollView
-          style={[styles.main, isMobile && styles.mainMobile]}
-          contentContainerStyle={styles.mainContent}
-          showsVerticalScrollIndicator={false}
-        >
-          {/* Mobile Header */}
-          {isMobile && (
-            <View style={styles.mobileHeader}>
-              <TouchableOpacity style={styles.menuBtn} onPress={() => setSidebarVisible(!sidebarVisible)}>
-                <MenuIcon />
-              </TouchableOpacity>
-              <Text style={styles.mobileTitle}>LYDO Dashboard</Text>
-              <TouchableOpacity style={styles.bellBtn} activeOpacity={0.7}>
-                <BellIcon hasNotif={notifCount > 0} />
-                {notifCount > 0 && (
-                  <View style={styles.notifBadge}>
-                    <Text style={styles.notifBadgeText}>{notifCount}</Text>
+        {/* Notification Modal — lists documents sent by SK officials */}
+        <LydoNotificationModal
+          {...notif.modalProps}
+          onReview={(doc) => {
+            notif.close();
+            router.push({
+              pathname: '/(tabs)/lydo-monitor',
+              params: { viewFilter: 'submitted' },
+            });
+          }}
+        />
+
+        {/* Missing Documents Modal */}
+        <Modal visible={missingDocsModalVisible} transparent animationType="fade" onRequestClose={() => setMissingDocsModalVisible(false)}>
+          <View style={missingModalStyles.backdrop}>
+            <View style={missingModalStyles.modal}>
+              <View style={missingModalStyles.header}>
+                <View style={{ flex: 1 }}>
+                  <Text style={missingModalStyles.title}>Missing Documents</Text>
+                  <Text style={missingModalStyles.subtitle}>
+                    {missingDocsList.length > 0
+                      ? `${missingDocsList.length} document${missingDocsList.length !== 1 ? 's' : ''} not yet submitted`
+                      : 'All barangays are up to date'}
+                  </Text>
+                </View>
+                <TouchableOpacity style={missingModalStyles.closeBtn} onPress={() => setMissingDocsModalVisible(false)} activeOpacity={0.8}>
+                  <Text style={missingModalStyles.closeText}>✕</Text>
+                </TouchableOpacity>
+              </View>
+              <View style={missingModalStyles.divider} />
+
+              <ScrollView
+                style={missingModalStyles.body}
+                contentContainerStyle={missingModalStyles.bodyContent}
+                showsVerticalScrollIndicator={false}
+              >
+                {missingDocsList.length === 0 ? (
+                  <View style={missingModalStyles.emptyState}>
+                    <Text style={missingModalStyles.emptyText}>No missing documents</Text>
+                    <Text style={missingModalStyles.emptySubText}>All barangays have submitted their documents.</Text>
+                  </View>
+                ) : (
+                  <View style={missingModalStyles.list}>
+                    {missingDocsList.map((doc, idx) => (
+                      <View key={doc.id} style={[missingModalStyles.itemRow, idx < missingDocsList.length - 1 && missingModalStyles.itemRowBorder]}>
+                        <View style={missingModalStyles.itemInfo}>
+                          <Text style={missingModalStyles.itemTitle}>{doc.title}</Text>
+                          <Text style={missingModalStyles.itemBarangay}>{doc.barangay}</Text>
+                        </View>
+                        <View style={[missingModalStyles.statusBadge, missingModalStyles.statusNotSubmitted]}>
+                          <Text style={[missingModalStyles.statusText, missingModalStyles.statusNotSubmittedText]}>
+                            Not Submitted
+                          </Text>
+                        </View>
+                      </View>
+                    ))}
                   </View>
                 )}
-              </TouchableOpacity>
+              </ScrollView>
             </View>
-          )}
+          </View>
+        </Modal>
 
-          {/* ── PAGE HEADER ── */}
-          <View style={styles.header}>
-            <View>
-              <Text style={styles.headerSub}>SANGGUNIANG KABATAAN FEDERATION</Text>
-              <Text style={styles.headerTitle}>RIZAL, LAGUNA</Text>
+        {/* Reminder Preview/Confirmation Modal — shown before a "Send
+            Reminder" monitoring task goes out, listing exactly which
+            barangays/SK officials will receive it and what it will say. */}
+        <Modal visible={reminderModalVisible} transparent animationType="fade" onRequestClose={closeReminderModal}>
+          <View style={reminderModalStyles.backdrop}>
+            <View style={reminderModalStyles.modal}>
+              <View style={reminderModalStyles.header}>
+                <View style={{ flex: 1 }}>
+                  <Text style={reminderModalStyles.title}>{reminderModalData.title || 'Reminder'}</Text>
+                  <Text style={reminderModalStyles.subtitle}>
+                    {reminderModalData.sent
+                      ? 'Reminder sent'
+                      : `Will be sent to ${reminderModalData.recipients.length} SK barangay${reminderModalData.recipients.length !== 1 ? 's' : ''}`}
+                  </Text>
+                </View>
+                <TouchableOpacity style={reminderModalStyles.closeBtn} onPress={closeReminderModal} activeOpacity={0.8}>
+                  <Text style={reminderModalStyles.closeText}>✕</Text>
+                </TouchableOpacity>
+              </View>
+              <View style={reminderModalStyles.divider} />
+
+              <ScrollView
+                style={reminderModalStyles.body}
+                contentContainerStyle={reminderModalStyles.bodyContent}
+                showsVerticalScrollIndicator={false}
+              >
+                {reminderModalData.sent ? (
+                  <View style={reminderModalStyles.sentState}>
+                    <Text style={reminderModalStyles.sentIcon}>✅</Text>
+                    <Text style={reminderModalStyles.sentText}>Reminder sent to SK officials</Text>
+                    <Text style={reminderModalStyles.sentSubText}>
+                      {reminderModalData.recipients.map((r) => r.barangay).join(', ')}
+                    </Text>
+                  </View>
+                ) : reminderModalData.recipients.length === 0 ? (
+                  <View style={reminderModalStyles.emptyState}>
+                    <Text style={reminderModalStyles.emptyText}>Nothing to send</Text>
+                    <Text style={reminderModalStyles.emptySubText}>
+                      No barangays are currently missing this requirement.
+                    </Text>
+                  </View>
+                ) : (
+                  <>
+                    <View style={reminderModalStyles.messageBox}>
+                      <Text style={reminderModalStyles.messageLabel}>Message to SK</Text>
+                      <Text style={reminderModalStyles.messageText}>{reminderModalData.message}</Text>
+                    </View>
+
+                    <Text style={reminderModalStyles.recipientsLabel}>
+                      Recipients ({reminderModalData.recipients.length})
+                    </Text>
+                    {reminderModalData.recipients.map((r, idx) => (
+                      <View
+                        key={r.barangay}
+                        style={[
+                          reminderModalStyles.recipientRow,
+                          idx < reminderModalData.recipients.length - 1 && reminderModalStyles.recipientRowBorder,
+                        ]}
+                      >
+                        <Text style={reminderModalStyles.recipientBarangay}>SK {r.barangay}</Text>
+                        {r.items.map((item) => (
+                          <Text key={item.id} style={reminderModalStyles.recipientItem}>
+                            • {item.title}
+                            {typeof item.daysLeft === 'number'
+                              ? item.daysLeft < 0
+                                ? ` (overdue ${Math.abs(item.daysLeft)}d)`
+                                : item.daysLeft === 0
+                                  ? ' (due today)'
+                                  : ` (due in ${item.daysLeft}d)`
+                              : ''}
+                          </Text>
+                        ))}
+                      </View>
+                    ))}
+                  </>
+                )}
+              </ScrollView>
+
+              {!reminderModalData.sent && reminderModalData.recipients.length > 0 && (
+                <View style={reminderModalStyles.footer}>
+                  <TouchableOpacity
+                    style={reminderModalStyles.cancelBtn}
+                    activeOpacity={0.8}
+                    onPress={closeReminderModal}
+                    disabled={reminderModalData.sending}
+                  >
+                    <Text style={reminderModalStyles.cancelBtnText}>Cancel</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[reminderModalStyles.sendBtn, reminderModalData.sending && { opacity: 0.7 }]}
+                    activeOpacity={0.8}
+                    onPress={confirmSendReminder}
+                    disabled={reminderModalData.sending}
+                  >
+                    {reminderModalData.sending ? (
+                      <ActivityIndicator color={COLORS.white} size="small" />
+                    ) : (
+                      <Text style={reminderModalStyles.sendBtnText}>Send Reminder</Text>
+                    )}
+                  </TouchableOpacity>
+                </View>
+              )}
             </View>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-              <View style={styles.datetimeCard}>
-                <View style={styles.datetimeRow}>
-                  <View style={styles.datetimeDivider} />
-                  <View style={styles.datetimeBlock}>
-                    <Text style={styles.datetimeLabel}>DATE</Text>
-                    <Text style={styles.datetimeValue}>{today}</Text>
+          </View>
+        </Modal>
+
+        <View style={styles.layout}>
+          {/* Sidebar overlay (mobile) */}
+          {isMobile && sidebarVisible && (
+            <TouchableOpacity style={styles.sidebarOverlay} activeOpacity={1} onPress={() => setSidebarVisible(false)} />
+          )}
+          <Sidebar
+            activeTab={activeTab}
+            onNavPress={handleNav}
+            onLogout={handleLogout}
+            isMobile={isMobile}
+            sidebarVisible={sidebarVisible}
+            navItems={LYDO_NAV_ITEMS}
+            logoSource={require('./../../assets/images/lydo-logo.png')}
+          />
+
+          {/* ── MAIN CONTENT ── */}
+          <View style={[styles.main, isMobile && styles.mainMobile]}>
+            <MobileHeader
+              title="LYDO Dashboard"
+              onMenuPress={() => setSidebarVisible(!sidebarVisible)}
+              onBellPress={notif.open}
+              bellCount={notif.count}
+              BellIcon={LydoBellIcon}
+
+              colors={COLORS}
+              hidden={isMobile && sidebarVisible}
+            />
+            <ScrollView
+              style={{ flex: 1 }}
+              contentContainerStyle={styles.mainContent}
+              showsVerticalScrollIndicator={false}
+            >
+              <MobileHeaderSpacer />
+
+              {/* ── PAGE HEADER ── */}
+              <View style={styles.header}>
+                <View>
+                  <Text style={styles.headerSub}>SANGGUNIANG KABATAAN FEDERATION</Text>
+                  <Text style={styles.headerTitle}>RIZAL, LAGUNA</Text>
+                </View>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                  <View style={styles.datetimeCard}>
+                    <View style={styles.datetimeRow}>
+                      <View style={styles.datetimeDivider} />
+                      <View style={styles.datetimeBlock}>
+                        <Text style={styles.datetimeLabel}>DATE</Text>
+                        <Text style={styles.datetimeValue}>{today}</Text>
+                      </View>
+                      <View style={styles.datetimeSeparator} />
+                      <View style={[styles.datetimeDivider, { backgroundColor: '#22C55E' }]} />
+                      <View style={styles.datetimeBlock}>
+                        <Text style={styles.datetimeLabel}>TIME (PHT)</Text>
+                        <Text style={[styles.datetimeValue, styles.datetimeTime]}>{currentTime}</Text>
+                      </View>
+                    </View>
                   </View>
-                  <View style={styles.datetimeSeparator} />
-                  <View style={[styles.datetimeDivider, { backgroundColor: '#22C55E' }]} />
-                  <View style={styles.datetimeBlock}>
-                    <Text style={styles.datetimeLabel}>TIME (PHT)</Text>
-                    <Text style={[styles.datetimeValue, styles.datetimeTime]}>{currentTime}</Text>
-                  </View>
+                  <TouchableOpacity style={styles.bellBtn} activeOpacity={0.7} onPress={notif.open}>
+                    <LydoBellIcon count={notif.count} />
+                  </TouchableOpacity>
                 </View>
               </View>
-              <TouchableOpacity style={styles.bellBtn} activeOpacity={0.7}>
-                <BellIcon hasNotif={notifCount > 0} />
-                {notifCount > 0 && (
-                  <View style={styles.notifBadge}>
-                    <Text style={styles.notifBadgeText}>{notifCount}</Text>
+
+              {/* ── STAT CARDS ROW ── */}
+              <View style={isMobile ? styles.statsColumn : styles.statsRow}>
+                <StatCard icon="👥" value={totalBarangays} label="Total Barangay" sub="This Fiscal Year" tone="primary" />
+                <StatCard icon="📄" value={totalDocuments} label="Total Documents" sub="This Fiscal Year" tone="success" />
+                <StatCard icon="✏️" value={forRevision} label="For Revision" tone="warning" />
+                <StatCard icon="✅" value={approved} label="Approved" tone="success" />
+                <StatCard icon="⚠️" value={missingDocs} label="Missing Documents" tone="danger" />
+              </View>
+
+              {/* ── COMPLIANCE + PROGRESS ROW (HeroUI-inspired cards) ── */}
+              <View style={isMobile ? styles.twoColColumn : styles.twoColRow}>
+                {/* Compliance Status */}
+                <View style={[styles.heroCard, styles.flex1]}>
+                  <View style={styles.heroCardHeaderRow}>
+                    <Text style={styles.heroCardTitle}>Barangay Compliance Status</Text>
                   </View>
-                )}
-              </TouchableOpacity>
-            </View>
-          </View>
-
-          {/* ── STAT CARDS ROW ── */}
-          <View style={isMobile ? styles.statsColumn : styles.statsRow}>
-            <StatCard icon="👥" value={totalBarangays} label="Total Barangay" sub="This Fiscal Year" iconBg="#EFF6FF" iconColor={COLORS.navy} />
-            <StatCard icon="📄" value={totalDocuments} label="Total Documents" sub="This Fiscal Year" iconBg="#F0FDF4" iconColor={COLORS.green} />
-            <StatCard icon="✏️" value={forRevision} label="For Revision" iconBg="#FEF3C7" iconColor={COLORS.orange} />
-            <StatCard icon="✅" value={approved} label="Approved" iconBg="#DCFCE7" iconColor={COLORS.green} />
-            <StatCard icon="⚠️" value={missingDocs} label="Missing Documents" iconBg="#FEE2E2" iconColor={COLORS.red} borderColor={COLORS.red} />
-          </View>
-
-          {/* ── COMPLIANCE + PROGRESS ROW ── */}
-          <View style={isMobile ? styles.twoColColumn : styles.twoColRow}>
-            {/* Compliance Status */}
-            <View style={[styles.card, styles.flex1]}>
-              <Text style={styles.cardTitle}>Barangay Compliance Status</Text>
-              <View style={styles.divider} />
-              {complianceData.map((item) => (
-                <View key={item.label} style={styles.complianceRow}>
-                  <View style={[styles.complianceDot, { backgroundColor: item.color }]} />
-                  <Text style={styles.complianceLabel}>{item.label}</Text>
-                  <Text style={[styles.complianceCount, { color: item.color }]}>{item.count}</Text>
-                </View>
-              ))}
-              <View style={styles.divider} />
-              <Text style={styles.complianceTotal}>
-                Total Barangays: {totalBarangays}
-              </Text>
-            </View>
-
-            {/* Submission Progress */}
-            <View style={[styles.card, styles.flex1]}>
-              <Text style={styles.cardTitle}>Submission Progress Overview</Text>
-              <View style={styles.divider} />
-              <View style={styles.progressContent}>
-                <DonutChart
-                  submitted={progressData.submitted}
-                  awaiting={progressData.awaiting}
-                  incomplete={progressData.incomplete}
-                  total={progressData.total}
-                />
-                <View style={styles.progressLegend}>
-                  {[
-                    { label: 'Submitted',          color: COLORS.green,  count: progressData.submitted  },
-                    { label: 'Awaiting Submission', color: COLORS.yellow, count: progressData.awaiting   },
-                    { label: 'Incomplete',          color: COLORS.red,    count: progressData.incomplete },
-                  ].map(l => (
-                    <View key={l.label} style={styles.legendRow}>
-                      <View style={[styles.legendDot, { backgroundColor: l.color }]} />
-                      <Text style={styles.legendLabel}>{l.label}</Text>
-                      <Text style={[styles.legendCount, { color: l.color }]}>{l.count}</Text>
+                  {complianceData.map((item) => (
+                    <View key={item.label} style={styles.complianceRow}>
+                      <View style={[styles.complianceDot, { backgroundColor: item.color }]} />
+                      <Text style={styles.complianceLabel}>{item.label}</Text>
+                      <Text style={[styles.complianceCount, { color: item.color }]}>{item.count}</Text>
                     </View>
                   ))}
-                  <View style={styles.legendDivider} />
-                  <Text style={styles.legendTotal}>Total: {progressData.total}</Text>
-                </View>
-              </View>
-            </View>
-          </View>
-
-          {/* ── APPROACHING DEADLINE ── */}
-          <View style={styles.deadlineCard}>
-            <View style={styles.deadlineHeader}>
-              <View style={styles.deadlineHeaderLeft}>
-                <Text style={styles.deadlineIcon}>⏰</Text>
-                <Text style={styles.deadlineTitle}>Approaching Deadline</Text>
-              </View>
-              <TouchableOpacity>
-                <Text style={styles.viewAll}>View All</Text>
-              </TouchableOpacity>
-            </View>
-            {approachingDeadlines.length > 0 ? (
-              approachingDeadlines.slice(0, 5).map((item) => (
-                <View key={item.id} style={styles.deadlineRow}>
-                  <Text style={styles.deadlineDocTitle}>{item.title}</Text>
-                  <Text style={styles.deadlineDate}>
-                    <Text style={styles.deadlineDateLabel}>Deadline: </Text>
-                    {item.deadline}
-                  </Text>
-                  <Text style={[styles.daysLeft, item.urgent ? styles.daysLeftUrgent : styles.daysLeftNormal]}>
-                    {item.daysLeft < 0
-                      ? `${Math.abs(item.daysLeft)} Day${Math.abs(item.daysLeft) !== 1 ? 's' : ''} Overdue`
-                      : item.daysLeft === 0
-                        ? 'Due Today'
-                        : `${item.daysLeft} Day${item.daysLeft !== 1 ? 's' : ''} Left`}
-                  </Text>
-                  <Text style={styles.deadlineStats}>
-                    <Text style={styles.deadlineStatLabel}>Submitted: </Text>
-                    <Text style={styles.deadlineStatValue}>{item.submitted}/{item.total}</Text>
-                  </Text>
-                  <Text style={styles.deadlineStats}>
-                    <Text style={styles.deadlineStatLabel}>Pending: </Text>
-                    <Text style={styles.deadlineStatValue}>{item.pending}/{item.total}</Text>
+                  <View style={styles.divider} />
+                  <Text style={styles.complianceTotal}>
+                    Total Barangays: {totalBarangays}
                   </Text>
                 </View>
-              ))
-            ) : (
-              <Text style={styles.deadlineEmptyText}>No upcoming deadlines — all barangays are caught up.</Text>
-            )}
-          </View>
 
-          {/* ── BOTTOM TWO COLUMNS ── */}
-          <View style={isMobile ? styles.twoColColumn : styles.twoColRow}>
-            {/* Left: Monitoring Tasks + Recent Activity */}
-            <View style={[styles.flex1_5, { gap: 14 }]}>
-              {/* Monitoring Tasks */}
-              <View style={styles.card}>
-                <Text style={styles.cardTitle}>Monitoring Tasks</Text>
-                <View style={styles.divider} />
-                {MONITORING_TASKS.map((task, idx) => (
-                  <View key={task.id} style={[styles.taskRow, idx < MONITORING_TASKS.length - 1 && styles.taskRowBorder]}>
-                    <Text style={styles.taskDesc}>{task.description}</Text>
-                    <View style={styles.taskBtnWrapper}>
-                      {task.badge ? (
-                        <View style={styles.taskBadge}>
-                          <Text style={styles.taskBadgeText}>{task.badge}</Text>
+                {/* Submission Progress */}
+                <View style={[styles.heroCard, styles.flex1]}>
+                  <View style={styles.heroCardHeaderRow}>
+                    <Text style={styles.heroCardTitle}>Submission Progress Overview</Text>
+                  </View>
+                  <View style={styles.progressContent}>
+                    <DonutChart
+                      submitted={progressData.submitted}
+                      awaiting={progressData.awaiting}
+                      incomplete={progressData.incomplete}
+                      total={progressData.total}
+                    />
+                    <View style={styles.progressLegend}>
+                      {[
+                        { label: 'Submitted', color: COLORS.green, count: progressData.submitted },
+                        { label: 'Awaiting Submission', color: COLORS.yellow, count: progressData.awaiting },
+                        { label: 'Incomplete', color: COLORS.red, count: progressData.incomplete },
+                      ].map(l => (
+                        <View key={l.label} style={styles.legendRow}>
+                          <View style={[styles.legendDot, { backgroundColor: l.color }]} />
+                          <Text style={styles.legendLabel}>{l.label}</Text>
+                          <Text style={[styles.legendCount, { color: l.color }]}>{l.count}</Text>
                         </View>
-                      ) : null}
-                      <TouchableOpacity
-                        style={styles.taskBtn}
-                        onPress={task.actionType === 'reminder' ? handleSendReminder : undefined}
-                        activeOpacity={0.8}
-                      >
-                        <Text style={styles.taskBtnText}>{task.action}</Text>
-                      </TouchableOpacity>
+                      ))}
+                      <View style={styles.legendDivider} />
+                      <Text style={styles.legendTotal}>Total: {progressData.total}</Text>
                     </View>
                   </View>
-                ))}
+                </View>
               </View>
 
-              {/* Recent Activity */}
-              <View style={styles.card}>
-                <View style={styles.cardHeaderRow}>
-                  <Text style={styles.cardTitle}>Recent Activity</Text>
+              {/* Annual Compliance Graph */}
+              <AnnualComplianceGraph />
+
+              {/* ── APPROACHING DEADLINE ── */}
+              <View style={styles.deadlineCard}>
+                <View style={styles.deadlineHeader}>
+                  <View style={styles.deadlineHeaderLeft}>
+                    <Text style={styles.deadlineIcon}>⏰</Text>
+                    <Text style={styles.deadlineTitle}>Approaching Deadline</Text>
+                  </View>
                   <TouchableOpacity>
                     <Text style={styles.viewAll}>View All</Text>
                   </TouchableOpacity>
                 </View>
-                <View style={styles.divider} />
-                {(activities.length > 0 ? activities.slice(0, 3) : [
-                  { id: '1', label: 'Approved Annual Budget', barangay: 'Barangay San Jose', time: '3:00 PM', date: 'May 30, 2026', type: 'approved', icon: '✔' },
-                  { id: '2', label: 'Sent the ABYIP Template', barangay: 'Barangay San Roque', time: '3:00 PM', date: 'May 30, 2026', type: 'create', icon: '▷' },
-                  { id: '3', label: 'Returned ABYIP Proposal', barangay: 'Barangay San José', time: '3:00 PM', date: 'May 30, 2026', type: 'returned', icon: '↩' },
-                ]).map((act, idx, arr) => (
-                  <View key={act.id} style={[styles.activityRow, idx < arr.length - 1 && styles.activityRowBorder]}>
-                    <View style={[styles.activityIconBox, { backgroundColor: activityIconColor(act.type) + '20' }]}>
-                      <Text style={[styles.activityIcon, { color: activityIconColor(act.type) }]}>{act.icon}</Text>
+                {approachingDeadlines.length > 0 ? (
+                  approachingDeadlines.slice(0, 5).map((item) => (
+                    <View key={item.id} style={styles.deadlineRow}>
+                      <Text style={styles.deadlineDocTitle}>{item.title}</Text>
+                      <Text style={styles.deadlineDate}>
+                        <Text style={styles.deadlineDateLabel}>Deadline: </Text>
+                        {item.deadline}
+                      </Text>
+                      <Text style={[styles.daysLeft, item.urgent ? styles.daysLeftUrgent : styles.daysLeftNormal]}>
+                        {item.daysLeft < 0
+                          ? `${Math.abs(item.daysLeft)} Day${Math.abs(item.daysLeft) !== 1 ? 's' : ''} Overdue`
+                          : item.daysLeft === 0
+                            ? 'Due Today'
+                            : `${item.daysLeft} Day${item.daysLeft !== 1 ? 's' : ''} Left`}
+                      </Text>
+                      <Text style={styles.deadlineStats}>
+                        <Text style={styles.deadlineStatLabel}>Submitted: </Text>
+                        <Text style={styles.deadlineStatValue}>{item.submitted}/{item.total}</Text>
+                      </Text>
+                      <Text style={styles.deadlineStats}>
+                        <Text style={styles.deadlineStatLabel}>Pending: </Text>
+                        <Text style={styles.deadlineStatValue}>{item.pending}/{item.total}</Text>
+                      </Text>
                     </View>
-                    <View style={styles.activityInfo}>
-                      <Text style={styles.activityLabel}>{act.label}</Text>
-                      <Text style={styles.activityMeta}>{act.barangay}</Text>
+                  ))
+                ) : (
+                  <Text style={styles.deadlineEmptyText}>No upcoming deadlines — all barangays are caught up.</Text>
+                )}
+              </View>
+
+              {/* ── BOTTOM TWO COLUMNS ── */}
+              <View style={isMobile ? styles.twoColColumn : styles.twoColRow}>
+                {/* Left: Monitoring Tasks + Recent Activity */}
+                <View style={[styles.flex1_5, { gap: 14 }]}>
+                  {/* Monitoring Tasks (HeroUI-inspired) */}
+                  <View style={styles.heroCard}>
+                    <View style={styles.heroCardHeaderRow}>
+                      <Text style={styles.heroCardTitle}>Monitoring Tasks</Text>
                     </View>
-                    <View style={styles.activityTime}>
-                      <Text style={styles.activityDateText}>{act.date}</Text>
-                      <Text style={styles.activityTimeText}>{act.time}</Text>
-                    </View>
+                    {MONITORING_TASKS_BASE.map((task, idx) => {
+                      // Get badge count based on the badgeProp
+                      let badgeCount = 0;
+                      if (task.badgeProp === 'proposalsForReview') badgeCount = proposalsForReview;
+                      else if (task.badgeProp === 'forRevision') badgeCount = forRevision;
+                      // Count barangays still owed a reminder, not just raw
+                      // missing-document/deadline totals — a barangay whose
+                      // current missing items were already covered by a
+                      // reminder we sent shouldn't keep the badge lit.
+                      else if (task.badgeProp === 'missingDocs') badgeCount = new Set(missingDocsPendingList.map(i => i.barangay_id)).size;
+                      else if (task.badgeProp === 'approachingDeadlines') badgeCount = new Set(nearDeadlinePendingList.map(i => i.barangay_id)).size;
+                      // A reminder was just sent for this task this visit —
+                      // suppress its badge until the next real refetch.
+                      if (remindedTasks[task.badgeProp]) badgeCount = 0;
+
+                      return (
+                        <View key={task.id} style={[styles.heroTaskRow, idx < MONITORING_TASKS_BASE.length - 1 && styles.heroTaskRowBorder]}>
+                          <Text style={styles.heroTaskDesc}>{task.description}</Text>
+                          <View style={styles.heroTaskBtnWrapper}>
+                            {badgeCount > 0 && (
+                              <View style={styles.heroTaskBadge}>
+                                <Text style={styles.heroTaskBadgeText}>{badgeCount}</Text>
+                              </View>
+                            )}
+                            <TouchableOpacity
+                              style={styles.heroTaskBtn}
+                              onPress={() => handleMonitoringTask(task)}
+                              activeOpacity={0.8}
+                            >
+                              <Text style={styles.heroTaskBtnText}>{task.action}</Text>
+                            </TouchableOpacity>
+                          </View>
+                        </View>
+                      );
+                    })}
                   </View>
-                ))}
-              </View>
-            </View>
 
-            {/* Right: Quick Actions */}
-            <View style={[styles.card, styles.flex1, { alignSelf: 'flex-start' }]}>
-              <Text style={styles.cardTitle}>Quick Actions</Text>
-              <View style={styles.divider} />
-              <View style={styles.quickGrid}>
-                {QUICK_ACTIONS.filter(a => !a.fullWidth).map((action) => (
-                  <TouchableOpacity
-                    key={action.id}
-                    style={styles.quickBtn}
-                    activeOpacity={0.8}
-                    onPress={() => {
-                      if (action.id === 'calendar') setCalendarVisible(true);
-                      else if (action.route) router.push(action.route);
-                    }}
-                  >
-                    <View style={[styles.quickIconBox, { backgroundColor: action.color + '18' }]}>
-                      <Text style={styles.quickIcon}>{action.icon}</Text>
+                  {/* Recent Activity (HeroUI-inspired) */}
+                  <View style={styles.heroCard}>
+                    <View style={styles.heroCardHeaderRow}>
+                      <Text style={styles.heroCardTitle}>Recent Activity</Text>
+                      <TouchableOpacity onPress={() => router.push('/(tabs)/lydo-logs')}>
+                        <Text style={styles.heroViewAll}>View All</Text>
+                      </TouchableOpacity>
                     </View>
-                    <Text style={styles.quickLabel}>{action.label}</Text>
-                    {action.badge ? (
-                      <View style={styles.quickBadge}>
-                        <Text style={styles.quickBadgeText}>{action.badge}</Text>
-                      </View>
-                    ) : null}
-                  </TouchableOpacity>
-                ))}
-              </View>
-              <TouchableOpacity style={styles.createTaskBtn} activeOpacity={0.8}>
-                <Text style={styles.createTaskText}>Create Task</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
+                    {(lydoActivities.length > 0 ? lydoActivities.slice(0, 3) : [
+                      { id: '1', label: 'No recent activity', description: '', performedBy: '', time: '--:--', date: '--', type: 'create', icon: '✎' },
+                    ]).map((act, idx, arr) => {
+                      const tone = ACTIVITY_TONES[act.type] || ACTIVITY_TONES.create;
+                      return (
+                        <View key={act.id} style={[styles.heroActivityRow, idx < arr.length - 1 && styles.heroActivityRowBorder]}>
+                          <View style={[styles.heroActivityIconBox, { backgroundColor: tone.chipBg }]}>
+                            <Text style={[styles.heroActivityIconText, { color: tone.chipColor }]}>{act.icon}</Text>
+                          </View>
+                          <View style={styles.heroActivityInfo}>
+                            <Text style={styles.heroActivityLabel}>{act.label}</Text>
+                            <Text style={styles.heroActivityMeta}>{act.description || act.performedBy}</Text>
+                          </View>
+                          <View style={styles.heroActivityTime}>
+                            <Text style={styles.heroActivityTimeText}>{act.time}</Text>
+                            <Text style={styles.heroActivityDateText}>{act.date}</Text>
+                          </View>
+                        </View>
+                      );
+                    })}
+                  </View>
+                </View>
 
-          <View style={{ height: 32 }} />
-        </ScrollView>
-      </View>
-    </SafeAreaView>
+                {/* Right: Quick Actions — HeroUI-style chip card */}
+                <View style={[styles.heroQuickCard, styles.flex1, { alignSelf: 'flex-start' }]}>
+                  <View style={styles.heroQuickHeader}>
+                    <Text style={styles.heroQuickEyebrow}>QUICK ACCESS</Text>
+                    <Text style={styles.heroQuickTitle}>Quick Actions</Text>
+                  </View>
+                  <View style={styles.heroQuickGrid}>
+                    {QUICK_ACTIONS.filter(a => !a.fullWidth).map((action) => {
+                      // Get badge count based on the badgeProp
+                      let badgeCount = 0;
+                      if (action.badgeProp === 'proposalsForReview') badgeCount = proposalsForReview;
+                      const tone = QUICK_ACTION_TONES[action.tone] || QUICK_ACTION_TONES.primary;
+
+                      return (
+                        <TouchableOpacity
+                          key={action.id}
+                          style={styles.heroQuickBtn}
+                          activeOpacity={0.7}
+                          onPress={() => {
+                            if (action.id === 'calendar') setCalendarVisible(true);
+                            else if (action.id === 'missing') setMissingDocsModalVisible(true);
+                            else if (action.route) {
+                              // Pass viewFilter param if defined
+                              const params = action.viewFilter ? { viewFilter: action.viewFilter } : {};
+                              router.push({ pathname: action.route, params });
+                            }
+                          }}
+                        >
+                          <View style={[styles.heroQuickIconChip, { backgroundColor: tone.chipBg }]}>
+                            <Text style={[styles.heroQuickIcon, { color: tone.chipColor }]}>{action.icon}</Text>
+                          </View>
+                          <Text style={styles.heroQuickLabel} numberOfLines={2}>{action.label}</Text>
+                          {badgeCount > 0 && (
+                            <View style={styles.heroQuickBadge}>
+                              <Text style={styles.heroQuickBadgeText}>{badgeCount > 9 ? '9+' : badgeCount}</Text>
+                            </View>
+                          )}
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                  <TouchableOpacity style={styles.heroCreateTaskBtn} activeOpacity={0.8}>
+                    <Text style={styles.heroCreateTaskText}>Create Task</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+
+              {/* Top Barangays Ranking */}
+              <TopBarangaysRanking />
+
+              <View style={{ height: 32 }} />
+            </ScrollView>
+          </View>
+        </View>
+      </SafeAreaView>
+    </>
   );
 }
 
@@ -1129,62 +1680,15 @@ const styles = StyleSheet.create({
   layout: { flex: 1, flexDirection: 'row' },
 
   // Sidebar
-  sidebar: {
-    width: 250,
-    backgroundColor: COLORS.navy,
-    alignItems: 'center',
-    paddingTop: 20,
-    paddingBottom: 24,
-    paddingHorizontal: 10,
-    zIndex: 10,
-  },
   sidebarOverlay: {
     position: 'absolute', left: 0, top: 0, bottom: 0, right: 0,
     backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 5,
   },
-  logoPill: {
-    marginTop: 20,
-    width: 70, height: 70, borderRadius: 35,
-    backgroundColor: 'rgba(255,255,255,0.15)',
-    alignItems: 'center', justifyContent: 'center',
-    marginBottom: 8, borderWidth: 2, borderColor: 'rgba(255,255,255,0.3)',
-  },
-  logoImage: { width: 110, height: 110 },
-  sidebarSpacer: { height: 28 },
-  navItem: {
-    width: '100%', paddingVertical: 12, paddingHorizontal: 12,
-    borderRadius: 24, marginBottom: 8, alignItems: 'center',
-    borderWidth: 1.5, borderColor: COLORS.white,
-    backgroundColor: COLORS.navy,
-  },
-  navItemInner: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  navItemActive: { backgroundColor: COLORS.white, borderColor: '#000' },
-  navLabel: { fontSize: 13, fontWeight: '600', color: COLORS.white, letterSpacing: 0.3 },
-  navLabelActive: { color: '#000', fontWeight: '800' },
-  logoutBtn: {
-    width: '100%', paddingVertical: 12, paddingHorizontal: 12,
-    borderRadius: 24, marginTop: 8, alignItems: 'center',
-    borderWidth: 1.5, borderColor: COLORS.white,
-    backgroundColor: 'rgba(255,255,255,0.1)',
-  },
-  logoutText: { fontSize: 13, fontWeight: '600', color: COLORS.white, letterSpacing: 0.3 },
 
   // Main
   main: { flex: 1, backgroundColor: COLORS.offWhite, borderTopLeftRadius: 20 },
   mainMobile: { borderTopLeftRadius: 0 },
   mainContent: { padding: 20, paddingBottom: 40 },
-
-  // Mobile Header
-  mobileHeader: {
-    flexDirection: 'row', alignItems: 'center',
-    justifyContent: 'space-between', marginBottom: 16,
-    paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: COLORS.lightGray,
-  },
-  menuBtn: {
-    width: 40, height: 40, borderRadius: 20,
-    backgroundColor: COLORS.cardBg, alignItems: 'center', justifyContent: 'center',
-  },
-  mobileTitle: { fontSize: 18, fontWeight: '800', color: COLORS.darkText },
 
   // Desktop Header
   header: {
@@ -1195,7 +1699,10 @@ const styles = StyleSheet.create({
     fontSize: 10, fontWeight: '600', color: COLORS.subText,
     letterSpacing: 2, textTransform: 'uppercase', marginBottom: 2,
   },
-  headerTitle: { fontSize: 20, fontWeight: '900', color: COLORS.darkText, letterSpacing: 0.5 },
+  headerTitle: {
+    fontSize: 20, fontWeight: '900', color: COLORS.darkText, letterSpacing: 0.5,
+    borderBottomWidth: 2, borderBottomColor: COLORS.lightGray, paddingBottom: 4, marginBottom: 6,
+  },
   datetimeCard: {
     backgroundColor: '#F7F5F2',
     borderRadius: 12,
@@ -1251,50 +1758,40 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
 
-  // Bell
+  // Bell — unread-count badge lives in LydoBellIcon (notificationCenter.js);
+  // only the button containers are styled here.
   bellBtn: {
     width: 40, height: 40, borderRadius: 20,
-    backgroundColor: COLORS.cardBg, alignItems: 'center', justifyContent: 'center',
-    shadowColor: 'rgba(0,0,0,0.08)', shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 1, shadowRadius: 6, elevation: 3,
+    backgroundColor: COLORS.white, alignItems: 'center', justifyContent: 'center',
+    shadowColor: COLORS.navy, shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15, shadowRadius: 6, elevation: 3,
   },
-  notifBadge: {
-    position: 'absolute', top: -2, right: -2,
-    width: 16, height: 16, borderRadius: 8,
-    backgroundColor: '#E8C547', alignItems: 'center', justifyContent: 'center',
-    borderWidth: 1.5, borderColor: COLORS.white,
-  },
-  notifBadgeText: { fontSize: 8, fontWeight: '900', color: '#133E75' },
 
-  // Stat Cards
+  // ── Stat Cards (HeroUI-inspired) ──
   statsRow: { flexDirection: 'row', gap: 10, marginBottom: 18, flexWrap: 'wrap' },
   statsColumn: { flexDirection: 'column', gap: 10, marginBottom: 18 },
-  statCard: {
+  heroStatCard: {
     flex: 1, minWidth: isMobile ? '100%' : 120,
-    backgroundColor: COLORS.cardBg, borderRadius: 14,
-    padding: 14, borderWidth: 1, borderColor: COLORS.borderColor,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06, shadowRadius: 8, elevation: 2,
+    backgroundColor: HERO.white, borderRadius: HERO.radiusLg,
+    padding: 14, borderWidth: 1, borderColor: HERO.default200,
+    borderTopWidth: 3,
+    ...HERO.shadowSm,
   },
-  statCardTop: { marginBottom: 8 },
-  statIconBox: {
-    width: 36, height: 36, borderRadius: 10,
-    alignItems: 'center', justifyContent: 'center',
-  },
-  statIcon: { fontSize: 18 },
-  statValue: { fontSize: 28, fontWeight: '900', color: COLORS.darkText, lineHeight: 34 },
-  statLabel: { fontSize: 12, fontWeight: '600', color: COLORS.darkText, marginTop: 2 },
-  statSub: { fontSize: 11, color: COLORS.navy, fontWeight: '500', marginTop: 2 },
+  heroStatIconWrap: { width: 36, height: 36, borderRadius: HERO.radiusMd, alignItems: 'center', justifyContent: 'center', marginBottom: 8 },
+  heroStatIcon: { fontSize: 18 },
+  heroStatValue: { fontSize: 28, fontWeight: '900', lineHeight: 34 },
+  heroStatLabel: { fontSize: 12, fontWeight: '700', color: HERO.foreground, marginTop: 2 },
+  heroStatSub: { fontSize: 10.5, fontWeight: '700', color: HERO.default500, letterSpacing: 0.4, marginTop: 2, textTransform: 'uppercase' },
 
-  // Card
-  card: {
-    backgroundColor: COLORS.cardBg, borderRadius: 14, padding: 16,
-    borderWidth: 1, borderColor: COLORS.borderColor,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06, shadowRadius: 8, elevation: 2,
+  // ── Generic Card (HeroUI-inspired) ──
+  heroCard: {
+    backgroundColor: HERO.white, borderRadius: HERO.radiusXl, padding: 18,
+    borderWidth: 1, borderColor: HERO.default200,
+    ...HERO.shadowMd,
   },
-  cardTitle: { fontSize: 15, fontWeight: '800', color: COLORS.darkText, marginBottom: 0 },
-  cardHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  heroCardHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
+  heroCardTitle: { fontSize: 16, fontWeight: '800', color: HERO.foreground },
+  heroViewAll: { fontSize: 12.5, fontWeight: '700', color: HERO.primary },
   divider: { height: 1, backgroundColor: COLORS.borderColor, marginVertical: 12 },
 
   // Two Col
@@ -1368,225 +1865,373 @@ const styles = StyleSheet.create({
   deadlineStatLabel: { fontWeight: '700', color: COLORS.navy },
   deadlineStatValue: { fontWeight: '600' },
 
-  // Monitoring Tasks
-  taskRow: {
-    flexDirection: 'row', alignItems: 'center',
-    paddingVertical: 14, gap: 10,
+  // ── Monitoring Tasks (HeroUI-inspired) ──
+  heroTaskRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 14, gap: 10 },
+  heroTaskRowBorder: { borderBottomWidth: 1, borderBottomColor: HERO.default200 },
+  heroTaskDesc: { flex: 1, fontSize: 13, color: HERO.foreground, lineHeight: 19 },
+  heroTaskBtnWrapper: { flexDirection: 'row', alignItems: 'center' },
+  heroTaskBtn: {
+    paddingHorizontal: 16, paddingVertical: 8, borderRadius: HERO.radiusFull,
+    borderWidth: 1, borderColor: HERO.primary100, backgroundColor: HERO.primary50,
   },
-  taskRowBorder: { borderBottomWidth: 1, borderBottomColor: COLORS.borderColor },
-  taskDesc: { flex: 1, fontSize: 13, color: COLORS.darkText, lineHeight: 19 },
-  taskBtnWrapper: { flexDirection: 'row', alignItems: 'center' },
-  taskBtn: {
-    paddingHorizontal: 16, paddingVertical: 8,
-    borderRadius: 20, borderWidth: 1.5,
-    borderColor: COLORS.navy, backgroundColor: COLORS.white,
-  },
-  taskBtnText: { fontSize: 12, fontWeight: '700', color: COLORS.navy, letterSpacing: 0.2 },
-  taskBadge: {
-    width: 20, height: 20, borderRadius: 10,
-    backgroundColor: COLORS.red,
+  heroTaskBtnText: { fontSize: 12, fontWeight: '700', color: HERO.primary, letterSpacing: 0.2 },
+  heroTaskBadge: {
+    width: 20, height: 20, borderRadius: HERO.radiusFull,
+    backgroundColor: HERO.danger,
     alignItems: 'center', justifyContent: 'center',
     marginRight: 6,
   },
-  taskBadgeText: { fontSize: 10, fontWeight: '800', color: COLORS.white },
+  heroTaskBadgeText: { fontSize: 10, fontWeight: '800', color: HERO.white },
 
-  // Activity
-  activityRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, gap: 10 },
-  activityRowBorder: { borderBottomWidth: 1, borderBottomColor: COLORS.borderColor },
-  activityIconBox: { width: 34, height: 34, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
-  activityIcon: { fontSize: 15, fontWeight: '700' },
-  activityInfo: { flex: 1 },
-  activityLabel: { fontSize: 13, fontWeight: '600', color: COLORS.darkText, lineHeight: 18 },
-  activityMeta: { fontSize: 11, color: COLORS.subText, marginTop: 2 },
-  activityTime: { alignItems: 'flex-end' },
-  activityTimeText: { fontSize: 12, fontWeight: '700', color: COLORS.darkText },
-  activityDateText: { fontSize: 11, color: COLORS.subText, marginTop: 1 },
+  // ── Recent Activity (HeroUI-inspired) ──
+  heroActivityRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, gap: 10 },
+  heroActivityRowBorder: { borderBottomWidth: 1, borderBottomColor: HERO.default200 },
+  heroActivityIconBox: { width: 36, height: 36, borderRadius: HERO.radiusMd, alignItems: 'center', justifyContent: 'center' },
+  heroActivityIconText: { fontSize: 15, fontWeight: '700' },
+  heroActivityInfo: { flex: 1 },
+  heroActivityLabel: { fontSize: 13, fontWeight: '700', color: HERO.foreground, lineHeight: 18 },
+  heroActivityMeta: { fontSize: 11, color: HERO.default500, marginTop: 2 },
+  heroActivityTime: { alignItems: 'flex-end' },
+  heroActivityTimeText: { fontSize: 12, fontWeight: '700', color: HERO.foreground },
+  heroActivityDateText: { fontSize: 11, color: HERO.default500, marginTop: 1 },
 
-  // Quick Actions
-  quickGrid: {
-    flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 10,
+  // ── Quick Actions (HeroUI-inspired card) ──
+  heroQuickCard: {
+    backgroundColor: HERO.white, borderRadius: HERO.radiusXl, padding: 18,
+    borderWidth: 1, borderColor: HERO.default200,
+    ...HERO.shadowMd,
   },
-  quickBtn: {
+  heroQuickHeader: { marginBottom: 14 },
+  heroQuickEyebrow: { fontSize: 10, fontWeight: '700', color: HERO.default500, letterSpacing: 1.2, marginBottom: 2 },
+  heroQuickTitle: { fontSize: 16, fontWeight: '800', color: HERO.foreground },
+  heroQuickGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  heroQuickBtn: {
     width: '47%', flexDirection: 'row', alignItems: 'center',
-    backgroundColor: COLORS.white, borderRadius: 14, padding: 14, gap: 10,
-    borderWidth: 1.5, borderColor: COLORS.borderColor,
-    position: 'relative', minHeight: 60,
+    backgroundColor: HERO.default50, borderRadius: HERO.radiusLg, padding: 12, gap: 10,
+    borderWidth: 1, borderColor: HERO.default200,
+    position: 'relative', minHeight: 58,
   },
-  quickIconBox: {
-    width: 40, height: 40, borderRadius: 10,
+  heroQuickIconChip: {
+    width: 38, height: 38, borderRadius: HERO.radiusMd,
     alignItems: 'center', justifyContent: 'center',
   },
-  quickIcon: { fontSize: 20 },
-  quickBadge: {
-    position: 'absolute', top: 8, right: 10,
-    backgroundColor: COLORS.red, borderRadius: 10,
+  heroQuickIcon: { fontSize: 17 },
+  heroQuickLabel: { flex: 1, fontSize: 12, fontWeight: '700', color: HERO.foreground, lineHeight: 16 },
+  heroQuickBadge: {
+    position: 'absolute', top: -6, right: -6,
+    backgroundColor: HERO.danger, borderRadius: HERO.radiusFull,
     minWidth: 20, height: 20, alignItems: 'center', justifyContent: 'center',
-    paddingHorizontal: 4,
+    paddingHorizontal: 4, borderWidth: 2, borderColor: HERO.white,
   },
-  quickBadgeText: { fontSize: 11, fontWeight: '800', color: COLORS.white },
-  quickLabel: { flex: 1, fontSize: 13, fontWeight: '700', color: COLORS.darkText, lineHeight: 18 },
-  createTaskBtn: {
-    backgroundColor: COLORS.white, borderRadius: 14, paddingVertical: 16,
-    alignItems: 'center', borderWidth: 1.5, borderColor: COLORS.borderColor, marginTop: 4,
+  heroQuickBadgeText: { fontSize: 10.5, fontWeight: '800', color: HERO.white },
+  heroCreateTaskBtn: {
+    backgroundColor: HERO.primary50, borderRadius: HERO.radiusLg, paddingVertical: 14,
+    alignItems: 'center', borderWidth: 1, borderColor: HERO.primary100, marginTop: 14,
   },
-  createTaskText: { fontSize: 14, fontWeight: '700', color: COLORS.darkText },
+  heroCreateTaskText: { fontSize: 13.5, fontWeight: '700', color: HERO.primary },
 });
 
-// ─── CALENDAR STYLES ──────────────────────────────────────────────────────────
+// ─── CALENDAR STYLES (HeroUI-inspired, mirrors sk-dashboard.js) ──────────────
 const calStyles = StyleSheet.create({
   backdrop: {
-    flex: 1, backgroundColor: 'rgba(0,0,0,0.65)',
+    flex: 1, backgroundColor: 'rgba(17,24,28,0.6)',
     justifyContent: 'center', alignItems: 'center', padding: 24,
   },
   modal: {
-    backgroundColor: COLORS.navy, borderRadius: 20,
-    width: isMobile ? '100%' : 940, maxWidth: 940, padding: 16,
-    position: 'relative',
+    backgroundColor: HERO.default50, borderRadius: HERO.radiusXl,
+    width: isMobile ? '100%' : 960, maxWidth: 960, padding: isMobile ? 14 : 18,
+    borderWidth: 1, borderColor: HERO.default200,
+    ...HERO.shadowMd,
   },
+
+  /* Header — HeroUI ModalHeader: eyebrow + title, icon-only close button */
+  modalHeader: {
+    flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between',
+    marginBottom: 14,
+  },
+  modalEyebrow: {
+    fontSize: 10, fontWeight: '700', color: HERO.default500,
+    letterSpacing: 1.2, marginBottom: 2,
+  },
+  modalTitle: { fontSize: 17, fontWeight: '800', color: HERO.foreground },
   closeBtn: {
-    position: 'absolute', top: -14, right: -14,
-    width: 32, height: 32, borderRadius: 16,
-    backgroundColor: COLORS.white,
+    width: 32, height: 32, borderRadius: HERO.radiusFull,
+    backgroundColor: HERO.white, borderWidth: 1, borderColor: HERO.default200,
     alignItems: 'center', justifyContent: 'center',
-    shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.25, shadowRadius: 4, elevation: 6,
+    ...HERO.shadowSm,
   },
-  closeBtnText: { color: COLORS.navy, fontSize: 14, fontWeight: '800' },
+  closeBtnText: { color: HERO.default500, fontSize: 13, fontWeight: '800' },
+
   body: { flexDirection: isMobile ? 'column' : 'row', gap: 14 },
 
   /* ── Left: Calendar panel ── */
   calPanel: {
     flex: isMobile ? undefined : 1,
-    backgroundColor: COLORS.white, borderRadius: 16,
+    backgroundColor: HERO.white, borderRadius: HERO.radiusLg,
     padding: isMobile ? 14 : 18,
+    borderWidth: 1, borderColor: HERO.default200,
   },
   calNav: {
     flexDirection: 'row', alignItems: 'center',
-    justifyContent: 'space-between', marginBottom: 12,
+    justifyContent: 'space-between', marginBottom: 14,
   },
   navBtn: {
-    width: 32, height: 32, borderRadius: 16,
-    backgroundColor: COLORS.offWhite,
+    width: 32, height: 32, borderRadius: HERO.radiusFull,
+    backgroundColor: HERO.default100, borderWidth: 1, borderColor: HERO.default200,
     alignItems: 'center', justifyContent: 'center',
   },
-  navArrow: { fontSize: 18, color: COLORS.navy, lineHeight: 20, fontWeight: '800' },
+  navArrow: { fontSize: 18, color: HERO.foreground, lineHeight: 20, fontWeight: '800' },
   monthLabel: {
-    fontSize: isMobile ? 14 : 16, fontWeight: '800',
-    color: COLORS.navy, letterSpacing: 1,
+    fontSize: isMobile ? 13.5 : 15, fontWeight: '800',
+    color: HERO.foreground, letterSpacing: 0.8,
   },
 
-  /* Legend */
+  /* Legend — HeroUI-style chips */
   legendRow: {
-    flexDirection: 'row', alignItems: 'center', gap: 16,
-    marginBottom: 12, paddingBottom: 12,
-    borderBottomWidth: 1, borderBottomColor: COLORS.lightGray,
+    flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap',
+    marginBottom: 14, paddingBottom: 14,
+    borderBottomWidth: 1, borderBottomColor: HERO.default200,
   },
-  legendItem: { flexDirection: 'row', alignItems: 'center', gap: 5 },
-  legendDot: { width: 8, height: 8, borderRadius: 4 },
-  legendSplitDot: { width: 8, height: 8, borderRadius: 4, overflow: 'hidden' },
-  legendSplitTop: { height: '50%', backgroundColor: '#22C55E' },
-  legendSplitBottom: { height: '50%', backgroundColor: '#E8A020' },
-  legendText: { fontSize: 11, fontWeight: '600', color: COLORS.subText },
+  legendChip: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    paddingHorizontal: 10, paddingVertical: 5, borderRadius: HERO.radiusFull,
+  },
+  legendDot: { width: 7, height: 7, borderRadius: 3.5 },
+  legendSplitDot: {
+    width: 7, height: 7, borderRadius: 3.5, overflow: 'hidden',
+  },
+  legendSplitTop: { height: '50%', backgroundColor: HERO.success },
+  legendSplitBottom: { height: '50%', backgroundColor: HERO.warning },
+  legendText: { fontSize: 11, fontWeight: '700' },
 
   grid: { flexDirection: 'row', flexWrap: 'wrap' },
   dowCell: { width: `${100 / 7}%`, alignItems: 'center', paddingBottom: 8 },
-  dowText: { fontSize: 10.5, fontWeight: '700', color: '#999', letterSpacing: 0.5 },
+  dowText: { fontSize: 10.5, fontWeight: '700', color: HERO.default500, letterSpacing: 0.5 },
 
   dayCellWrap: { width: `${100 / 7}%`, position: 'relative', marginBottom: 5, zIndex: 1 },
   dayCellWrapActive: { zIndex: 999, elevation: 999 },
   dayCell: {
     flex: 1, minHeight: isMobile ? 54 : 64,
     alignItems: 'center', justifyContent: 'flex-start', paddingTop: 6,
-    borderRadius: 9, backgroundColor: COLORS.white,
-    borderWidth: 1, borderColor: '#F0F0F0',
+    borderRadius: HERO.radiusMd, backgroundColor: HERO.white,
+    borderWidth: 1, borderColor: HERO.default100,
     marginHorizontal: 1.5,
     position: 'relative', overflow: 'hidden',
   },
-  dayCellWeekend: { backgroundColor: '#FBFBFD' },
+  dayCellWeekend: { backgroundColor: HERO.default50 },
   dayCellGhost: { backgroundColor: 'transparent', borderColor: 'transparent' },
-  dayCellToday: { borderWidth: 1.5, borderColor: COLORS.navy },
-  dayCellTintPending: { backgroundColor: '#FFFBEB', borderColor: '#FDECC8' },
-  dayCellTintMet: { backgroundColor: '#F0FDF4', borderColor: '#CFF3DA' },
-  dayCellTintPartial: { backgroundColor: '#FAFAFC', borderColor: '#EDEDF2' },
+  dayCellToday: { borderWidth: 1.5, borderColor: HERO.primary },
 
-  dayCellAccentMet: { position: 'absolute', top: 0, left: 0, bottom: 0, width: 3, backgroundColor: '#22C55E' },
-  dayCellAccentPending: { position: 'absolute', top: 0, left: 0, bottom: 0, width: 3, backgroundColor: '#E8A020' },
-  dayCellAccentPartialTop: { position: 'absolute', top: 0, left: 0, height: '50%', width: 3, backgroundColor: '#22C55E' },
-  dayCellAccentPartialBottom: { position: 'absolute', bottom: 0, left: 0, height: '50%', width: 3, backgroundColor: '#E8A020' },
+  dayCellTintPending: { backgroundColor: HERO.warning50, borderColor: HERO.warning100 },
+  dayCellTintMet: { backgroundColor: HERO.success50, borderColor: HERO.success100 },
+  dayCellTintPartial: { backgroundColor: HERO.default50, borderColor: HERO.default200 },
 
-  dayText: { fontSize: isMobile ? 13 : 14, fontWeight: '700', color: COLORS.navy },
-  dayTextGhost: { color: '#ddd' },
+  dayCellAccentMet: { position: 'absolute', top: 0, left: 0, bottom: 0, width: 3, backgroundColor: HERO.success },
+  dayCellAccentPending: { position: 'absolute', top: 0, left: 0, bottom: 0, width: 3, backgroundColor: HERO.warning },
+  dayCellAccentPartialTop: { position: 'absolute', top: 0, left: 0, height: '50%', width: 3, backgroundColor: HERO.success },
+  dayCellAccentPartialBottom: { position: 'absolute', bottom: 0, left: 0, height: '50%', width: 3, backgroundColor: HERO.warning },
 
-  todayTag: { fontSize: 7, fontWeight: '800', color: COLORS.navy, letterSpacing: 0.5, marginTop: 2 },
+  dayText: { fontSize: isMobile ? 13 : 14, fontWeight: '700', color: HERO.foreground },
+  dayTextGhost: { color: HERO.default300 },
+
+  todayTag: {
+    fontSize: 7, fontWeight: '800', color: HERO.primary,
+    letterSpacing: 0.5, marginTop: 2,
+  },
 
   dotCluster: { flexDirection: 'row', alignItems: 'center', gap: 3, marginTop: 4 },
   dot: { width: 5, height: 5, borderRadius: 2.5 },
-  dotMet: { backgroundColor: '#22C55E' },
-  dotPending: { backgroundColor: '#E8A020' },
-  dotExtra: { fontSize: 8, fontWeight: '800', color: COLORS.subText, marginLeft: 1 },
+  dotMet: { backgroundColor: HERO.success },
+  dotPending: { backgroundColor: HERO.warning },
+  dotExtra: { fontSize: 8, fontWeight: '800', color: HERO.default500, marginLeft: 1 },
 
   dayCellCaption: {
-    fontSize: 8, fontWeight: '700', color: COLORS.subText,
+    fontSize: 8, fontWeight: '700', color: HERO.default500,
     textAlign: 'center', marginTop: 2, paddingHorizontal: 3,
   },
 
-  /* Tooltip popover */
+  /* Tooltip popover — HeroUI Popover */
   tooltip: {
     position: 'absolute', top: '108%', left: '-20%', right: '-120%',
-    zIndex: 99, backgroundColor: COLORS.white, borderRadius: 10,
+    zIndex: 99, backgroundColor: HERO.white, borderRadius: HERO.radiusLg,
     padding: 12, elevation: 10,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.2, shadowRadius: 6,
+    borderWidth: 1, borderColor: HERO.default200,
+    ...HERO.shadowMd,
   },
-  tooltipDate: { fontSize: 12.5, fontWeight: '800', color: COLORS.navy, marginBottom: 6 },
+  tooltipDate: { fontSize: 12.5, fontWeight: '800', color: HERO.foreground, marginBottom: 6 },
   tooltipItemRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 },
   tooltipDot: { width: 7, height: 7, borderRadius: 3.5, flexShrink: 0 },
-  tooltipDotMet: { backgroundColor: '#22C55E' },
-  tooltipDotPending: { backgroundColor: '#E8A020' },
-  tooltipItemText: { flex: 1, fontSize: 12, color: '#333', lineHeight: 16 },
+  tooltipDotMet: { backgroundColor: HERO.success },
+  tooltipDotPending: { backgroundColor: HERO.warning },
+  tooltipItemText: { flex: 1, fontSize: 12, color: HERO.foreground, lineHeight: 16 },
   tooltipStatusText: { fontSize: 10, fontWeight: '800', letterSpacing: 0.3 },
-  tooltipStatusMetText: { color: '#22C55E' },
-  tooltipStatusPendingText: { color: '#B45309' },
+  tooltipStatusMetText: { color: HERO.success600 },
+  tooltipStatusPendingText: { color: HERO.warning600 },
 
-  /* ── Right: Annual Compliance Timeline panel ── */
+  /* ── Right: Annual Compliance Timeline panel — HeroUI Card ── */
   sidePanel: {
-    width: isMobile ? '100%' : 260,
-    backgroundColor: COLORS.white, borderRadius: 16,
+    width: isMobile ? '100%' : 270,
+    backgroundColor: HERO.white, borderRadius: HERO.radiusLg,
     overflow: 'hidden',
     maxHeight: isMobile ? 320 : 500,
+    borderWidth: 1, borderColor: HERO.default200,
   },
   sidePanelHeader: {
-    backgroundColor: COLORS.navy, paddingHorizontal: 16, paddingVertical: 14,
+    backgroundColor: HERO.primary50, paddingHorizontal: 16, paddingVertical: 14,
+    borderBottomWidth: 1, borderBottomColor: HERO.default200,
   },
-  sidePanelTitle: { fontSize: 12.5, fontWeight: '800', color: COLORS.white, letterSpacing: 0.6, lineHeight: 16 },
-  sidePanelYear: { fontSize: 10.5, fontWeight: '600', color: 'rgba(255,255,255,0.65)', marginTop: 2, letterSpacing: 0.5 },
+  sidePanelTitle: {
+    fontSize: 12.5, fontWeight: '800', color: HERO.primary,
+    letterSpacing: 0.6, lineHeight: 16,
+  },
+  sidePanelYear: {
+    fontSize: 10.5, fontWeight: '600', color: HERO.default500,
+    marginTop: 2, letterSpacing: 0.5,
+  },
 
   sideEmptyState: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
-  sideEmptyText: { fontSize: 13, color: '#888', textAlign: 'center', lineHeight: 18 },
+  sideEmptyText: { fontSize: 13, color: HERO.default500, textAlign: 'center', lineHeight: 18 },
 
   /* Timeline groups */
   timelineGroup: {
     paddingHorizontal: 14, paddingVertical: 10,
-    borderBottomWidth: 1, borderBottomColor: '#F0F1F5',
+    borderBottomWidth: 1, borderBottomColor: HERO.default100,
   },
-  timelineGroupHighlight: { backgroundColor: '#FFFBEB' },
+  timelineGroupHighlight: { backgroundColor: HERO.warning50 },
   timelineGroupHeader: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     marginBottom: 6,
   },
-  timelineMonth: { fontSize: 11.5, fontWeight: '800', color: COLORS.navy, letterSpacing: 0.4 },
-  timelineMonthHighlight: { color: '#B45309' },
+  timelineMonth: { fontSize: 11.5, fontWeight: '800', color: HERO.foreground, letterSpacing: 0.4 },
+  timelineMonthHighlight: { color: HERO.warning600 },
   nextBadge: {
-    fontSize: 8.5, fontWeight: '800', color: '#B45309',
-    backgroundColor: '#FEF3C7', borderRadius: 6,
-    paddingHorizontal: 6, paddingVertical: 2, letterSpacing: 0.5,
+    fontSize: 8.5, fontWeight: '800', color: HERO.white,
+    backgroundColor: HERO.primary, borderRadius: HERO.radiusFull,
+    paddingHorizontal: 7, paddingVertical: 2.5, letterSpacing: 0.5,
   },
   timelineItemRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, marginBottom: 4 },
   timelineStatusIcon: {
-    width: 15, height: 15, borderRadius: 7.5, flexShrink: 0,
+    width: 16, height: 16, borderRadius: HERO.radiusFull, flexShrink: 0,
     alignItems: 'center', justifyContent: 'center', marginTop: 1,
   },
-  timelineStatusIconMet: { backgroundColor: '#22C55E' },
-  timelineStatusIconPending: { backgroundColor: '#F3E8C4' },
-  timelineStatusIconText: { fontSize: 9, fontWeight: '900', color: COLORS.white, lineHeight: 10 },
-  timelineLabel: { flex: 1, fontSize: 12, color: '#444', lineHeight: 16, fontWeight: '500' },
+  timelineStatusIconMet: { backgroundColor: HERO.success },
+  timelineStatusIconPending: { backgroundColor: HERO.warning100 },
+  timelineStatusIconText: { fontSize: 9, fontWeight: '900', color: HERO.white, lineHeight: 10 },
+  timelineLabel: { flex: 1, fontSize: 12, color: HERO.foreground, lineHeight: 16, fontWeight: '500' },
 });
+
+// ─── MISSING DOCUMENTS MODAL STYLES ──────────────────────────────────────────
+const missingModalStyles = StyleSheet.create({
+  backdrop: {
+    flex: 1, backgroundColor: 'rgba(0,0,0,0.65)',
+    justifyContent: 'center', alignItems: 'center', padding: 24,
+  },
+  modal: {
+    backgroundColor: COLORS.white, borderRadius: 16,
+    width: isMobile ? '92%' : 480,
+    height: isMobile ? '75%' : 560,
+    overflow: 'hidden', elevation: 20, shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.25, shadowRadius: 20,
+  },
+  header: {
+    flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between',
+    paddingHorizontal: 16, paddingVertical: 14, backgroundColor: COLORS.navy,
+  },
+  title: { fontSize: 16, fontWeight: '800', color: COLORS.white },
+  subtitle: { fontSize: 12, fontWeight: '600', color: 'rgba(255,255,255,0.75)', marginTop: 3 },
+  closeBtn: {
+    width: 28, height: 28, borderRadius: 14,
+    backgroundColor: 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center',
+    marginLeft: 12,
+  },
+  closeText: { fontSize: 12, fontWeight: '700', color: COLORS.white },
+  divider: { height: 1, backgroundColor: COLORS.lightGray },
+  body: { flex: 1 },
+  bodyContent: { padding: 16, flexGrow: 1 },
+  emptyState: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 40 },
+  emptyText: { fontSize: 15, fontWeight: '700', color: COLORS.darkText, marginBottom: 4 },
+  emptySubText: { fontSize: 13, color: COLORS.subText, textAlign: 'center' },
+  list: { flex: 1 },
+  itemRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, gap: 10 },
+  itemRowBorder: { borderBottomWidth: 1, borderBottomColor: COLORS.lightGray },
+  itemInfo: { flex: 1 },
+  itemTitle: { fontSize: 13, fontWeight: '600', color: COLORS.darkText, marginBottom: 2 },
+  itemBarangay: { fontSize: 12, color: COLORS.subText },
+  statusBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 },
+  statusDraft: { backgroundColor: '#FEF3C7' },
+  statusSaved: { backgroundColor: '#DBEAFE' },
+  statusNotSubmitted: { backgroundColor: '#FEE2E2' },
+  statusText: { fontSize: 10, fontWeight: '700' },
+  statusDraftText: { color: '#B45309' },
+  statusSavedText: { color: '#1D4ED8' },
+  statusNotSubmittedText: { color: '#DC2626' },
+});
+
+const reminderModalStyles = StyleSheet.create({
+  backdrop: {
+    flex: 1, backgroundColor: 'rgba(0,0,0,0.65)',
+    justifyContent: 'center', alignItems: 'center', padding: 24,
+  },
+  modal: {
+    backgroundColor: COLORS.white, borderRadius: 16,
+    width: isMobile ? '92%' : 480,
+    maxHeight: isMobile ? '80%' : 560,
+    overflow: 'hidden', elevation: 20, shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.25, shadowRadius: 20,
+  },
+  header: {
+    flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between',
+    paddingHorizontal: 16, paddingVertical: 14, backgroundColor: COLORS.navy,
+  },
+  title: { fontSize: 16, fontWeight: '800', color: COLORS.white },
+  subtitle: { fontSize: 12, fontWeight: '600', color: 'rgba(255,255,255,0.75)', marginTop: 3 },
+  closeBtn: {
+    width: 28, height: 28, borderRadius: 14,
+    backgroundColor: 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center',
+    marginLeft: 12,
+  },
+  closeText: { fontSize: 12, fontWeight: '700', color: COLORS.white },
+  divider: { height: 1, backgroundColor: COLORS.lightGray },
+  body: { flexGrow: 0 },
+  bodyContent: { padding: 16 },
+  messageBox: {
+    backgroundColor: COLORS.offWhite, borderRadius: 12, padding: 12,
+    borderWidth: 1, borderColor: COLORS.lightGray, marginBottom: 16,
+  },
+  messageLabel: {
+    fontSize: 11, fontWeight: '700', color: COLORS.subText,
+    textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 6,
+  },
+  messageText: { fontSize: 13, color: COLORS.darkText, lineHeight: 19 },
+  recipientsLabel: {
+    fontSize: 11, fontWeight: '700', color: COLORS.subText,
+    textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 8,
+  },
+  recipientRow: { paddingVertical: 10, gap: 3 },
+  recipientRowBorder: { borderBottomWidth: 1, borderBottomColor: COLORS.lightGray },
+  recipientBarangay: { fontSize: 13.5, fontWeight: '700', color: COLORS.navy, marginBottom: 2 },
+  recipientItem: { fontSize: 12.5, color: COLORS.subText, lineHeight: 18 },
+  footer: {
+    flexDirection: 'row', gap: 10, padding: 16,
+    borderTopWidth: 1, borderTopColor: COLORS.lightGray,
+  },
+  cancelBtn: {
+    flex: 1, paddingVertical: 12, borderRadius: 10,
+    borderWidth: 1.5, borderColor: COLORS.lightGray,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  cancelBtnText: { fontSize: 13.5, fontWeight: '700', color: COLORS.subText },
+  sendBtn: {
+    flex: 1.4, paddingVertical: 12, borderRadius: 10,
+    backgroundColor: COLORS.navy,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  sendBtnText: { fontSize: 13.5, fontWeight: '700', color: COLORS.white },
+  emptyState: { alignItems: 'center', justifyContent: 'center', paddingVertical: 40 },
+  emptyText: { fontSize: 15, fontWeight: '700', color: COLORS.darkText, marginBottom: 4 },
+  emptySubText: { fontSize: 13, color: COLORS.subText, textAlign: 'center' },
+  sentState: { alignItems: 'center', justifyContent: 'center', paddingVertical: 36, paddingHorizontal: 12 },
+  sentIcon: { fontSize: 34, marginBottom: 10 },
+  sentText: { fontSize: 15, fontWeight: '800', color: COLORS.darkText, marginBottom: 6 },
+  sentSubText: { fontSize: 12.5, color: COLORS.subText, textAlign: 'center', lineHeight: 18 },
+});
+
+// Notification modal styles now live in notificationCenter.js (shared). 

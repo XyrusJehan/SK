@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import Head from 'expo-router/head';
 import {
   View,
   Text,
@@ -6,14 +7,24 @@ import {
   ScrollView,
   TouchableOpacity,
   StyleSheet,
-  SafeAreaView,
   StatusBar,
   Dimensions,
   Image,
+  Alert,
+  Linking,
+  Platform,
+  ActivityIndicator,
 } from 'react-native';
+// SafeAreaView from core 'react-native' is a no-op on Android. Use the
+// context-aware version so insets work on both platforms.
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useNav } from './navContext';
+import Sidebar, { LYDO_NAV_ITEMS } from './../components/Sidebar';
+import MobileHeader, { MobileHeaderSpacer } from './mobileHeader';
 import { useAuth } from './authContext';
+import { fetchSavedReports, fetchArchivedReports, restoreComplianceDocument } from './reportsApi';
+import { useLydoNotificationCenter, LydoNotificationModal, LydoBellIcon } from './notificationCenter';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const isMobile = SCREEN_WIDTH < 768;
@@ -35,136 +46,77 @@ const COLORS = {
 };
 
 // ─── NAV / TAB CONSTANTS ──────────────────────────────────────────────────────
-const NAV_TABS       = ['Dashboard', 'Documents', 'Monitor','Barangay', 'Logs'];
 const DOCUMENT_TABS  = ['Barangay Folders', 'Reports', 'Templates'];
 
-// ─── SIDEBAR NAV ICONS (pure React Native Views — no react-native-svg) ────────
-
-// Dashboard: 2×2 grid of rounded squares
-const DashboardIcon = ({ color = '#fff', size = 16 }) => {
-  const s = size * 0.38, gap = size * 0.12, r = size * 0.12;
-  const box = { width: s, height: s, borderRadius: r, backgroundColor: color };
-  return (
-    <View style={{ width: size, height: size, justifyContent: 'center', alignItems: 'center' }}>
-      <View style={{ flexDirection: 'row', gap }}><View style={box} /><View style={box} /></View>
-      <View style={{ height: gap }} />
-      <View style={{ flexDirection: 'row', gap }}><View style={box} /><View style={box} /></View>
-    </View>
-  );
+// ─── REPORT TYPE LABELS ───────────────────────────────────────────────────────
+// Map compliance_documents.document_type -> human-readable label and a tag
+// color for the row badge. Two values come from reportsApi.REPORT_TYPE_META.
+const REPORT_TYPE_META = {
+  FDP_Monitoring_Report: {
+    label: 'FDP Monitoring',
+    color: '#133E75',
+    bg:    '#E3ECF7',
+  },
+  Submission_Compliance_Report: {
+    label: 'Submission Compliance',
+    color: '#1B5E20',
+    bg:    '#E8F5E9',
+  },
 };
 
-// Documents: file shape with fold + two lines
-const DocumentsIcon = ({ color = '#fff', size = 16 }) => {
-  const w = size * 0.6, h = size * 0.78, fold = size * 0.22;
+// ─── DATE FORMATTERS ──────────────────────────────────────────────────────────
+function fmtShortDate(iso) {
+  if (!iso) return '—';
+  return new Date(iso).toLocaleDateString('en-PH', {
+    timeZone: 'Asia/Manila', month: '2-digit', day: '2-digit', year: 'numeric',
+  });
+}
+function fmtTime(iso) {
+  if (!iso) return '';
+  return new Date(iso).toLocaleTimeString('en-PH', {
+    timeZone: 'Asia/Manila', hour: 'numeric', minute: '2-digit',
+  });
+}
+
+// Fallback: react-native Alert.alert only logs on web. Use this so failure
+// / "no file" messages actually reach the user in the browser.
+function notify(title, message) {
+  if (Platform.OS === 'web') {
+    window.alert(message ? `${title}\n\n${message}` : title);
+    return;
+  }
+  Alert.alert(title, message);
+}
+
+// ─── REPORT ROW (active list) ──────────────────────────────────────────────
+const ReportRow = ({ item, onPress }) => {
+  const meta = REPORT_TYPE_META[item.document_type] || {
+    label: item.document_type || 'Report',
+    color: COLORS.navy,
+    bg: '#E3ECF7',
+  };
   return (
-    <View style={{ width: size, height: size, justifyContent: 'center', alignItems: 'center' }}>
-      <View style={{ width: w, height: h, justifyContent: 'flex-end', paddingBottom: size * 0.08, paddingHorizontal: size * 0.1 }}>
-        <View style={{ position: 'absolute', left: 0, right: 0, top: fold, bottom: 0, borderWidth: 1.5, borderColor: color, borderRadius: size * 0.08 }} />
-        <View style={{ position: 'absolute', top: 0, right: 0, width: fold, height: fold, backgroundColor: color, borderBottomLeftRadius: size * 0.06 }} />
-        <View style={{ position: 'absolute', top: 0, left: 0, width: w - fold, height: fold, borderTopWidth: 1.5, borderLeftWidth: 1.5, borderColor: color, borderTopLeftRadius: size * 0.08 }} />
-        <View style={{ height: 1.5, backgroundColor: color, borderRadius: 1, marginBottom: size * 0.1, width: '80%' }} />
-        <View style={{ height: 1.5, backgroundColor: color, borderRadius: 1, width: '55%' }} />
-      </View>
-    </View>
-  );
-};
-
-// Monitor: simple globe — circle + horizontal line + vertical oval hint
-const MonitorIcon = ({ color = '#fff', size = 16 }) => (
-  <View style={{ width: size, height: size, justifyContent: 'center', alignItems: 'center' }}>
-    <View style={{ width: size * 0.82, height: size * 0.82, borderRadius: size * 0.41, borderWidth: 1.5, borderColor: color, justifyContent: 'center', alignItems: 'center', overflow: 'hidden' }}>
-      <View style={{ position: 'absolute', height: 1.5, width: '100%', backgroundColor: color }} />
-      <View style={{ width: size * 0.38, height: size * 0.78, borderRadius: size * 0.19, borderWidth: 1.5, borderColor: color, backgroundColor: 'transparent' }} />
-    </View>
-  </View>
-);
-
-// Barangay: building/institution icon — base + columns hint
-const BarangayIcon = ({ color = '#fff', size = 16 }) => {
-  const bw = 1.5;
-  return (
-    <View style={{ width: size, height: size, justifyContent: 'center', alignItems: 'center' }}>
-      {/* roof / triangle top */}
-      <View style={{ width: size * 0.82, height: size * 0.22, borderLeftWidth: bw, borderRightWidth: bw, borderTopWidth: bw, borderColor: color, borderTopLeftRadius: size * 0.06, borderTopRightRadius: size * 0.06 }} />
-      {/* body */}
-      <View style={{ width: size * 0.82, height: size * 0.52, borderLeftWidth: bw, borderRightWidth: bw, borderBottomWidth: bw, borderColor: color, flexDirection: 'row', justifyContent: 'space-around', alignItems: 'center', paddingHorizontal: size * 0.08, paddingBottom: size * 0.06 }}>
-        {[0, 1, 2].map(i => (
-          <View key={i} style={{ width: size * 0.1, height: size * 0.36, backgroundColor: color, borderRadius: size * 0.03 }} />
-        ))}
-      </View>
-    </View>
-  );
-};
-
-// Logs: clipboard with lines
-const LogsIcon = ({ color = '#fff', size = 16 }) => (
-  <View style={{ width: size, height: size, justifyContent: 'center', alignItems: 'center' }}>
-    <View style={{ width: size * 0.75, height: size * 0.85, borderWidth: 1.5, borderColor: color, borderRadius: size * 0.1, paddingHorizontal: size * 0.1, paddingVertical: size * 0.1, justifyContent: 'space-around' }}>
-      <View style={{ position: 'absolute', top: -size * 0.08, alignSelf: 'center', width: size * 0.3, height: size * 0.14, backgroundColor: color, borderRadius: size * 0.04 }} />
-      {[0, 1, 2].map(i => (
-        <View key={i} style={{ flexDirection: 'row', alignItems: 'center', gap: size * 0.08, marginTop: i === 0 ? size * 0.1 : 0 }}>
-          <View style={{ width: size * 0.1, height: size * 0.1, borderRadius: size * 0.05, backgroundColor: color }} />
-          <View style={{ flex: 1, height: 1.5, backgroundColor: color, borderRadius: 1 }} />
+    <TouchableOpacity
+      style={styles.reportRow}
+      onPress={() => onPress && onPress(item)}
+      activeOpacity={0.7}
+    >
+      <View style={styles.reportNameWrap}>
+        <View style={[styles.reportBadge, { backgroundColor: meta.bg }]}>
+          <Text style={[styles.reportBadgeText, { color: meta.color }]}>{meta.label}</Text>
         </View>
-      ))}
-    </View>
-  </View>
-);
-
-// Logout: door with arrow
-const LogoutNavIcon = ({ color = '#fff', size = 16 }) => (
-  <View style={{ width: size, height: size, justifyContent: 'center', alignItems: 'center' }}>
-    <View style={{ position: 'absolute', left: 0, top: 0, width: size * 0.55, height: size, borderWidth: 1.5, borderColor: color, borderRadius: size * 0.08 }} />
-    <View style={{ position: 'absolute', right: size * 0.02, width: size * 0.52, height: 1.8, backgroundColor: color, borderRadius: 1 }} />
-    <View style={{ position: 'absolute', right: size * 0.02, width: size * 0.2, height: size * 0.2, borderTopWidth: 1.8, borderRightWidth: 1.8, borderColor: color, transform: [{ rotate: '45deg' }], marginTop: -size * 0.01 }} />
-  </View>
-);
-
-// ─── SAMPLE REPORT DATA ───────────────────────────────────────────────────────
-const REPORTS = [
-  { id: '1', name: 'SK_Rizal_ABYIP_Report_2026.pdf',   time: '3:00 PM', date: '1/02/2026' },
-  { id: '2', name: 'Annual Budget Allocation 2026',     time: '3:00 PM', date: '1/02/2026' },
-  { id: '3', name: 'Consolidated Compliance Report',    time: '3:00 PM', date: '1/02/2026' },
-];
-
-// ─── QUICK STATS (top-right info block) ───────────────────────────────────────
-const QUICK_STATS = [
-  { label: 'Reports',    value: '3' },
-  { label: 'Downloads',  value: '12' },
-  { label: 'Saved Annual Budget for barangays', value: null },
-];
-
-// ─── ICON COMPONENTS ──────────────────────────────────────────────────────────
-const BellIcon = ({ hasNotif }) => (
-  <View style={styles.bellWrapper}>
-    <View style={styles.bellBody} />
-    <View style={styles.bellBottom} />
-    {hasNotif && <View style={styles.bellDot} />}
-  </View>
-);
-
-const MenuIcon = () => (
-  <View style={styles.menuIconContainer}>
-    <View style={styles.menuLine} />
-    <View style={styles.menuLine} />
-    <View style={styles.menuLine} />
-  </View>
-);
-
-// ─── REPORT ROW ───────────────────────────────────────────────────────────────
-const ReportRow = ({ item, onPress }) => (
-  <TouchableOpacity
-    style={styles.reportRow}
-    onPress={() => onPress && onPress(item)}
-    activeOpacity={0.7}
-  >
-    <Text style={styles.reportName} numberOfLines={1}>{item.name}</Text>
-    <View style={styles.reportDateCell}>
-      <Text style={styles.reportTime}>{item.time}</Text>
-      <Text style={styles.reportDate}>  {item.date}</Text>
-    </View>
-  </TouchableOpacity>
-);
+        <Text style={styles.reportName} numberOfLines={1}>{item.title}</Text>
+        {item.barangay_name ? (
+          <Text style={styles.reportSubtext}>{item.barangay_name}</Text>
+        ) : null}
+      </View>
+      <View style={styles.reportDateCell}>
+        <Text style={styles.reportTime}>{fmtTime(item.upload_date)}</Text>
+        <Text style={styles.reportDate}>  {fmtShortDate(item.upload_date)}</Text>
+      </View>
+    </TouchableOpacity>
+  );
+};
 
 // ─── MAIN SCREEN ──────────────────────────────────────────────────────────────
 export default function LYDODocumentReportsScreen() {
@@ -173,10 +125,21 @@ export default function LYDODocumentReportsScreen() {
   const { logout } = useAuth();
 
   const [searchText, setSearchText]         = useState('');
-  const [notifCount]                        = useState(2);
+  const notif = useLydoNotificationCenter();
   const [sidebarVisible, setSidebarVisible] = useState(false);
   const [activeDocumentTab]                 = useState('Reports');
   const [currentTime, setCurrentTime]       = useState('');
+  const [reports, setReports]               = useState([]);
+  const [loading, setLoading]               = useState(false);
+  const [loadError, setLoadError]           = useState(null);
+
+  // ── Archive (superseded versions) ──
+  const [showArchiveView, setShowArchiveView] = useState(false);
+  const [archiveRecords, setArchiveRecords]   = useState([]);
+  const [archiveLoading, setArchiveLoading]   = useState(false);
+  const [archiveError, setArchiveError]       = useState(null);
+  const [expandedArchiveId, setExpandedArchiveId] = useState(null);
+  const [restoringId, setRestoringId]         = useState(null);
 
   const today = new Date().toLocaleDateString('en-PH', {
     timeZone: 'Asia/Manila', month: 'long', day: 'numeric', year: 'numeric',
@@ -201,20 +164,107 @@ export default function LYDODocumentReportsScreen() {
     return () => clearInterval(interval);
   }, []);
 
-  // ── Filtered reports ──
-  const filteredReports = REPORTS.filter(r =>
-    r.name.toLowerCase().includes(searchText.toLowerCase())
-  );
+  // ── Live fetch of saved reports from compliance_documents ──
+  // Lists FDP Monitoring and Submission Compliance report snapshots
+  // generated by the Monitor > Report screen. Newest first. Only ACTIVE
+  // (current) versions show here — saving a report of the same type/doc/
+  // year again archives the old row instead of piling up duplicates.
+  const loadReports = async () => {
+    setLoading(true);
+    setLoadError(null);
+    try {
+      const rows = await fetchSavedReports({ status: 'active' });
+      setReports(rows);
+    } catch (err) {
+      console.error('Failed to load saved reports:', err);
+      setLoadError(err.message || 'Failed to load saved reports.');
+      setReports([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // ── Fetch superseded versions for the Archive view ──
+  const loadArchive = async () => {
+    setArchiveLoading(true);
+    setArchiveError(null);
+    try {
+      const rows = await fetchArchivedReports({});
+      setArchiveRecords(rows);
+    } catch (err) {
+      console.error('Failed to load archived reports:', err);
+      setArchiveError(err.message || 'Failed to load archived reports.');
+      setArchiveRecords([]);
+    } finally {
+      setArchiveLoading(false);
+    }
+  };
+
+  const refreshAll = () => { loadReports(); loadArchive(); };
+
+  useEffect(() => { refreshAll(); }, []);
+
+  // ── Restore an archived version back to active ──
+  // Whatever is currently active for that same report gets archived in
+  // its place (handled server-side), so there's still only one active
+  // row per report at a time. Refresh both lists afterward since a
+  // restore moves a row between them.
+  const handleRestore = async (item) => {
+    setRestoringId(item.compliance_id);
+    try {
+      await restoreComplianceDocument(item.compliance_id);
+      notify('Restored', `"${item.title}" is now the active version.`);
+      setExpandedArchiveId(null);
+      refreshAll();
+    } catch (err) {
+      console.error('Failed to restore report:', err);
+      notify('Restore Failed', err.message || 'Could not restore this report. Please try again.');
+    } finally {
+      setRestoringId(null);
+    }
+  };
+
+  // ── Filtered reports (search applies to whichever view is showing) ──
+  const matchesSearch = (r) =>
+    (r.title || '').toLowerCase().includes(searchText.toLowerCase()) ||
+    (r.document_type || '').toLowerCase().includes(searchText.toLowerCase()) ||
+    (r.barangay_name || '').toLowerCase().includes(searchText.toLowerCase());
+
+  const filteredReports = reports.filter(matchesSearch);
+  const filteredArchive = archiveRecords.filter(matchesSearch);
+
+  // ── Open / download the saved PDF ──
+  // The scanned_file_url is a public URL in the 'documents' bucket. On web
+  // we open it in a new tab; on native, Linking hands the URL off to the
+  // device's default PDF viewer / browser.
+  const handleReportPress = async (item) => {
+    const url = item.scanned_file_url;
+    if (!url) {
+      notify('File Unavailable', 'This report does not have a file URL.');
+      return;
+    }
+    try {
+      const supported = await Linking.canOpenURL(url);
+      if (!supported) {
+        notify('Cannot Open', 'No app is available to open this file.');
+        return;
+      }
+      await Linking.openURL(url);
+    } catch (err) {
+      console.error('Failed to open report URL:', err);
+      notify('Open Failed', err.message || 'Could not open the report.');
+    }
+  };
 
   // ── Navigation ──
-  const handleNavPress = (tab) => {
+  const handleNav = (tab) => {
     setActiveTab(tab);
     setSidebarVisible(false);
-    if (tab === 'Dashboard')      router.push('/(tabs)/lydo-dashboard');
+    if (tab === 'Dashboard') router.push('/(tabs)/lydo-dashboard');
     else if (tab === 'Documents') router.push('/(tabs)/lydo-document');
-    else if (tab === 'Monitor')   router.push('/(tabs)/lydo-monitor');
-        if (tab === 'Barangay') router.push('/(tabs)/lydo-accounts');
-        if (tab === 'Logs') router.push('/(tabs)/lydo-logs');
+    else if (tab === 'Monitor') router.push('/(tabs)/lydo-monitor');
+    else if (tab === 'Barangay') router.push('/(tabs)/lydo-accounts');
+    else if (tab === 'Logs') router.push('/(tabs)/lydo-logs');
   };
 
   const handleLogout = () => {
@@ -228,71 +278,24 @@ export default function LYDODocumentReportsScreen() {
     if (tab === 'Templates')         { router.push('/(tabs)/lydo-document-templates'); return; }
   };
 
-  // ── Sidebar ──
-  const NAV_ITEMS = [
-    { tab: 'Dashboard', IconComponent: DashboardIcon },
-    { tab: 'Documents', IconComponent: DocumentsIcon },
-    { tab: 'Monitor',   IconComponent: MonitorIcon   },
-    { tab: 'Barangay',  IconComponent: BarangayIcon  },
-    { tab: 'Logs',      IconComponent: LogsIcon      },
-  ];
-
-  const renderSidebar = () => (
-    <View style={styles.sidebar}>
-      <View style={styles.logoPill}>
-        <Image
-          source={require('./../../assets/images/lydo-logo.png')}
-          style={styles.logoImage}
-          resizeMode="contain"
-        />
-      </View>
-      <View style={styles.sidebarSpacer} />
-      {NAV_ITEMS.map(({ tab, IconComponent }) => {
-        const active = activeTab === tab;
-        const iconColor = active ? '#133E75' : 'rgba(255,255,255,0.85)';
-        return (
-          <TouchableOpacity
-            key={tab}
-            style={[styles.navItem, active && styles.navItemActive]}
-            onPress={() => handleNavPress(tab)}
-            activeOpacity={0.8}
-          >
-            <View style={styles.navItemInner}>
-              <IconComponent color={iconColor} size={16} />
-              <Text style={[styles.navLabel, active && styles.navLabelActive]}>{tab}</Text>
-            </View>
-          </TouchableOpacity>
-        );
-      })}
-      <View style={{ flex: 1 }} />
-      <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout} activeOpacity={0.8}>
-        <View style={styles.navItemInner}>
-          <LogoutNavIcon color="rgba(255,255,255,0.85)" size={16} />
-          <Text style={styles.logoutText}>Logout</Text>
-        </View>
-      </TouchableOpacity>
-    </View>
-  );
-
   // ── Main Content ──
   const renderContent = () => (
-    <ScrollView
-      style={[styles.main, isMobile && styles.mainMobile]}
-      contentContainerStyle={styles.mainContent}
-      showsVerticalScrollIndicator={false}
-    >
-      {/* Mobile Header */}
-      {isMobile && (
-        <View style={styles.mobileHeader}>
-          <TouchableOpacity style={styles.menuBtn} onPress={() => setSidebarVisible(true)}>
-            <MenuIcon />
-          </TouchableOpacity>
-          <Text style={styles.mobileTitle}>Reports</Text>
-          <TouchableOpacity style={styles.bellBtn}>
-            <BellIcon hasNotif={notifCount > 0} />
-          </TouchableOpacity>
-        </View>
-      )}
+    <View style={[styles.main, isMobile && styles.mainMobile]}>
+      <MobileHeader
+        title="Reports"
+        onMenuPress={() => setSidebarVisible(true)}
+        onBellPress={notif.open}
+        bellCount={notif.count}
+        BellIcon={LydoBellIcon}
+        colors={COLORS}
+        hidden={isMobile && sidebarVisible}
+      />
+      <ScrollView
+        style={{ flex: 1 }}
+        contentContainerStyle={styles.mainContent}
+        showsVerticalScrollIndicator={false}
+      >
+      <MobileHeaderSpacer />
 
       {/* Desktop Header */}
       {!isMobile && (
@@ -317,14 +320,9 @@ export default function LYDODocumentReportsScreen() {
                 </View>
               </View>
             </View>
-            <TouchableOpacity style={styles.bellBtn} activeOpacity={0.7}>
-              <BellIcon hasNotif={notifCount > 0} />
-              {notifCount > 0 && (
-                <View style={styles.notifBadge}>
-                  <Text style={styles.notifBadgeText}>{notifCount}</Text>
-                </View>
-              )}
-            </TouchableOpacity>
+              <TouchableOpacity style={styles.bellBtn} activeOpacity={0.7} onPress={notif.open}>
+                <LydoBellIcon count={notif.count} />
+              </TouchableOpacity>
           </View>
         </View>
       )}
@@ -348,7 +346,7 @@ export default function LYDODocumentReportsScreen() {
         })}
       </View>
 
-      {/* Search + Quick Stats Row */}
+      {/* Search Row */}
       <View style={styles.searchStatsRow}>
         {/* Search box */}
         <View style={styles.searchBox}>
@@ -366,66 +364,224 @@ export default function LYDODocumentReportsScreen() {
             </TouchableOpacity>
           )}
         </View>
-
-        {/* Quick stats — top right */}
-        {!isMobile && (
-          <View style={styles.quickStatsBlock}>
-            <View style={styles.quickStatRow}>
-              <Text style={styles.quickStatLabel}>Reports :</Text>
-              <Text style={styles.quickStatValue}>{REPORTS.length}</Text>
-            </View>
-            <View style={styles.quickStatRow}>
-              <Text style={styles.quickStatLabel}>Downloads</Text>
-            </View>
-            <View style={styles.quickStatRow}>
-              <Text style={styles.quickStatLabel}>Saved Annual Budget for barangays</Text>
-            </View>
-          </View>
-        )}
       </View>
 
-      {/* Section label */}
-      <Text style={styles.sectionLabel}>All Documents</Text>
-
-      {/* Report Table */}
-      <View style={styles.tableContainer}>
-        {/* Table Header */}
-        <View style={styles.tableHeader}>
-          <Text style={[styles.tableHeaderText, { flex: 1 }]}>Report</Text>
-          <Text style={[styles.tableHeaderText, { width: 160, textAlign: 'right' }]}>Created Date</Text>
+      {/* Section label + Refresh + Archive toggle (shown for both views) */}
+      <View style={styles.sectionLabelRow}>
+        <Text style={styles.sectionLabel}>
+          {showArchiveView ? 'Archived Report Versions' : 'Saved FDP & Submission Reports'}
+        </Text>
+        <View style={styles.sectionLabelActions}>
+          <TouchableOpacity
+            style={styles.refreshBtn}
+            onPress={refreshAll}
+            activeOpacity={0.7}
+            disabled={loading}
+          >
+            {loading
+              ? <ActivityIndicator size="small" color={COLORS.navy} />
+              : <Text style={styles.refreshBtnText}>↻ Refresh</Text>}
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.archiveBtn}
+            activeOpacity={0.8}
+            onPress={() => setShowArchiveView(v => !v)}
+          >
+            <Text style={styles.archiveBtnText}>
+              🗂 {showArchiveView ? 'Hide Archive' : `View Archive${archiveRecords.length > 0 ? ` (${archiveRecords.length})` : ''}`}
+            </Text>
+          </TouchableOpacity>
         </View>
-
-        {/* Rows */}
-        {filteredReports.length > 0 ? (
-          filteredReports.map((item, idx) => (
-            <React.Fragment key={item.id}>
-              <ReportRow item={item} />
-              {idx < filteredReports.length - 1 && <View style={styles.divider} />}
-            </React.Fragment>
-          ))
-        ) : (
-          <View style={styles.emptyState}>
-            <Text style={styles.emptyText}>No reports found</Text>
-          </View>
-        )}
-
-        {/* Empty rows to fill table height — visual only */}
-        {filteredReports.length < 8 &&
-          Array.from({ length: Math.max(0, 5 - filteredReports.length) }).map((_, i) => (
-            <View key={`empty-${i}`}>
-              <View style={styles.reportRowEmpty} />
-              {i < 4 - filteredReports.length && <View style={styles.divider} />}
-            </View>
-          ))
-        }
       </View>
+
+      {!showArchiveView ? (
+        <>
+          {/* Report Table */}
+          <View style={styles.tableContainer}>
+            {/* Table Header */}
+            <View style={styles.tableHeader}>
+              <Text style={[styles.tableHeaderText, { flex: 1 }]}>Report</Text>
+              <Text style={[styles.tableHeaderText, { width: 160, textAlign: 'right' }]}>Created Date</Text>
+            </View>
+
+            {/* Loading / error states */}
+            {loading && reports.length === 0 && (
+              <View style={styles.emptyState}>
+                <ActivityIndicator size="small" color={COLORS.navy} />
+                <Text style={styles.emptyText}>Loading saved reports…</Text>
+              </View>
+            )}
+
+            {!loading && loadError && (
+              <View style={styles.emptyState}>
+                <Text style={[styles.emptyText, { color: '#8B0000' }]}>
+                  Couldn't load saved reports: {loadError}
+                </Text>
+              </View>
+            )}
+
+            {/* Rows */}
+            {!loading && !loadError && filteredReports.length > 0 ? (
+              filteredReports.map((item, idx) => (
+                <React.Fragment key={item.compliance_id}>
+                  <ReportRow item={item} onPress={handleReportPress} />
+                  {idx < filteredReports.length - 1 && <View style={styles.divider} />}
+                </React.Fragment>
+              ))
+            ) : null}
+
+            {!loading && !loadError && filteredReports.length === 0 && (
+              <View style={styles.emptyState}>
+                <Text style={styles.emptyText}>
+                  {reports.length === 0
+                    ? 'No saved reports yet. Generate one from Monitor > Report.'
+                    : 'No reports match your search.'}
+                </Text>
+              </View>
+            )}
+          </View>
+        </>
+      ) : (
+        /* ── ARCHIVE VIEW (same pattern as Document Templates > View Archive) ── */
+        <View style={styles.tableContainer}>
+          {/* Archive header */}
+          <View style={styles.archiveSectionHeader}>
+            <Text style={styles.archiveSectionTitle}>Archives</Text>
+            <View style={styles.archiveLockBadge}>
+              <Text style={styles.archiveLockText}>🔒 Superseded versions • Restore to reactivate</Text>
+            </View>
+          </View>
+
+          {archiveLoading && archiveRecords.length === 0 && (
+            <View style={styles.emptyState}>
+              <ActivityIndicator size="small" color={COLORS.navy} />
+              <Text style={styles.emptyText}>Loading archived reports…</Text>
+            </View>
+          )}
+
+          {!archiveLoading && archiveError && (
+            <View style={styles.emptyState}>
+              <Text style={[styles.emptyText, { color: '#8B0000' }]}>
+                Couldn't load archived reports: {archiveError}
+              </Text>
+            </View>
+          )}
+
+          {!archiveLoading && !archiveError && filteredArchive.length === 0 && (
+            <View style={styles.emptyState}>
+              <Text style={styles.emptyText}>
+                {archiveRecords.length === 0
+                  ? 'No archived report versions yet. Older versions show up here after you re-save a report.'
+                  : 'No archived reports match your search.'}
+              </Text>
+            </View>
+          )}
+
+          {!archiveLoading && !archiveError && filteredArchive.map((record, idx) => {
+            const meta = REPORT_TYPE_META[record.document_type] || {
+              label: record.document_type || 'Report',
+              color: COLORS.navy,
+              bg: '#E3ECF7',
+            };
+            const expanded = expandedArchiveId === record.compliance_id;
+            const isRestoring = restoringId === record.compliance_id;
+            return (
+              <View key={record.compliance_id}>
+                <TouchableOpacity
+                  style={styles.archiveRow}
+                  onPress={() => setExpandedArchiveId(prev => (prev === record.compliance_id ? null : record.compliance_id))}
+                  activeOpacity={0.75}
+                >
+                  <View style={styles.archiveRowMain}>
+                    <Text style={styles.archiveRowName} numberOfLines={2}>{record.title}</Text>
+                    <Text style={styles.archiveOldVersionText}>Superseded</Text>
+                  </View>
+
+                  {/* Expanded detail */}
+                  {expanded && (
+                    <View style={styles.archiveExpandedDetail}>
+                      <View style={styles.archiveDetailRow}>
+                        <Text style={styles.archiveDetailLabel}>Version</Text>
+                        <View style={styles.archiveVersionBadge}>
+                          <Text style={styles.archiveVersionText}>v{record.version}</Text>
+                        </View>
+                      </View>
+                      <View style={styles.archiveDetailRow}>
+                        <Text style={styles.archiveDetailLabel}>Type</Text>
+                        <View style={[styles.reportBadge, { backgroundColor: meta.bg }]}>
+                          <Text style={[styles.reportBadgeText, { color: meta.color }]}>{meta.label}</Text>
+                        </View>
+                      </View>
+                      {record.barangay_name ? (
+                        <View style={styles.archiveDetailRow}>
+                          <Text style={styles.archiveDetailLabel}>Barangay</Text>
+                          <Text style={styles.archiveDetailValue}>{record.barangay_name}</Text>
+                        </View>
+                      ) : null}
+                      <View style={styles.archiveDetailRow}>
+                        <Text style={styles.archiveDetailLabel}>Archived On</Text>
+                        <Text style={styles.archiveDetailValue}>
+                          {fmtShortDate(record.upload_date)}  {fmtTime(record.upload_date)}
+                        </Text>
+                      </View>
+                      <View style={styles.archiveDetailRow}>
+                        <Text style={styles.archiveDetailLabel}>Reason</Text>
+                        <Text style={[styles.archiveDetailValue, { flex: 1, textAlign: 'right' }]}>
+                          Replaced by newer version
+                        </Text>
+                      </View>
+                      <View style={[styles.archiveDetailRow, { gap: 8, marginTop: 8 }]}>
+                        <TouchableOpacity
+                          style={styles.archiveActionBtn}
+                          onPress={() => handleReportPress(record)}
+                          activeOpacity={0.8}
+                        >
+                          <Text style={styles.archiveActionBtnText}>⬇ Download</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={[styles.archiveActionBtn, { backgroundColor: '#E8F5E9' }]}
+                          onPress={() => handleRestore(record)}
+                          activeOpacity={0.8}
+                          disabled={isRestoring}
+                        >
+                          {isRestoring
+                            ? <ActivityIndicator size="small" color="#1B5E20" />
+                            : <Text style={[styles.archiveActionBtnText, { color: '#1B5E20' }]}>↩ Restore</Text>}
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  )}
+                </TouchableOpacity>
+                {idx < filteredArchive.length - 1 && <View style={styles.divider} />}
+              </View>
+            );
+          })}
+        </View>
+      )}
 
     </ScrollView>
+    </View>
   );
 
   return (
-    <SafeAreaView style={styles.safe}>
+    <>
+      <Head>
+        <title>LYDO Document Reports · SK Monitoring</title>
+      </Head>
+      <SafeAreaView style={styles.safe} edges={isMobile ? ['left', 'right', 'bottom'] : ['top', 'left', 'right', 'bottom']}>
       <StatusBar barStyle="light-content" backgroundColor={COLORS.navy} />
+
+      {/* Notification Modal — lists documents sent by SK officials */}
+      <LydoNotificationModal
+        {...notif.modalProps}
+        onReview={(doc) => {
+          notif.close();
+          router.push({
+            pathname: '/(tabs)/lydo-monitor',
+            params: { viewFilter: 'submitted' },
+          });
+        }}
+      />
 
       <View style={styles.layout}>
         {/* Mobile Sidebar Overlay */}
@@ -437,15 +593,20 @@ export default function LYDODocumentReportsScreen() {
           />
         )}
 
-        {isMobile ? (
-          sidebarVisible && renderSidebar()
-        ) : (
-          renderSidebar()
-        )}
+        <Sidebar
+          activeTab={activeTab}
+          onNavPress={handleNav}
+          onLogout={handleLogout}
+          isMobile={isMobile}
+          sidebarVisible={sidebarVisible}
+          navItems={LYDO_NAV_ITEMS}
+          logoSource={require('./../../assets/images/lydo-logo.png')}
+        />
 
         {renderContent()}
       </View>
     </SafeAreaView>
+    </>
   );
 }
 
@@ -454,71 +615,17 @@ const styles = StyleSheet.create({
   safe:   { flex: 1, backgroundColor: '#133E75' },
   layout: { flex: 1, flexDirection: 'row' },
 
-  // ── Sidebar ──
-  sidebar: {
-    width: 250,
-    backgroundColor: '#133E75',
-    alignItems: 'center',
-    paddingTop: 20, paddingBottom: 24, paddingHorizontal: 10,
-    zIndex: 10,
-  },
   sidebarOverlay: {
     position: 'absolute',
     left: 0, top: 0, bottom: 0, right: 0,
     backgroundColor: 'rgba(0,0,0,0.5)',
     zIndex: 5,
   },
-  logoPill: {
-    marginTop: 20,
-    width: 70, height: 70, borderRadius: 35,
-    backgroundColor: 'rgba(255,255,255,0.15)',
-    alignItems: 'center', justifyContent: 'center',
-    marginBottom: 8, borderWidth: 2, borderColor: 'rgba(255,255,255,0.3)',
-  },
-    logoImage: {
-    width: 110,
-    height: 110,
-  },
-  sidebarSpacer: { height: 28 },
-  navItemInner: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  navItem: {
-    alignItems: 'center', justifyContent: 'center',
-  },
-  logoText: { fontSize: 15, fontWeight: '900', color: '#133E75', letterSpacing: 0.5 },
-  navItem: {
-    width: '100%', paddingVertical: 12, paddingHorizontal: 12,
-    borderRadius: 24, marginBottom: 8, alignItems: 'center',
-    borderWidth: 1.5, borderColor: COLORS.white, backgroundColor: '#133E75',
-  },
-  navItemActive: { backgroundColor: '#ffffff', borderColor: '#000000' },
-  navLabel:      { fontSize: 13, fontWeight: '600', color: '#ffffff', letterSpacing: 0.3 },
-  navLabelActive:{ color: '#000000', fontWeight: '800' },
-  logoutBtn: {
-    width: '100%', paddingVertical: 12, paddingHorizontal: 12,
-    borderRadius: 24, marginTop: 8, alignItems: 'center',
-    borderWidth: 1.5, borderColor: COLORS.white,
-    backgroundColor: 'rgba(255,255,255,0.1)',
-  },
-  logoutText: { fontSize: 13, fontWeight: '600', color: '#ffffff', letterSpacing: 0.3 },
 
   // ── Main ──
   main:        { flex: 1, backgroundColor: COLORS.offWhite, borderTopLeftRadius: 20 },
   mainMobile:  { borderTopLeftRadius: 0 },
   mainContent: { padding: 20, paddingBottom: 40 },
-
-  // Mobile Header
-  mobileHeader: {
-    flexDirection: 'row', alignItems: 'center',
-    justifyContent: 'space-between', marginBottom: 16,
-    paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: COLORS.lightGray,
-  },
-  menuBtn: {
-    width: 40, height: 40, borderRadius: 20,
-    backgroundColor: COLORS.cardBg, alignItems: 'center', justifyContent: 'center',
-  },
-  menuIconContainer: { width: 20, height: 16, justifyContent: 'space-between' },
-  menuLine:          { width: 20, height: 2, backgroundColor: '#133E75', borderRadius: 1 },
-  mobileTitle:       { fontSize: 18, fontWeight: '800', color: COLORS.darkText },
 
   // Desktop Header
   header: {
@@ -593,21 +700,6 @@ const styles = StyleSheet.create({
     shadowColor: COLORS.shadow, shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 1, shadowRadius: 6, elevation: 3,
   },
-  bellWrapper: { width: 20, height: 22, alignItems: 'center' },
-  bellBody: {
-    width: 14, height: 12, borderRadius: 7,
-    borderWidth: 2, borderColor: COLORS.maroon, marginTop: 4,
-  },
-  bellBottom: {
-    width: 8, height: 4,
-    borderBottomLeftRadius: 4, borderBottomRightRadius: 4,
-    backgroundColor: '#8B0000', marginTop: -1,
-  },
-  bellDot: {
-    position: 'absolute', top: 0, right: 1,
-    width: 7, height: 7, borderRadius: 4,
-    backgroundColor: COLORS.gold, borderWidth: 1.5, borderColor: COLORS.cardBg,
-  },
   notifBadge: {
     position: 'absolute', top: -2, right: -2,
     width: 16, height: 16, borderRadius: 8,
@@ -662,25 +754,45 @@ const styles = StyleSheet.create({
   },
   searchInput: { flex: 1, fontSize: 13, color: COLORS.darkText },
 
-  // Quick Stats
-  quickStatsBlock: {
-    flex: 1, alignItems: 'flex-end', paddingTop: 2,
+  // Archive toggle button
+  archiveBtn: {
+    paddingHorizontal: 14, paddingVertical: 7,
+    backgroundColor: COLORS.white, borderRadius: 6,
+    borderWidth: 1, borderColor: COLORS.lightGray,
   },
-  quickStatRow: {
-    flexDirection: 'row', alignItems: 'center',
-    marginBottom: 2,
-  },
-  quickStatLabel: {
-    fontSize: 13, color: COLORS.darkText, fontWeight: '400',
-  },
-  quickStatValue: {
-    fontSize: 13, color: COLORS.darkText, fontWeight: '700', marginLeft: 4,
-  },
+  archiveBtnText: { color: COLORS.subText, fontSize: 12, fontWeight: '700' },
 
   // Section label
+  sectionLabelRow: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    marginBottom: 10,
+  },
   sectionLabel: {
     fontSize: 13, fontWeight: '700', color: COLORS.darkText,
-    marginBottom: 10,
+  },
+  sectionLabelActions: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+  },
+  refreshBtn: {
+    paddingHorizontal: 12, paddingVertical: 6, borderRadius: 6,
+    borderWidth: 1, borderColor: COLORS.lightGray, backgroundColor: COLORS.white,
+  },
+  refreshBtnText: {
+    fontSize: 12, fontWeight: '700', color: COLORS.navy,
+  },
+
+  // Report row layout
+  reportNameWrap: { flex: 1, paddingRight: 8 },
+  reportBadge: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: 8, paddingVertical: 2,
+    borderRadius: 10, marginBottom: 4,
+  },
+  reportBadgeText: {
+    fontSize: 10, fontWeight: '700', letterSpacing: 0.4, textTransform: 'uppercase',
+  },
+  reportSubtext: {
+    fontSize: 11, color: COLORS.subText, marginTop: 2,
   },
 
   // Table
@@ -727,4 +839,54 @@ const styles = StyleSheet.create({
   // Empty state
   emptyState: { padding: 40, alignItems: 'center' },
   emptyText:  { fontSize: 14, color: COLORS.midGray },
+
+  // ── Archive View (mirrors lydo-document-templates) ──
+  archiveSectionHeader: {
+    paddingHorizontal: 18, paddingTop: 16, paddingBottom: 10,
+    borderBottomWidth: 1, borderBottomColor: COLORS.lightGray,
+    backgroundColor: COLORS.offWhite,
+    borderTopLeftRadius: 10, borderTopRightRadius: 10,
+  },
+  archiveSectionTitle: {
+    fontSize: 15, fontWeight: '800', color: COLORS.darkText, marginBottom: 6,
+  },
+  archiveLockBadge: {
+    backgroundColor: '#FFF8E1', borderRadius: 6, borderWidth: 1,
+    borderColor: '#F9C74F', paddingHorizontal: 10, paddingVertical: 5,
+    alignSelf: 'flex-start',
+  },
+  archiveLockText: { fontSize: 11, color: '#7A5800', fontWeight: '600' },
+  archiveRow: {
+    paddingHorizontal: 18, paddingVertical: 16,
+  },
+  archiveRowMain: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12,
+  },
+  archiveRowName: {
+    flex: 1, fontSize: 13, color: COLORS.darkText, fontWeight: '500', lineHeight: 18,
+  },
+  archiveOldVersionText: {
+    fontSize: 12, fontWeight: '700', color: '#B71C1C',
+  },
+  archiveExpandedDetail: {
+    marginTop: 12, paddingTop: 12,
+    borderTopWidth: 1, borderTopColor: COLORS.lightGray,
+  },
+  archiveDetailRow: {
+    flexDirection: 'row', alignItems: 'center',
+    justifyContent: 'space-between', marginBottom: 8,
+  },
+  archiveDetailLabel: { fontSize: 12, color: COLORS.subText, fontWeight: '600' },
+  archiveDetailValue: { fontSize: 12, color: COLORS.darkText, fontWeight: '500' },
+  archiveVersionBadge: {
+    backgroundColor: '#EFEBE9', borderRadius: 6,
+    paddingHorizontal: 8, paddingVertical: 3,
+    borderWidth: 1, borderColor: '#BCAAA4',
+  },
+  archiveVersionText: { fontSize: 11, fontWeight: '800', color: '#6D4C41' },
+  archiveActionBtn: {
+    flex: 1, paddingVertical: 8, borderRadius: 8,
+    backgroundColor: '#EEF2FB', alignItems: 'center',
+  },
+  archiveActionBtnText: { fontSize: 12, fontWeight: '700', color: '#5B8DD9' },
 });

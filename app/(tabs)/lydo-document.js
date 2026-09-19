@@ -1,29 +1,32 @@
 import * as FileSystem from 'expo-file-system';
 import { useRouter } from 'expo-router';
+import Head from 'expo-router/head';
 import * as Sharing from 'expo-sharing';
-import * as WebBrowser from 'expo-web-browser';
 import { useEffect, useState } from 'react';
 import {
+  ActivityIndicator,
   Dimensions,
-  Image,
   Linking,
   Modal,
-  SafeAreaView,
+  Platform,
   ScrollView,
   StatusBar,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
-  View,
-  ActivityIndicator,
-  Platform,
+  View
 } from 'react-native';
+// SafeAreaView from 'react-native' is a no-op on Android. Use the
+// context-aware version so insets work on both platforms.
 import { Feather } from '@expo/vector-icons';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { supabase } from '../../utils/supabase';
+import Sidebar, { LYDO_NAV_ITEMS } from './../components/Sidebar';
 import { useAuth } from './authContext';
+import MobileHeader, { MobileHeaderSpacer } from './mobileHeader';
 import { useNav } from './navContext';
-
+import { LydoBellIcon, LydoNotificationModal, useLydoNotificationCenter } from './notificationCenter';
 // WebView: use react-native-webview on native, iframe on web
 let WebView = null;
 if (Platform.OS !== 'web') {
@@ -35,47 +38,57 @@ const isMobile = SCREEN_WIDTH < 768;
 
 // ─── COLORS ───────────────────────────────────────────────────────────────────
 const COLORS = {
-  maroon:    '#8B0000',
-  navy:      '#133E75',
-  navyDark:  '#0D2E5A',
-  gold:      '#E8C547',
-  white:     '#FFFFFF',
-  offWhite:  '#F7F5F2',
+  maroon: '#8B0000',
+  navy: '#133E75',
+  navyDark: '#0D2E5A',
+  gold: '#E8C547',
+  white: '#FFFFFF',
+  offWhite: '#F7F5F2',
   lightGray: '#ECECEC',
-  midGray:   '#B0B0B0',
-  darkText:  '#1A1A1A',
-  subText:   '#666666',
-  cardBg:    '#FFFFFF',
-  shadow:    'rgba(0,0,0,0.08)',
+  midGray: '#B0B0B0',
+  darkText: '#1A1A1A',
+  subText: '#666666',
+  cardBg: '#FFFFFF',
+  shadow: 'rgba(0,0,0,0.08)',
 
   planning: {
-    header:  '#5B8DD9',
-    bg:      '#EAF0FB',
-    btn:     '#5B8DD9',
-    text:    '#FFFFFF',
+    header: '#5B8DD9',
+    bg: '#EAF0FB',
+    btn: '#5B8DD9',
+    text: '#FFFFFF',
     subText: '#2A4E8A',
   },
   financial: {
-    header:  '#3AAA5C',
-    bg:      '#E8F7EE',
-    btn:     '#3AAA5C',
-    text:    '#FFFFFF',
+    header: '#3AAA5C',
+    bg: '#E8F7EE',
+    btn: '#3AAA5C',
+    text: '#FFFFFF',
     subText: '#1A6B38',
   },
   governance: {
-    header:  '#8B5BD9',
-    bg:      '#F0EAFB',
-    btn:     '#8B5BD9',
-    text:    '#FFFFFF',
+    header: '#8B5BD9',
+    bg: '#F0EAFB',
+    btn: '#8B5BD9',
+    text: '#FFFFFF',
     subText: '#5A2EA0',
   },
   performance: {
-    header:  '#E87A30',
-    bg:      '#FDF0E6',
-    btn:     '#E87A30',
-    text:    '#FFFFFF',
+    header: '#E87A30',
+    bg: '#FDF0E6',
+    btn: '#E87A30',
+    text: '#FFFFFF',
     subText: '#A04010',
   },
+};
+
+// ─── HEROUI-INSPIRED DESIGN TOKENS ────────────────────────────────────────────
+// Same token set as sk-dashboard.js / lydo-dashboard.js — kept in sync across
+// the app so buttons read as HeroUI components everywhere.
+const HERO = {
+  primary: COLORS.navy, primary50: '#EEF3FA', primary100: '#DCE7F4', primary600: '#0F2F58',
+  default200: '#E4E4E7', default300: '#D4D4D8', white: '#FFFFFF',
+  radiusMd: 12, radiusFull: 999,
+  shadowSm: { shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 3, elevation: 2 },
 };
 
 // ─── BARANGAY DATA ─────────────────────────────────────────────────────────────
@@ -133,104 +146,7 @@ const DOCUMENT_GROUPS = [
 const NAV_TABS = ['Dashboard', 'Documents', 'Monitor', 'Barangay', 'Logs'];
 const DOCUMENT_TABS = ['Barangay Folders', 'Reports', 'Templates'];
 
-// ─── SIDEBAR NAV ICONS (pure React Native Views — no react-native-svg) ────────
 
-// Dashboard: 2×2 grid of rounded squares
-const DashboardIcon = ({ color = '#fff', size = 16 }) => {
-  const s = size * 0.38, gap = size * 0.12, r = size * 0.12;
-  const box = { width: s, height: s, borderRadius: r, backgroundColor: color };
-  return (
-    <View style={{ width: size, height: size, justifyContent: 'center', alignItems: 'center' }}>
-      <View style={{ flexDirection: 'row', gap }}><View style={box} /><View style={box} /></View>
-      <View style={{ height: gap }} />
-      <View style={{ flexDirection: 'row', gap }}><View style={box} /><View style={box} /></View>
-    </View>
-  );
-};
-
-// Documents: file shape with fold + two lines
-const DocumentsIcon = ({ color = '#fff', size = 16 }) => {
-  const w = size * 0.6, h = size * 0.78, fold = size * 0.22;
-  return (
-    <View style={{ width: size, height: size, justifyContent: 'center', alignItems: 'center' }}>
-      <View style={{ width: w, height: h, justifyContent: 'flex-end', paddingBottom: size * 0.08, paddingHorizontal: size * 0.1 }}>
-        <View style={{ position: 'absolute', left: 0, right: 0, top: fold, bottom: 0, borderWidth: 1.5, borderColor: color, borderRadius: size * 0.08 }} />
-        <View style={{ position: 'absolute', top: 0, right: 0, width: fold, height: fold, backgroundColor: color, borderBottomLeftRadius: size * 0.06 }} />
-        <View style={{ position: 'absolute', top: 0, left: 0, width: w - fold, height: fold, borderTopWidth: 1.5, borderLeftWidth: 1.5, borderColor: color, borderTopLeftRadius: size * 0.08 }} />
-        <View style={{ height: 1.5, backgroundColor: color, borderRadius: 1, marginBottom: size * 0.1, width: '80%' }} />
-        <View style={{ height: 1.5, backgroundColor: color, borderRadius: 1, width: '55%' }} />
-      </View>
-    </View>
-  );
-};
-
-// Monitor: simple globe — circle + horizontal line + vertical oval hint
-const MonitorIcon = ({ color = '#fff', size = 16 }) => (
-  <View style={{ width: size, height: size, justifyContent: 'center', alignItems: 'center' }}>
-    <View style={{ width: size * 0.82, height: size * 0.82, borderRadius: size * 0.41, borderWidth: 1.5, borderColor: color, justifyContent: 'center', alignItems: 'center', overflow: 'hidden' }}>
-      <View style={{ position: 'absolute', height: 1.5, width: '100%', backgroundColor: color }} />
-      <View style={{ width: size * 0.38, height: size * 0.78, borderRadius: size * 0.19, borderWidth: 1.5, borderColor: color, backgroundColor: 'transparent' }} />
-    </View>
-  </View>
-);
-
-// Barangay: building/institution icon — base + columns hint
-const BarangayIcon = ({ color = '#fff', size = 16 }) => {
-  const bw = 1.5;
-  return (
-    <View style={{ width: size, height: size, justifyContent: 'center', alignItems: 'center' }}>
-      {/* roof / triangle top */}
-      <View style={{ width: size * 0.82, height: size * 0.22, borderLeftWidth: bw, borderRightWidth: bw, borderTopWidth: bw, borderColor: color, borderTopLeftRadius: size * 0.06, borderTopRightRadius: size * 0.06 }} />
-      {/* body */}
-      <View style={{ width: size * 0.82, height: size * 0.52, borderLeftWidth: bw, borderRightWidth: bw, borderBottomWidth: bw, borderColor: color, flexDirection: 'row', justifyContent: 'space-around', alignItems: 'center', paddingHorizontal: size * 0.08, paddingBottom: size * 0.06 }}>
-        {[0, 1, 2].map(i => (
-          <View key={i} style={{ width: size * 0.1, height: size * 0.36, backgroundColor: color, borderRadius: size * 0.03 }} />
-        ))}
-      </View>
-    </View>
-  );
-};
-
-// Logs: clipboard with lines
-const LogsIcon = ({ color = '#fff', size = 16 }) => (
-  <View style={{ width: size, height: size, justifyContent: 'center', alignItems: 'center' }}>
-    <View style={{ width: size * 0.75, height: size * 0.85, borderWidth: 1.5, borderColor: color, borderRadius: size * 0.1, paddingHorizontal: size * 0.1, paddingVertical: size * 0.1, justifyContent: 'space-around' }}>
-      <View style={{ position: 'absolute', top: -size * 0.08, alignSelf: 'center', width: size * 0.3, height: size * 0.14, backgroundColor: color, borderRadius: size * 0.04 }} />
-      {[0, 1, 2].map(i => (
-        <View key={i} style={{ flexDirection: 'row', alignItems: 'center', gap: size * 0.08, marginTop: i === 0 ? size * 0.1 : 0 }}>
-          <View style={{ width: size * 0.1, height: size * 0.1, borderRadius: size * 0.05, backgroundColor: color }} />
-          <View style={{ flex: 1, height: 1.5, backgroundColor: color, borderRadius: 1 }} />
-        </View>
-      ))}
-    </View>
-  </View>
-);
-
-// Logout: door with arrow
-const LogoutNavIcon = ({ color = '#fff', size = 16 }) => (
-  <View style={{ width: size, height: size, justifyContent: 'center', alignItems: 'center' }}>
-    <View style={{ position: 'absolute', left: 0, top: 0, width: size * 0.55, height: size, borderWidth: 1.5, borderColor: color, borderRadius: size * 0.08 }} />
-    <View style={{ position: 'absolute', right: size * 0.02, width: size * 0.52, height: 1.8, backgroundColor: color, borderRadius: 1 }} />
-    <View style={{ position: 'absolute', right: size * 0.02, width: size * 0.2, height: size * 0.2, borderTopWidth: 1.8, borderRightWidth: 1.8, borderColor: color, transform: [{ rotate: '45deg' }], marginTop: -size * 0.01 }} />
-  </View>
-);
-
-// ─── ICON COMPONENTS ──────────────────────────────────────────────────────────
-const BellIcon = ({ hasNotif }) => (
-  <View style={styles.bellWrapper}>
-    <View style={styles.bellBody} />
-    <View style={styles.bellBottom} />
-    {hasNotif && <View style={styles.bellDot} />}
-  </View>
-);
-
-const MenuIcon = () => (
-  <View style={styles.menuIconContainer}>
-    <View style={styles.menuLine} />
-    <View style={styles.menuLine} />
-    <View style={styles.menuLine} />
-  </View>
-);
 
 // ─── macOS-STYLE FOLDER ICON ──────────────────────────────────────────────────
 const FolderIcon = ({ size = 68 }) => {
@@ -359,19 +275,19 @@ export default function LYDODocumentsScreen({ navigation }) {
   const { activeTab, setActiveTab } = useNav();
   const { logout, user } = useAuth();
 
-  const [view, setView]                           = useState('folders'); // 'folders' | 'years' | 'doctypes'
-  const [selectedBarangay, setSelectedBarangay]   = useState(null);
-  const [selectedYear, setSelectedYear]           = useState(null);
-  const [selectedDocType, setSelectedDocType]     = useState(null);
-  const [searchText, setSearchText]               = useState('');
-  const [notifCount]                              = useState(2);
-  const [currentTime, setCurrentTime]             = useState('');
-  const [sidebarVisible, setSidebarVisible]       = useState(false);
+  const [view, setView] = useState('folders'); // 'folders' | 'years' | 'doctypes'
+  const [selectedBarangay, setSelectedBarangay] = useState(null);
+  const [selectedYear, setSelectedYear] = useState(null);
+  const [selectedDocType, setSelectedDocType] = useState(null);
+  const [searchText, setSearchText] = useState('');
+  const notif = useLydoNotificationCenter();
+  const [currentTime, setCurrentTime] = useState('');
+  const [sidebarVisible, setSidebarVisible] = useState(false);
   const [activeDocumentTab, setActiveDocumentTab] = useState('Barangay Folders');
-  const [barangays, setBarangays]                 = useState([]);
-  const [documentYears, setDocumentYears]         = useState([]);
-  const [docTypesForYear, setDocTypesForYear]     = useState([]); // {document_type, count}
-  const [docsForType, setDocsForType]             = useState([]); // documents by barangay for selected type
+  const [barangays, setBarangays] = useState([]);
+  const [documentYears, setDocumentYears] = useState([]);
+  const [docTypesForYear, setDocTypesForYear] = useState([]); // {document_type, count}
+  const [docsForType, setDocsForType] = useState([]); // documents by barangay for selected type
 
   // Viewer state
   const [viewerModal, setViewerModal] = useState({ visible: false, fileUrl: null, title: '' });
@@ -381,6 +297,16 @@ export default function LYDODocumentsScreen({ navigation }) {
   const [addFolderVisible, setAddFolderVisible] = useState(false);
   const [newFolderYear, setNewFolderYear] = useState('');
   const [addFolderError, setAddFolderError] = useState('');
+
+  // Add Document Type modal state
+  const [addDocTypeVisible, setAddDocTypeVisible] = useState(false);
+  const [newDocTypeName, setNewDocTypeName] = useState('');
+  const [newDocTypeCategory, setNewDocTypeCategory] = useState('');
+  const [newDocTypeYear, setNewDocTypeYear] = useState('');
+  const [addDocTypeError, setAddDocTypeError] = useState('');
+
+  // Document categories (from document_category table)
+  const [docCategories, setDocCategories] = useState([]);
 
   // Handle view press - open document viewer
   const handleViewPress = (doc) => {
@@ -430,18 +356,29 @@ export default function LYDODocumentsScreen({ navigation }) {
           setBarangays(barangayData || []);
         }
 
-        // Fetch all distinct years — approved docs + 'Year Folder' saved sentinels
+        // Fetch fiscal years from folder_year table
         const { data: yearData, error: yearError } = await supabase
-          .from('documents')
-          .select('year')
-          .or('status.eq.approved,and(status.eq.saved,document_type.eq.Year Folder)')
-          .order('year', { ascending: true });
+          .from('folder_year')
+          .select('id, fiscal_year')
+          .order('fiscal_year', { ascending: true });
 
         if (yearError) {
           console.error('Error fetching years:', yearError);
         } else {
-          const years = [...new Set(yearData?.map(d => d.year).filter(Boolean))].sort((a, b) => a - b);
+          const years = yearData?.map(d => d.fiscal_year).filter(Boolean).sort((a, b) => a - b) || [];
           setDocumentYears(years);
+        }
+
+        // Fetch document categories
+        const { data: catData, error: catError } = await supabase
+          .from('document_category')
+          .select('id, document_category')
+          .order('document_category');
+
+        if (catError) {
+          console.error('Error fetching categories:', catError);
+        } else {
+          setDocCategories(catData || []);
         }
       } catch (error) {
         console.error('Error:', error);
@@ -470,21 +407,65 @@ export default function LYDODocumentsScreen({ navigation }) {
 
     const fetchDocTypesForYear = async () => {
       try {
-        const { data, error } = await supabase
+        // First, get the folder_year ID for this fiscal year
+        const { data: yearData, error: yearDataError } = await supabase
+          .from('folder_year')
+          .select('id')
+          .eq('fiscal_year', year)
+          .single();
+
+        if (yearDataError) {
+          console.error('Error fetching folder year:', yearDataError);
+          return;
+        }
+
+        const folderYearId = yearData?.id;
+        if (!folderYearId) {
+          console.error('No folder year found for:', year);
+          return;
+        }
+
+        // Fetch all document types - we'll filter locally by year
+        const { data: allDocTypes, error: typesError } = await supabase
+          .from('document_types')
+          .select('id, document_type, category, year')
+          .order('document_type');
+
+        if (typesError) { console.error('Error fetching doc types:', typesError); return; }
+
+        // Filter: include types that are either (specific to this year) or (no specific year / null)
+        const allTypes = (allDocTypes || []).filter(dt => {
+          const dtYear = dt.year?.toString();
+          return dtYear === year.toString() || dtYear === null || dtYear === undefined;
+        });
+
+        // Get counts from actual documents for this year using folder_year id
+        const { data: docsData } = await supabase
           .from('documents')
           .select('document_type')
-          .eq('year', year)
+          .eq('year', folderYearId)
           .eq('status', 'approved');
 
-        if (error) { console.error('Error fetching doc types:', error); return; }
-
-        // Get unique document_types with count
         const countMap = new Map();
-        data?.forEach(doc => {
-          if (doc.document_type) {
-            countMap.set(doc.document_type, (countMap.get(doc.document_type) || 0) + 1);
+
+        // First, add document types from document_types table
+        allTypes.forEach(docType => {
+          if (docType.document_type) {
+            // Count how many documents exist for this type
+            const count = docsData?.filter(d => d.document_type === docType.id.toString()).length || 0;
+            countMap.set(docType.document_type, count);
           }
         });
+
+        // If countMap is empty (no documents yet), still show all document types with count 0
+        if (countMap.size === 0 && allTypes.length > 0) {
+          allTypes.forEach(docType => {
+            if (docType.document_type && !countMap.has(docType.document_type)) {
+              countMap.set(docType.document_type, 0);
+            }
+          });
+        }
+
         const types = Array.from(countMap.entries()).map(([document_type, count]) => ({ document_type, count }));
         types.sort((a, b) => a.document_type.localeCompare(b.document_type));
         setDocTypesForYear(types);
@@ -504,11 +485,53 @@ export default function LYDODocumentsScreen({ navigation }) {
 
     const fetchDocsForType = async () => {
       try {
+        // First, get the folder_year ID for the selected fiscal year
+        const { data: yearData, error: yearError } = await supabase
+          .from('folder_year')
+          .select('id')
+          .eq('fiscal_year', selectedYear)
+          .single();
+
+        if (yearError) {
+          console.error('Error fetching folder year:', yearError);
+          return;
+        }
+
+        const folderYearId = yearData?.id;
+        if (!folderYearId) {
+          console.error('No folder year found for:', selectedYear);
+          return;
+        }
+
+        // Then, find the document type ID from document_types table
+        const { data: typeData, error: typeError } = await supabase
+          .from('document_types')
+          .select('id')
+          .eq('document_type', docType)
+          .single();
+
+        if (typeError) {
+          console.error('Error finding document type:', typeError);
+          // Fallback: try querying directly with the docType string
+          const { data, error } = await supabase
+            .from('documents')
+            .select('document_id, title, document_type, status, submitted_at, file_url, barangay_id, barangays(barangay_id, barangay_name)')
+            .eq('year', folderYearId)
+            .eq('document_type', docType)
+            .eq('status', 'approved');
+
+          if (error) { console.error('Error fetching docs:', error); return; }
+          setDocsForType(data || []);
+          return;
+        }
+
+        // Query documents using the found type ID and folder_year id
+        const typeId = typeData?.id?.toString();
         const { data, error } = await supabase
           .from('documents')
           .select('document_id, title, document_type, status, submitted_at, file_url, barangay_id, barangays(barangay_id, barangay_name)')
-          .eq('year', selectedYear)
-          .eq('document_type', docType)
+          .eq('year', folderYearId)
+          .eq('document_type', typeId)
           .eq('status', 'approved');
 
         if (error) { console.error('Error fetching docs:', error); return; }
@@ -533,8 +556,8 @@ export default function LYDODocumentsScreen({ navigation }) {
     if (tab === 'Dashboard') router.push('/(tabs)/lydo-dashboard')
     else if (tab === 'Documents') router.push('/(tabs)/lydo-document');
     else if (tab === 'Monitor') router.push('/(tabs)/lydo-monitor');
-        if (tab === 'Barangay') router.push('/(tabs)/lydo-accounts');
-          if (tab === 'Logs') router.push('/(tabs)/lydo-logs');
+    if (tab === 'Barangay') router.push('/(tabs)/lydo-accounts');
+    if (tab === 'Logs') router.push('/(tabs)/lydo-logs');
   };
 
   const handleLogout = () => {
@@ -568,26 +591,14 @@ export default function LYDODocumentsScreen({ navigation }) {
     }
 
     try {
-      // Insert a sentinel row into documents to anchor this year folder.
-      // Uses status:'saved' to satisfy any check constraint on the status column.
-      const insertPayload = {
-        title:           `Year Folder ${yearNum}`,
-        year:            yearNum,
-        status:          'saved',
-        folder_category: 'planning',
-        document_type:   'Year Folder',
-        current_version: 1,
-        created_at:      new Date().toISOString(),
-        saved_at:        new Date().toISOString(),
-      };
-
-      // Only include submitted_by if we have a valid user id
-      if (user?.id) insertPayload.submitted_by = user.id;
-
+      // Insert new fiscal year into folder_year table
       const { data: inserted, error } = await supabase
-        .from('documents')
-        .insert(insertPayload)
-        .select('year')
+        .from('folder_year')
+        .insert({
+          fiscal_year: yearNum,
+          created_at: new Date().toISOString(),
+        })
+        .select('fiscal_year')
         .single();
 
       if (error) {
@@ -605,6 +616,62 @@ export default function LYDODocumentsScreen({ navigation }) {
       setAddFolderError('');
     } catch (err) {
       setAddFolderError(`Unexpected error: ${err.message}`);
+      console.error(err);
+    }
+  };
+
+  const handleAddDocType = async () => {
+    const trimmed = newDocTypeName.trim();
+
+    // Validate: name is required
+    if (!trimmed) {
+      setAddDocTypeError('Document type name is required.');
+      return;
+    }
+
+    if (!newDocTypeCategory) {
+      setAddDocTypeError('Please select a category.');
+      return;
+    }
+
+    try {
+      // Prepare the insert payload
+      const insertPayload = {
+        document_type: trimmed,
+        category: newDocTypeCategory,
+        created_at: new Date().toISOString(),
+      };
+
+      // Add year if specified (null means applies to all years)
+      if (newDocTypeYear && newDocTypeYear !== 'all') {
+        insertPayload.year = newDocTypeYear;
+      }
+
+      const { data: inserted, error } = await supabase
+        .from('document_types')
+        .insert(insertPayload)
+        .select('id, document_type')
+        .single();
+
+      if (error) {
+        setAddDocTypeError(`Error: ${error.message}`);
+        console.error('Insert document type error:', error);
+        return;
+      }
+
+      // Close modal and reset
+      setAddDocTypeVisible(false);
+      setNewDocTypeName('');
+      setNewDocTypeCategory('');
+      setNewDocTypeYear('');
+      setAddDocTypeError('');
+
+      // Refresh the document types for the current year
+      if (selectedYear) {
+        goToYears(selectedYear);
+      }
+    } catch (err) {
+      setAddDocTypeError(`Unexpected error: ${err.message}`);
       console.error(err);
     }
   };
@@ -629,734 +696,792 @@ export default function LYDODocumentsScreen({ navigation }) {
     g.items.some(i => i.toLowerCase().includes(searchText.toLowerCase()))
   );
 
-  // ── Sidebar ──
-  const NAV_ITEMS = [
-    { tab: 'Dashboard', IconComponent: DashboardIcon },
-    { tab: 'Documents', IconComponent: DocumentsIcon },
-    { tab: 'Monitor',   IconComponent: MonitorIcon   },
-    { tab: 'Barangay',  IconComponent: BarangayIcon  },
-    { tab: 'Logs',      IconComponent: LogsIcon      },
-  ];
-
-  const renderSidebar = () => (
-    <View style={styles.sidebar}>
-      <View style={styles.logoPill}>
-        <Image
-          source={require('./../../assets/images/lydo-logo.png')}
-          style={styles.logoImage}
-          resizeMode="contain"
-        />
-      </View>
-      <View style={styles.sidebarSpacer} />
-      {NAV_ITEMS.map(({ tab, IconComponent }) => {
-        const active = activeTab === tab;
-        const iconColor = active ? '#133E75' : 'rgba(255,255,255,0.85)';
-        return (
-          <TouchableOpacity
-            key={tab}
-            style={[styles.navItem, active && styles.navItemActive]}
-            onPress={() => handleNavPress(tab)}
-            activeOpacity={0.8}
-          >
-            <View style={styles.navItemInner}>
-              <IconComponent color={iconColor} size={16} />
-              <Text style={[styles.navLabel, active && styles.navLabelActive]}>{tab}</Text>
-            </View>
-          </TouchableOpacity>
-        );
-      })}
-      <View style={{ flex: 1 }} />
-      <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout} activeOpacity={0.8}>
-        <View style={styles.navItemInner}>
-          <LogoutNavIcon color="rgba(255,255,255,0.85)" size={16} />
-          <Text style={styles.logoutText}>Logout</Text>
-        </View>
-      </TouchableOpacity>
-    </View>
-  );
-
   // ── Content body (shared between mobile/desktop) ──
   const renderContent = () => (
-    <ScrollView
-      style={[styles.main, isMobile && styles.mainMobile]}
-      contentContainerStyle={styles.mainContent}
-      showsVerticalScrollIndicator={false}
-    >
-      {/* Mobile Header */}
-      {isMobile && (
-        <View style={styles.mobileHeader}>
-          <TouchableOpacity style={styles.menuBtn} onPress={() => setSidebarVisible(true)}>
-            <MenuIcon />
-          </TouchableOpacity>
-          <Text style={styles.mobileTitle}>Documents</Text>
-          <TouchableOpacity style={styles.bellBtn}>
-            <BellIcon hasNotif={notifCount > 0} />
-          </TouchableOpacity>
-        </View>
-      )}
+    <View style={[styles.main, isMobile && styles.mainMobile]}>
+      <MobileHeader
+        title="Documents"
+        onMenuPress={() => setSidebarVisible(true)}
+        onBellPress={notif.open}
+        bellCount={notif.count}
+        BellIcon={LydoBellIcon}
+        colors={COLORS}
+        hidden={isMobile && sidebarVisible}
+      />
+      <ScrollView
+        style={{ flex: 1 }}
+        contentContainerStyle={styles.mainContent}
+        showsVerticalScrollIndicator={false}
+      >
+        <MobileHeaderSpacer />
 
-      {/* Desktop Header */}
-      {!isMobile && (
-        <View style={styles.header}>
-          <View>
-            <Text style={styles.headerSub}>SANGGUNIANG KABATAAN FEDERATION</Text>
-            <Text style={styles.headerTitle}>RIZAL, LAGUNA</Text>
-          </View>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-            <View style={styles.datetimeCard}>
-              <View style={styles.datetimeRow}>
-                <View style={styles.datetimeDivider} />
-                <View style={styles.datetimeBlock}>
-                  <Text style={styles.datetimeLabel}>DATE</Text>
-                  <Text style={styles.datetimeValue}>{today}</Text>
-                </View>
-                <View style={styles.datetimeSeparator} />
-                <View style={[styles.datetimeDivider, { backgroundColor: '#22C55E' }]} />
-                <View style={styles.datetimeBlock}>
-                  <Text style={styles.datetimeLabel}>TIME (PHT)</Text>
-                  <Text style={[styles.datetimeValue, styles.datetimeTime]}>{currentTime}</Text>
-                </View>
-              </View>
+        {/* Desktop Header */}
+        {!isMobile && (
+          <View style={styles.header}>
+            <View>
+              <Text style={styles.headerSub}>SANGGUNIANG KABATAAN FEDERATION</Text>
+              <Text style={styles.headerTitle}>RIZAL, LAGUNA</Text>
             </View>
-            <TouchableOpacity style={styles.bellBtn} activeOpacity={0.7}>
-              <BellIcon hasNotif={notifCount > 0} />
-              {notifCount > 0 && (
-                <View style={styles.notifBadge}>
-                  <Text style={styles.notifBadgeText}>{notifCount}</Text>
-                </View>
-              )}
-            </TouchableOpacity>
-          </View>
-        </View>
-      )}
-
-      {/* Page title */}
-      <Text style={styles.sectionTitle}>Document Management</Text>
-
-      {/* Document Tab Bar */}
-      <View style={styles.documentTabBar}>
-        {DOCUMENT_TABS.map(tab => {
-          const active = activeDocumentTab === tab;
-          return (
-            <TouchableOpacity
-              key={tab}
-              style={[styles.documentTab, active && styles.documentTabActive]}
-              onPress={() => handleDocumentTabPress(tab)}
-              activeOpacity={0.8}
-            >
-              <Text style={[styles.documentTabText, active && styles.documentTabTextActive]}>{tab}</Text>
-            </TouchableOpacity>
-          );
-        })}
-      </View>
-
-      {/* ── VIEW: ROOT FOLDERS (years) ── */}
-      {view === 'folders' && (
-        <>
-          {/* Search + Add Folder button row */}
-          <View style={[styles.searchRow, { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 }]}>
-            <View style={styles.searchBox}>
-              <Text style={{ fontSize: 13, marginRight: 6 }}>🔍</Text>
-              <TextInput
-                style={styles.searchInput}
-                placeholder="Search year…"
-                placeholderTextColor={COLORS.midGray}
-                value={searchText}
-                onChangeText={setSearchText}
-              />
-              {searchText.length > 0 && (
-                <TouchableOpacity onPress={() => setSearchText('')}>
-                  <Text style={{ color: COLORS.midGray, fontSize: 13 }}>✕</Text>
-                </TouchableOpacity>
-              )}
-            </View>
-            <TouchableOpacity
-              style={styles.addFolderBtn}
-              onPress={() => {
-                setNewFolderYear('');
-                setAddFolderError('');
-                setAddFolderVisible(true);
-              }}
-              activeOpacity={0.8}
-            >
-              {/* Mini folder icon */}
-              <View style={styles.addFolderBtnIconWrap}>
-                <View style={styles.addFolderBtnFolderTab} />
-                <View style={styles.addFolderBtnFolderBody}>
-                  <Text style={styles.addFolderBtnPlus}>+</Text>
-                </View>
-              </View>
-              <Text style={styles.addFolderBtnText}>Add Folder</Text>
-            </TouchableOpacity>
-          </View>
-
-          {/* Container box for year folders */}
-          <View style={styles.folderContainer}>
-            <Text style={styles.allDocsLabel}>All Documents</Text>
-
-            {filteredYears.length === 0 ? (
-              <View style={styles.emptyState}>
-                <Text style={{ fontSize: 32, marginBottom: 8 }}>📁</Text>
-                <Text style={styles.emptyText}>No year folders yet.</Text>
-                <Text style={{ fontSize: 12, color: COLORS.midGray, marginTop: 4 }}>
-                  Tap "+ Add Folder" to create one.
-                </Text>
-              </View>
-            ) : (
-              <View style={isMobile ? styles.folderGridMobile : styles.folderGrid}>
-                {filteredYears.map((year, idx) => (
-                  <TouchableOpacity
-                    key={idx}
-                    style={styles.folderCard}
-                    onPress={() => goToYears(year)}
-                    activeOpacity={0.75}
-                  >
-                    <YearFolderIcon size={isMobile ? 60 : 68} />
-                    <Text style={styles.folderName}>{year}</Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            )}
-          </View>
-
-          {/* ── ADD FOLDER MODAL ── */}
-          <Modal
-            visible={addFolderVisible}
-            transparent
-            animationType="fade"
-            onRequestClose={() => setAddFolderVisible(false)}
-          >
-            <TouchableOpacity
-              style={styles.addFolderOverlay}
-              activeOpacity={1}
-              onPress={() => setAddFolderVisible(false)}
-            />
-            <View style={styles.addFolderModalWrap} pointerEvents="box-none">
-              <View style={styles.addFolderModal}>
-                {/* Header */}
-                <View style={styles.addFolderModalHeader}>
-                  <View style={styles.addFolderModalHeaderLeft}>
-                    <View style={styles.addFolderModalIconWrap}>
-                      <Text style={{ fontSize: 20 }}>📁</Text>
-                    </View>
-                    <Text style={styles.addFolderModalTitle}>New Year Folder</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+              <View style={styles.datetimeCard}>
+                <View style={styles.datetimeRow}>
+                  <View style={styles.datetimeDivider} />
+                  <View style={styles.datetimeBlock}>
+                    <Text style={styles.datetimeLabel}>DATE</Text>
+                    <Text style={styles.datetimeValue}>{today}</Text>
                   </View>
-                  <TouchableOpacity
-                    onPress={() => setAddFolderVisible(false)}
-                    style={styles.addFolderCloseBtn}
-                    activeOpacity={0.7}
-                  >
-                    <Text style={styles.addFolderCloseBtnText}>✕</Text>
-                  </TouchableOpacity>
-                </View>
-
-                <View style={styles.addFolderModalDivider} />
-
-                {/* Body */}
-                <View style={styles.addFolderModalBody}>
-                  <Text style={styles.addFolderModalLabel}>Year</Text>
-                  <TextInput
-                    style={[styles.addFolderInput, addFolderError ? styles.addFolderInputError : null]}
-                    placeholder={`e.g. ${new Date().getFullYear()}`}
-                    placeholderTextColor={COLORS.midGray}
-                    value={newFolderYear}
-                    onChangeText={t => { setNewFolderYear(t.replace(/[^0-9]/g, '')); setAddFolderError(''); }}
-                    keyboardType="number-pad"
-                    maxLength={4}
-                    autoFocus
-                  />
-                  {addFolderError ? (
-                    <Text style={styles.addFolderErrorText}>{addFolderError}</Text>
-                  ) : (
-                    <Text style={styles.addFolderHint}>
-                      A new folder will be created for this fiscal year.
-                    </Text>
-                  )}
-                </View>
-
-                {/* Footer buttons */}
-                <View style={styles.addFolderModalFooter}>
-                  <TouchableOpacity
-                    style={styles.addFolderCancelBtn}
-                    onPress={() => setAddFolderVisible(false)}
-                    activeOpacity={0.8}
-                  >
-                    <Text style={styles.addFolderCancelText}>Cancel</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[styles.addFolderConfirmBtn, !newFolderYear.trim() && styles.addFolderConfirmBtnDisabled]}
-                    onPress={handleAddFolder}
-                    activeOpacity={0.8}
-                    disabled={!newFolderYear.trim()}
-                  >
-                    <Text style={styles.addFolderConfirmText}>Create Folder</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            </View>
-          </Modal>
-        </>
-      )}
-
-      {/* ── VIEW: DOCUMENT TYPE FOLDERS inside a year (table layout) ── */}
-      {view === 'years' && (
-        <>
-          {/* Back Button */}
-          <TouchableOpacity
-            style={styles.backBtn}
-            onPress={goToFolders}
-            activeOpacity={0.75}
-          >
-            <Feather name="arrow-left" size={16} color={COLORS.navy} />
-            <Text style={styles.backBtnText}>Back</Text>
-          </TouchableOpacity>
-
-          {/* Breadcrumb: Folders > 2026 Documents */}
-          <View style={styles.breadcrumb}>
-            <TouchableOpacity onPress={goToFolders}>
-              <Text style={styles.breadcrumbLink}>Folders</Text>
-            </TouchableOpacity>
-            <Text style={styles.breadcrumbSep}> › </Text>
-            <Text style={styles.breadcrumbCurrent}>{selectedYear} Documents</Text>
-          </View>
-
-          {/* Search row + label */}
-          <View style={styles.tableTopRow}>
-            <Text style={styles.allDocsLabel}>All Documents</Text>
-            <View style={styles.searchBox}>
-              <Text style={{ fontSize: 13, marginRight: 6 }}>🔍</Text>
-              <TextInput
-                style={styles.searchInput}
-                placeholder="Search"
-                placeholderTextColor={COLORS.midGray}
-                value={searchText}
-                onChangeText={setSearchText}
-              />
-              {searchText.length > 0 && (
-                <TouchableOpacity onPress={() => setSearchText('')}>
-                  <Text style={{ color: COLORS.midGray, fontSize: 13 }}>✕</Text>
-                </TouchableOpacity>
-              )}
-            </View>
-          </View>
-
-          {/* Table */}
-          <View style={styles.docTable}>
-            {/* Table Header */}
-            <View style={styles.docTableHeader}>
-              <Text style={[styles.docTableHeaderCell, { flex: 3 }]}>Document</Text>
-            </View>
-
-            {/* Table Rows — document types */}
-            {filteredDocTypes.length === 0 ? (
-              <View style={styles.docTableEmptyRow}>
-                <Text style={styles.emptyText}>No documents found.</Text>
-              </View>
-            ) : (
-              filteredDocTypes.map((item, idx) => (
-                <View
-                  key={item.document_type}
-                  style={[
-                    styles.docTableRow,
-                    idx % 2 === 0 && styles.docTableRowAlt,
-                  ]}
-                >
-                  {/* Document column: folder icon + name */}
-                  <TouchableOpacity
-                    style={[styles.docTableCell, { flex: 3, flexDirection: 'row',  justifyContent: 'flex-start', gap: 8 }]}
-                    onPress={() => goToDocTypes(item.document_type)}
-                    activeOpacity={0.75}
-                  >
-                    <View style={{ width: 28, height: 23 }}>
-                      <View style={{
-                        position: 'absolute', top: 0, left: 0,
-                        width: 11, height: 4,
-                        backgroundColor: '#0F68D0',
-                        borderTopLeftRadius: 2, borderTopRightRadius: 4,
-                      }} />
-                      <View style={{
-                        position: 'absolute', top: 3, left: 0,
-                        width: 28, height: 20,
-                        backgroundColor: '#1A8CFF',
-                        borderRadius: 3,
-                      }}>
-                        <View style={{
-                          position: 'absolute', top: 3, left: 4, right: 4, height: 4,
-                          backgroundColor: 'rgba(255,255,255,0.22)', borderRadius: 2,
-                        }} />
-                      </View>
-                    </View>
-                    <Text style={styles.docTableCellText} numberOfLines={2}>
-                      {item.document_type}
-                    </Text>
-                  </TouchableOpacity>
-
-                  
-
-                  
-                </View>
-              ))
-            )}
-
-            {/* Empty filler rows */}
-            {filteredDocTypes.length > 0 && filteredDocTypes.length < 6 &&
-              [...Array(Math.max(0, 4 - filteredDocTypes.length))].map((_, i) => (
-                <View key={`empty-${i}`} style={[styles.docTableRow, (filteredDocTypes.length + i) % 2 === 0 && styles.docTableRowAlt]}>
-                  <View style={[styles.docTableCell, { flex: 3 }]} />
-                  <View style={[styles.docTableCell, { flex: 2 }]} />
-                  <View style={[styles.docTableCell, { flex: 1 }]} />
-                </View>
-              ))
-            }
-          </View>
-        </>
-      )}
-
-      {/* ── VIEW: DOCUMENTS BY BARANGAY for a selected document type ── */}
-      {view === 'doctypes' && (
-        <>
-          {/* Back Button */}
-          <TouchableOpacity
-            style={styles.backBtn}
-            onPress={() => goToYears(selectedYear)}
-            activeOpacity={0.75}
-          >
-            <Feather name="arrow-left" size={16} color={COLORS.navy} />
-            <Text style={styles.backBtnText}>Back</Text>
-          </TouchableOpacity>
-
-          {/* Breadcrumb: Folders > 2026 Documents > Annual Budget... */}
-          <View style={styles.breadcrumb}>
-            <TouchableOpacity onPress={goToFolders}>
-              <Text style={styles.breadcrumbLink}>Folders</Text>
-            </TouchableOpacity>
-            <Text style={styles.breadcrumbSep}> › </Text>
-            <TouchableOpacity onPress={() => goToYears(selectedYear)}>
-              <Text style={styles.breadcrumbLink}>{selectedYear} Documents</Text>
-            </TouchableOpacity>
-            <Text style={styles.breadcrumbSep}> › </Text>
-            <Text style={styles.breadcrumbCurrent} numberOfLines={1}>{selectedDocType}</Text>
-          </View>
-
-          {/* Section title */}
-          <View style={styles.tableTopRow}>
-            <Text style={[styles.allDocsLabel, { fontSize: 14, color: '#133E75', fontWeight: '800' }]}>{selectedDocType}</Text>
-            <View style={styles.searchBox}>
-              <Text style={{ fontSize: 13, marginRight: 6 }}>🔍</Text>
-              <TextInput
-                style={styles.searchInput}
-                placeholder="Search"
-                placeholderTextColor={COLORS.midGray}
-                value={searchText}
-                onChangeText={setSearchText}
-              />
-              {searchText.length > 0 && (
-                <TouchableOpacity onPress={() => setSearchText('')}>
-                  <Text style={{ color: COLORS.midGray, fontSize: 13 }}>✕</Text>
-                </TouchableOpacity>
-              )}
-            </View>
-          </View>
-
-          {/* Table */}
-          <View style={styles.docTable}>
-            {/* Table Header — Barangay | Document | Date Submitted | Action */}
-            <View style={styles.docTableHeader}>
-              <Text style={[styles.docTableHeaderCell, { flex: 2 }]}>Barangay</Text>
-              <Text style={[styles.docTableHeaderCell, { flex: 3 }]}>Document</Text>
-              <Text style={[styles.docTableHeaderCell, { flex: 2, textAlign: 'center' }]}>Date Submitted</Text>
-              <Text style={[styles.docTableHeaderCell, { flex: 1, textAlign: 'center' }]}>Action</Text>
-            </View>
-
-            {filteredDocsForType.length === 0 ? (
-              <View style={styles.docTableEmptyRow}>
-                <Text style={styles.emptyText}>No documents found.</Text>
-              </View>
-            ) : (
-              filteredDocsForType.map((doc, idx) => (
-                <View
-                  key={doc.document_id}
-                  style={[styles.docTableRow, idx % 2 === 0 && styles.docTableRowAlt]}
-                >
-                  {/* Barangay */}
-                  <View style={[styles.docTableCell, { flex: 2 }]}>
-                    <Text style={styles.docTableCellText} numberOfLines={2}>
-                      {doc.barangays?.barangay_name || '—'}
-                    </Text>
-                  </View>
-
-                  {/* Document title */}
-                  <View style={[styles.docTableCell, { flex: 3 }]}>
-                    <Text style={styles.docTableCellText} numberOfLines={2}>
-                      {doc.title}
-                    </Text>
-                  </View>
-
-                  {/* Date Submitted */}
-                  <View style={[styles.docTableCell, { flex: 2, alignItems: 'center' }]}>
-                    <Text style={styles.docTableCellSub}>
-                      {doc.submitted_at ? new Date(doc.submitted_at).toLocaleDateString('en-PH', { year: 'numeric', month: 'short', day: 'numeric' }) : '—'}
-                    </Text>
-                  </View>
-
-                  {/* Actions: download + view */}
-                  <View style={[styles.docTableCell, { flex: 1, flexDirection: 'row', justifyContent: 'center', gap: 10 }]}>
-                    {doc.file_url ? (
-                      <TouchableOpacity
-                        style={styles.actionIconBtn}
-                        activeOpacity={0.7}
-                        onPress={async () => {
-                          if (doc.file_url) {
-                            try {
-                              // Download the file to cache directory
-                              const filename = doc.file_url.split('/').pop() || 'document.pdf';
-                              const fileUri = FileSystem.cacheDirectory + filename;
-
-                              const downloadResult = await FileSystem.downloadAsync(doc.file_url, fileUri);
-
-                              // Share the downloaded file
-                              if (downloadResult.status === 200) {
-                                await Sharing.shareAsync(downloadResult.uri, {
-                                  mimeType: 'application/pdf',
-                                  dialogTitle: 'Save Document',
-                                  UTI: 'com.adobe.pdf'
-                                });
-                              }
-                            } catch (err) {
-                              console.error('Error downloading file:', err);
-                              // Fallback to opening URL if download fails
-                              Linking.openURL(doc.file_url).catch(e =>
-                                console.error('Error opening URL:', e)
-                              );
-                            }
-                          }
-                        }}
-                      >
-                        {/* Download icon */}
-                        <Feather name="download" size={isMobile ? 13 : 15} color={COLORS.navy} />
-                      </TouchableOpacity>
-                    ) : null}
-                    {doc.file_url && (
-                      <TouchableOpacity
-                        style={styles.actionIconBtn}
-                        activeOpacity={0.7}
-                        onPress={() => handleViewPress(doc)}
-                      >
-                        {/* Eye icon */}
-                        <Feather name="eye" size={isMobile ? 13 : 15} color="#00796B" />
-                      </TouchableOpacity>
-                    )}
+                  <View style={styles.datetimeSeparator} />
+                  <View style={[styles.datetimeDivider, { backgroundColor: '#22C55E' }]} />
+                  <View style={styles.datetimeBlock}>
+                    <Text style={styles.datetimeLabel}>TIME (PHT)</Text>
+                    <Text style={[styles.datetimeValue, styles.datetimeTime]}>{currentTime}</Text>
                   </View>
                 </View>
-              ))
-            )}
-
-            {/* Empty filler rows */}
-            {filteredDocsForType.length > 0 && filteredDocsForType.length < 5 &&
-              [...Array(Math.max(0, 4 - filteredDocsForType.length))].map((_, i) => (
-                <View key={`empty-${i}`} style={[styles.docTableRow, (filteredDocsForType.length + i) % 2 === 0 && styles.docTableRowAlt]}>
-                  <View style={[styles.docTableCell, { flex: 2 }]} />
-                  <View style={[styles.docTableCell, { flex: 3 }]} />
-                  <View style={[styles.docTableCell, { flex: 2 }]} />
-                  <View style={[styles.docTableCell, { flex: 1 }]} />
-                </View>
-              ))
-            }
+              </View>
+              <TouchableOpacity style={styles.bellBtn} activeOpacity={0.7} onPress={notif.open}>
+                <LydoBellIcon count={notif.count} />
+              </TouchableOpacity>
+            </View>
           </View>
-        </>
-      )}
-    </ScrollView>
-  );
-
-  return (
-    <SafeAreaView style={styles.safe}>
-      <StatusBar barStyle="light-content" backgroundColor={COLORS.navy} />
-
-      <View style={styles.layout}>
-        {/* Mobile: Sidebar as overlay */}
-        {isMobile && sidebarVisible && (
-          <TouchableOpacity
-            style={styles.sidebarOverlay}
-            activeOpacity={1}
-            onPress={() => setSidebarVisible(false)}
-          />
         )}
 
-        {isMobile ? (
-          sidebarVisible && renderSidebar()
-        ) : (
-          renderSidebar()
-        )}
+        {/* Page title */}
+        <Text style={styles.sectionTitle}>Document Management</Text>
 
-        {renderContent()}
-
-        {/* ── Document Viewer Modal ── */}
-        <Modal
-          visible={viewerModal.visible}
-          animationType="slide"
-          transparent={false}
-          onRequestClose={() => setViewerModal({ visible: false, fileUrl: null, title: '' })}
-        >
-          <SafeAreaView style={{ flex: 1, backgroundColor: COLORS.navy }}>
-            {/* Viewer Header */}
-            <View style={styles.viewerHeader}>
+        {/* Document Tab Bar */}
+        <View style={styles.documentTabBar}>
+          {DOCUMENT_TABS.map(tab => {
+            const active = activeDocumentTab === tab;
+            return (
               <TouchableOpacity
-                style={styles.viewerBackBtn}
-                onPress={() => setViewerModal({ visible: false, fileUrl: null, title: '' })}
+                key={tab}
+                style={[styles.documentTab, active && styles.documentTabActive]}
+                onPress={() => handleDocumentTabPress(tab)}
                 activeOpacity={0.8}
               >
-                <Feather name="arrow-left" size={20} color={COLORS.white} />
+                <Text style={[styles.documentTabText, active && styles.documentTabTextActive]}>{tab}</Text>
               </TouchableOpacity>
-              <Text style={styles.viewerTitle} numberOfLines={1}>
-                {viewerModal.title}
-              </Text>
-              {viewerModal.fileUrl && (
+            );
+          })}
+        </View>
+
+        {/* ── VIEW: ROOT FOLDERS (years) ── */}
+        {view === 'folders' && (
+          <>
+            {/* Search + Add Folder button row */}
+            <View style={[styles.searchRow, isMobile ? styles.searchRowStack : styles.searchRowInline]}>
+              <View style={styles.searchBox}>
+                <Text style={{ fontSize: 13, marginRight: 6 }}>🔍</Text>
+                <TextInput
+                  style={styles.searchInput}
+                  placeholder="Search year…"
+                  placeholderTextColor={COLORS.midGray}
+                  value={searchText}
+                  onChangeText={setSearchText}
+                />
+                {searchText.length > 0 && (
+                  <TouchableOpacity onPress={() => setSearchText('')}>
+                    <Text style={{ color: COLORS.midGray, fontSize: 13 }}>✕</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+              <View style={[styles.addFolderButtonsWrap, isMobile && styles.addFolderButtonsWrapMobile]}>
                 <TouchableOpacity
-                  style={styles.viewerOpenBtn}
-                  onPress={async () => {
-                    if (viewerModal.fileUrl) {
-                      try {
-                        const filename = viewerModal.fileUrl.split('/').pop() || 'document.pdf';
-                        const fileUri = FileSystem.cacheDirectory + filename;
-                        const downloadResult = await FileSystem.downloadAsync(viewerModal.fileUrl, fileUri);
-                        if (downloadResult.status === 200) {
-                          await Sharing.shareAsync(downloadResult.uri, {
-                            mimeType: 'application/pdf',
-                            dialogTitle: 'Save Document',
-                            UTI: 'com.adobe.pdf'
-                          });
-                        }
-                      } catch (err) {
-                        console.error('Error downloading file:', err);
-                        Linking.openURL(viewerModal.fileUrl).catch(e =>
-                          console.error('Error opening URL:', e)
-                        );
-                      }
-                    }
-                    setViewerModal({ visible: false, fileUrl: null, title: '' });
+                  style={[styles.addFolderBtn, isMobile && styles.addFolderBtnMobile]}
+                  onPress={() => {
+                    setNewFolderYear('');
+                    setAddFolderError('');
+                    setAddFolderVisible(true);
                   }}
                   activeOpacity={0.8}
                 >
-                  <Feather name="download" size={18} color={COLORS.gold} />
+                  <Text style={styles.addFolderBtnPlus}>+</Text>
+                  <Text style={styles.addFolderBtnText}>Add Folder</Text>
                 </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.addFolderBtn, isMobile && styles.addFolderBtnMobile]}
+                  onPress={() => {
+                    setNewDocTypeName('');
+                    setNewDocTypeCategory('');
+                    setNewDocTypeYear('all');
+                    setAddDocTypeError('');
+                    setAddDocTypeVisible(true);
+                  }}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.addFolderBtnPlus}>+</Text>
+                  <Text style={styles.addFolderBtnText}>Document Type</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            {/* Container box for year folders */}
+            <View style={styles.folderContainer}>
+              <Text style={styles.allDocsLabel}>All Documents</Text>
+
+              {filteredYears.length === 0 ? (
+                <View style={styles.emptyState}>
+                  <Text style={{ fontSize: 32, marginBottom: 8 }}>📁</Text>
+                  <Text style={styles.emptyText}>No year folders yet.</Text>
+                  <Text style={{ fontSize: 12, color: COLORS.midGray, marginTop: 4 }}>
+                    Tap "+ Add Folder" to create one.
+                  </Text>
+                </View>
+              ) : (
+                <View style={isMobile ? styles.folderGridMobile : styles.folderGrid}>
+                  {filteredYears.map((year, idx) => (
+                    <TouchableOpacity
+                      key={idx}
+                      style={styles.folderCard}
+                      onPress={() => goToYears(year)}
+                      activeOpacity={0.75}
+                    >
+                      <YearFolderIcon size={isMobile ? 60 : 68} />
+                      <Text style={styles.folderName}>{year}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
               )}
             </View>
 
-            {/* WebView / iframe */}
-            <View style={{ flex: 1, backgroundColor: COLORS.offWhite, overflow: 'hidden' }}>
-              {viewerModal.fileUrl && (
-                Platform.OS === 'web' ? (
-                  <iframe
-                    src={`https://docs.google.com/gview?embedded=true&url=${encodeURIComponent(viewerModal.fileUrl)}`}
-                    style={{ flex: 1, width: '100%', height: '100%', border: 'none' }}
-                    title={viewerModal.title}
+            {/* ── ADD FOLDER MODAL ── */}
+            <Modal
+              visible={addFolderVisible}
+              transparent
+              animationType="fade"
+              onRequestClose={() => setAddFolderVisible(false)}
+            >
+              <TouchableOpacity
+                style={styles.addFolderOverlay}
+                activeOpacity={1}
+                onPress={() => setAddFolderVisible(false)}
+              />
+              <View style={styles.addFolderModalWrap} pointerEvents="box-none">
+                <View style={styles.addFolderModal}>
+                  {/* Header */}
+                  <View style={styles.addFolderModalHeader}>
+                    <View style={styles.addFolderModalHeaderLeft}>
+                      <View style={styles.addFolderModalIconWrap}>
+                        <Text style={{ fontSize: 20 }}>📁</Text>
+                      </View>
+                      <Text style={styles.addFolderModalTitle}>New Year Folder</Text>
+                    </View>
+                    <TouchableOpacity
+                      onPress={() => setAddFolderVisible(false)}
+                      style={styles.addFolderCloseBtn}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={styles.addFolderCloseBtnText}>✕</Text>
+                    </TouchableOpacity>
+                  </View>
+
+                  <View style={styles.addFolderModalDivider} />
+
+                  {/* Body */}
+                  <View style={styles.addFolderModalBody}>
+                    <Text style={styles.addFolderModalLabel}>Year</Text>
+                    <TextInput
+                      style={[styles.addFolderInput, addFolderError ? styles.addFolderInputError : null]}
+                      placeholder={`e.g. ${new Date().getFullYear()}`}
+                      placeholderTextColor={COLORS.midGray}
+                      value={newFolderYear}
+                      onChangeText={t => { setNewFolderYear(t.replace(/[^0-9]/g, '')); setAddFolderError(''); }}
+                      keyboardType="number-pad"
+                      maxLength={4}
+                      autoFocus
+                    />
+                    {addFolderError ? (
+                      <Text style={styles.addFolderErrorText}>{addFolderError}</Text>
+                    ) : (
+                      <Text style={styles.addFolderHint}>
+                        A new folder will be created for this fiscal year.
+                      </Text>
+                    )}
+                  </View>
+
+                  {/* Footer buttons */}
+                  <View style={styles.addFolderModalFooter}>
+                    <TouchableOpacity
+                      style={styles.addFolderCancelBtn}
+                      onPress={() => setAddFolderVisible(false)}
+                      activeOpacity={0.8}
+                    >
+                      <Text style={styles.addFolderCancelText}>Cancel</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.addFolderConfirmBtn, !newFolderYear.trim() && styles.addFolderConfirmBtnDisabled]}
+                      onPress={handleAddFolder}
+                      activeOpacity={0.8}
+                      disabled={!newFolderYear.trim()}
+                    >
+                      <Text style={styles.addFolderConfirmText}>Create Folder</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              </View>
+            </Modal>
+
+            {/* ── ADD DOCUMENT TYPE MODAL ── */}
+            <Modal
+              visible={addDocTypeVisible}
+              transparent
+              animationType="fade"
+              onRequestClose={() => setAddDocTypeVisible(false)}
+            >
+              <TouchableOpacity
+                style={styles.addFolderOverlay}
+                activeOpacity={1}
+                onPress={() => setAddDocTypeVisible(false)}
+              />
+              <View style={styles.addFolderModalWrap} pointerEvents="box-none">
+                <View style={styles.addFolderModal}>
+                  {/* Header */}
+                  <View style={styles.addFolderModalHeader}>
+                    <View style={styles.addFolderModalHeaderLeft}>
+                      <View style={styles.addFolderModalIconWrap}>
+                        <Text style={{ fontSize: 20 }}>📄</Text>
+                      </View>
+                      <Text style={styles.addFolderModalTitle}>New Document Type</Text>
+                    </View>
+                    <TouchableOpacity
+                      onPress={() => setAddDocTypeVisible(false)}
+                      style={styles.addFolderCloseBtn}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={styles.addFolderCloseBtnText}>✕</Text>
+                    </TouchableOpacity>
+                  </View>
+
+                  <View style={styles.addFolderModalDivider} />
+
+                  {/* Body */}
+                  <View style={styles.addFolderModalBody}>
+                    <Text style={styles.addFolderModalLabel}>Document Type Name</Text>
+                    <TextInput
+                      style={[styles.addFolderInput, addDocTypeError && !newDocTypeName.trim() ? styles.addFolderInputError : null]}
+                      placeholder="e.g. Annual Report"
+                      placeholderTextColor={COLORS.midGray}
+                      value={newDocTypeName}
+                      onChangeText={t => { setNewDocTypeName(t); setAddDocTypeError(''); }}
+                      autoFocus
+                    />
+
+                    <Text style={[styles.addFolderModalLabel, { marginTop: 12 }]}>Category</Text>
+                    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 4 }}>
+                      {docCategories.map(cat => (
+                        <TouchableOpacity
+                          key={cat.id}
+                          style={[
+                            styles.categoryChip,
+                            newDocTypeCategory === cat.id.toString() && styles.categoryChipActive
+                          ]}
+                          onPress={() => { setNewDocTypeCategory(cat.id.toString()); setAddDocTypeError(''); }}
+                        >
+                          <Text style={[
+                            styles.categoryChipText,
+                            newDocTypeCategory === cat.id.toString() && styles.categoryChipTextActive
+                          ]}>
+                            {cat.document_category}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+
+                    <Text style={[styles.addFolderModalLabel, { marginTop: 12 }]}>Year Specific (Optional)</Text>
+                    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 4 }}>
+                      <TouchableOpacity
+                        style={[
+                          styles.categoryChip,
+                          (newDocTypeYear === '' || newDocTypeYear === 'all') && styles.categoryChipActive
+                        ]}
+                        onPress={() => { setNewDocTypeYear('all'); setAddDocTypeError(''); }}
+                      >
+                        <Text style={[
+                          styles.categoryChipText,
+                          (newDocTypeYear === '' || newDocTypeYear === 'all') && styles.categoryChipTextActive
+                        ]}>
+                          All Years
+                        </Text>
+                      </TouchableOpacity>
+                      {documentYears.map(y => (
+                        <TouchableOpacity
+                          key={y}
+                          style={[
+                            styles.categoryChip,
+                            newDocTypeYear === y.toString() && styles.categoryChipActive
+                          ]}
+                          onPress={() => { setNewDocTypeYear(y.toString()); setAddDocTypeError(''); }}
+                        >
+                          <Text style={[
+                            styles.categoryChipText,
+                            newDocTypeYear === y.toString() && styles.categoryChipTextActive
+                          ]}>
+                            {y}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+
+                    {addDocTypeError ? (
+                      <Text style={styles.addFolderErrorText}>{addDocTypeError}</Text>
+                    ) : (
+                      <Text style={styles.addFolderHint}>
+                        This document type will be available for the selected category and year(s).
+                      </Text>
+                    )}
+                  </View>
+
+                  {/* Footer buttons */}
+                  <View style={styles.addFolderModalFooter}>
+                    <TouchableOpacity
+                      style={styles.addFolderCancelBtn}
+                      onPress={() => setAddDocTypeVisible(false)}
+                      activeOpacity={0.8}
+                    >
+                      <Text style={styles.addFolderCancelText}>Cancel</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[
+                        styles.addFolderConfirmBtn,
+                        (!newDocTypeName.trim() || !newDocTypeCategory) && styles.addFolderConfirmBtnDisabled
+                      ]}
+                      onPress={handleAddDocType}
+                      activeOpacity={0.8}
+                      disabled={!newDocTypeName.trim() || !newDocTypeCategory}
+                    >
+                      <Text style={styles.addFolderConfirmText}>Add Type</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              </View>
+            </Modal>
+          </>
+        )}
+
+        {/* ── VIEW: DOCUMENT TYPE FOLDERS inside a year (table layout) ── */}
+        {view === 'years' && (
+          <>
+            {/* Back Button */}
+            <TouchableOpacity
+              style={styles.backBtn}
+              onPress={goToFolders}
+              activeOpacity={0.75}
+            >
+              <Feather name="arrow-left" size={16} color={COLORS.navy} />
+              <Text style={styles.backBtnText}>Back</Text>
+            </TouchableOpacity>
+
+            {/* Breadcrumb: Folders > 2026 Documents */}
+            <View style={styles.breadcrumb}>
+              <TouchableOpacity onPress={goToFolders}>
+                <Text style={styles.breadcrumbLink}>Folders</Text>
+              </TouchableOpacity>
+              <Text style={styles.breadcrumbSep}> › </Text>
+              <Text style={styles.breadcrumbCurrent}>{selectedYear} Documents</Text>
+            </View>
+
+            {/* Search row + label + Add Doc Type button */}
+            <View style={styles.tableTopRow}>
+              <Text style={styles.allDocsLabel}>All Documents</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <View style={styles.searchBox}>
+                  <Text style={{ fontSize: 13, marginRight: 6 }}>🔍</Text>
+                  <TextInput
+                    style={styles.searchInput}
+                    placeholder="Search"
+                    placeholderTextColor={COLORS.midGray}
+                    value={searchText}
+                    onChangeText={setSearchText}
                   />
-                ) : (
-                  <WebView
-                    source={{
-                      uri: `https://docs.google.com/gview?embedded=true&url=${encodeURIComponent(viewerModal.fileUrl)}`,
-                    }}
-                    style={{ flex: 1 }}
-                    onLoadStart={() => setWebViewLoading(true)}
-                    onLoadEnd={() => setWebViewLoading(false)}
-                    onError={() => {
-                      setWebViewLoading(false);
+                  {searchText.length > 0 && (
+                    <TouchableOpacity onPress={() => setSearchText('')}>
+                      <Text style={{ color: COLORS.midGray, fontSize: 13 }}>✕</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              </View>
+            </View>
+
+            {/* Table */}
+            <View style={styles.docTable}>
+              {/* Table Header */}
+              <View style={styles.docTableHeader}>
+                <Text style={[styles.docTableHeaderCell, { flex: 3 }]}>Document</Text>
+              </View>
+
+              {/* Table Rows — document types */}
+              {filteredDocTypes.length === 0 ? (
+                <View style={styles.docTableEmptyRow}>
+                  <Text style={styles.emptyText}>No documents found.</Text>
+                </View>
+              ) : (
+                filteredDocTypes.map((item, idx) => (
+                  <View
+                    key={item.document_type}
+                    style={[
+                      styles.docTableRow,
+                      idx % 2 === 0 && styles.docTableRowAlt,
+                    ]}
+                  >
+                    {/* Document column: folder icon + name */}
+                    <TouchableOpacity
+                      style={[styles.docTableCell, { flex: 3, flexDirection: 'row', justifyContent: 'flex-start', gap: 8 }]}
+                      onPress={() => goToDocTypes(item.document_type)}
+                      activeOpacity={0.75}
+                    >
+                      <View style={{ width: 28, height: 23 }}>
+                        <View style={{
+                          position: 'absolute', top: 0, left: 0,
+                          width: 11, height: 4,
+                          backgroundColor: '#0F68D0',
+                          borderTopLeftRadius: 2, borderTopRightRadius: 4,
+                        }} />
+                        <View style={{
+                          position: 'absolute', top: 3, left: 0,
+                          width: 28, height: 20,
+                          backgroundColor: '#1A8CFF',
+                          borderRadius: 3,
+                        }}>
+                          <View style={{
+                            position: 'absolute', top: 3, left: 4, right: 4, height: 4,
+                            backgroundColor: 'rgba(255,255,255,0.22)', borderRadius: 2,
+                          }} />
+                        </View>
+                      </View>
+                      <Text style={styles.docTableCellText} numberOfLines={2}>
+                        {item.document_type}
+                      </Text>
+                    </TouchableOpacity>
+
+
+
+
+                  </View>
+                ))
+              )}
+
+              {/* Empty filler rows */}
+              {filteredDocTypes.length > 0 && filteredDocTypes.length < 6 &&
+                [...Array(Math.max(0, 4 - filteredDocTypes.length))].map((_, i) => (
+                  <View key={`empty-${i}`} style={[styles.docTableRow, (filteredDocTypes.length + i) % 2 === 0 && styles.docTableRowAlt]}>
+                    <View style={[styles.docTableCell, { flex: 3 }]} />
+                    <View style={[styles.docTableCell, { flex: 2 }]} />
+                    <View style={[styles.docTableCell, { flex: 1 }]} />
+                  </View>
+                ))
+              }
+            </View>
+          </>
+        )}
+
+        {/* ── VIEW: DOCUMENTS BY BARANGAY for a selected document type ── */}
+        {view === 'doctypes' && (
+          <>
+            {/* Back Button */}
+            <TouchableOpacity
+              style={styles.backBtn}
+              onPress={() => goToYears(selectedYear)}
+              activeOpacity={0.75}
+            >
+              <Feather name="arrow-left" size={16} color={COLORS.navy} />
+              <Text style={styles.backBtnText}>Back</Text>
+            </TouchableOpacity>
+
+            {/* Breadcrumb: Folders > 2026 Documents > Annual Budget... */}
+            <View style={styles.breadcrumb}>
+              <TouchableOpacity onPress={goToFolders}>
+                <Text style={styles.breadcrumbLink}>Folders</Text>
+              </TouchableOpacity>
+              <Text style={styles.breadcrumbSep}> › </Text>
+              <TouchableOpacity onPress={() => goToYears(selectedYear)}>
+                <Text style={styles.breadcrumbLink}>{selectedYear} Documents</Text>
+              </TouchableOpacity>
+              <Text style={styles.breadcrumbSep}> › </Text>
+              <Text style={styles.breadcrumbCurrent} numberOfLines={1}>{selectedDocType}</Text>
+            </View>
+
+            {/* Section title */}
+            <View style={styles.tableTopRow}>
+              <Text style={[styles.allDocsLabel, { fontSize: 14, color: '#133E75', fontWeight: '800' }]}>{selectedDocType}</Text>
+              <View style={styles.searchBox}>
+                <Text style={{ fontSize: 13, marginRight: 6 }}>🔍</Text>
+                <TextInput
+                  style={styles.searchInput}
+                  placeholder="Search"
+                  placeholderTextColor={COLORS.midGray}
+                  value={searchText}
+                  onChangeText={setSearchText}
+                />
+                {searchText.length > 0 && (
+                  <TouchableOpacity onPress={() => setSearchText('')}>
+                    <Text style={{ color: COLORS.midGray, fontSize: 13 }}>✕</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            </View>
+
+            {/* Table */}
+            <View style={styles.docTable}>
+              {/* Table Header — Barangay | Document | Date Submitted | Action */}
+              <View style={styles.docTableHeader}>
+                <Text style={[styles.docTableHeaderCell, { flex: 2 }]}>Barangay</Text>
+                <Text style={[styles.docTableHeaderCell, { flex: 3 }]}>Document</Text>
+                <Text style={[styles.docTableHeaderCell, { flex: 2, textAlign: 'center' }]}>Date Submitted</Text>
+                <Text style={[styles.docTableHeaderCell, { flex: 1, textAlign: 'center' }]}>Action</Text>
+              </View>
+
+              {filteredDocsForType.length === 0 ? (
+                <View style={styles.docTableEmptyRow}>
+                  <Text style={styles.emptyText}>No documents found.</Text>
+                </View>
+              ) : (
+                filteredDocsForType.map((doc, idx) => (
+                  <View
+                    key={doc.document_id}
+                    style={[styles.docTableRow, idx % 2 === 0 && styles.docTableRowAlt]}
+                  >
+                    {/* Barangay */}
+                    <View style={[styles.docTableCell, { flex: 2 }]}>
+                      <Text style={styles.docTableCellText} numberOfLines={2}>
+                        {doc.barangays?.barangay_name || '—'}
+                      </Text>
+                    </View>
+
+                    {/* Document title */}
+                    <View style={[styles.docTableCell, { flex: 3 }]}>
+                      <Text style={styles.docTableCellText} numberOfLines={2}>
+                        {doc.title}
+                      </Text>
+                    </View>
+
+                    {/* Date Submitted */}
+                    <View style={[styles.docTableCell, { flex: 2, alignItems: 'center' }]}>
+                      <Text style={styles.docTableCellSub}>
+                        {doc.submitted_at ? new Date(doc.submitted_at).toLocaleDateString('en-PH', { year: 'numeric', month: 'short', day: 'numeric' }) : '—'}
+                      </Text>
+                    </View>
+
+                    {/* Actions: download + view */}
+                    <View style={[styles.docTableCell, { flex: 1, flexDirection: 'row', justifyContent: 'center', gap: 10 }]}>
+                      {doc.file_url ? (
+                        <TouchableOpacity
+                          style={styles.actionIconBtn}
+                          activeOpacity={0.7}
+                          onPress={async () => {
+                            if (doc.file_url) {
+                              try {
+                                // Download the file to cache directory
+                                const filename = doc.file_url.split('/').pop() || 'document.pdf';
+                                const fileUri = FileSystem.cacheDirectory + filename;
+
+                                const downloadResult = await FileSystem.downloadAsync(doc.file_url, fileUri);
+
+                                // Share the downloaded file
+                                if (downloadResult.status === 200) {
+                                  await Sharing.shareAsync(downloadResult.uri, {
+                                    mimeType: 'application/pdf',
+                                    dialogTitle: 'Save Document',
+                                    UTI: 'com.adobe.pdf'
+                                  });
+                                }
+                              } catch (err) {
+                                console.error('Error downloading file:', err);
+                                // Fallback to opening URL if download fails
+                                Linking.openURL(doc.file_url).catch(e =>
+                                  console.error('Error opening URL:', e)
+                                );
+                              }
+                            }
+                          }}
+                        >
+                          {/* Download icon */}
+                          <Feather name="download" size={isMobile ? 13 : 15} color={COLORS.navy} />
+                        </TouchableOpacity>
+                      ) : null}
+                      {doc.file_url && (
+                        <TouchableOpacity
+                          style={styles.actionIconBtn}
+                          activeOpacity={0.7}
+                          onPress={() => handleViewPress(doc)}
+                        >
+                          {/* Eye icon */}
+                          <Feather name="eye" size={isMobile ? 13 : 15} color="#00796B" />
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                  </View>
+                ))
+              )}
+
+              {/* Empty filler rows */}
+              {filteredDocsForType.length > 0 && filteredDocsForType.length < 5 &&
+                [...Array(Math.max(0, 4 - filteredDocsForType.length))].map((_, i) => (
+                  <View key={`empty-${i}`} style={[styles.docTableRow, (filteredDocsForType.length + i) % 2 === 0 && styles.docTableRowAlt]}>
+                    <View style={[styles.docTableCell, { flex: 2 }]} />
+                    <View style={[styles.docTableCell, { flex: 3 }]} />
+                    <View style={[styles.docTableCell, { flex: 2 }]} />
+                    <View style={[styles.docTableCell, { flex: 1 }]} />
+                  </View>
+                ))
+              }
+            </View>
+          </>
+        )}
+      </ScrollView>
+    </View>
+  );
+
+  return (
+    <>
+      <Head>
+        <title>LYDO Document · SK Monitoring</title>
+      </Head>
+      <SafeAreaView style={styles.safe} edges={isMobile ? ['left', 'right', 'bottom'] : ['top', 'left', 'right', 'bottom']}>
+        <StatusBar barStyle="light-content" backgroundColor={COLORS.navy} />
+
+        {/* Notification Modal — lists documents sent by SK officials */}
+        <LydoNotificationModal
+          {...notif.modalProps}
+          onReview={(doc) => {
+            notif.close();
+            router.push({
+              pathname: '/(tabs)/lydo-monitor',
+              params: { viewFilter: 'submitted' },
+            });
+          }}
+        />
+
+        <View style={styles.layout}>
+          {/* Mobile: Sidebar as overlay */}
+          {isMobile && sidebarVisible && (
+            <TouchableOpacity
+              style={styles.sidebarOverlay}
+              activeOpacity={1}
+              onPress={() => setSidebarVisible(false)}
+            />
+          )}
+
+          <Sidebar
+            activeTab={activeTab}
+            onNavPress={handleNavPress}
+            onLogout={handleLogout}
+            isMobile={isMobile}
+            sidebarVisible={sidebarVisible}
+            navItems={LYDO_NAV_ITEMS}
+            logoSource={require('./../../assets/images/lydo-logo.png')}
+          />
+
+          {renderContent()}
+
+          {/* ── Document Viewer Modal ── */}
+          <Modal
+            visible={viewerModal.visible}
+            animationType="slide"
+            transparent={false}
+            onRequestClose={() => setViewerModal({ visible: false, fileUrl: null, title: '' })}
+          >
+            <SafeAreaView style={styles.safe} edges={isMobile ? ['left', 'right', 'bottom'] : ['top', 'left', 'right', 'bottom']}>
+              {/* Viewer Header */}
+              <View style={styles.viewerHeader}>
+                <TouchableOpacity
+                  style={styles.viewerBackBtn}
+                  onPress={() => setViewerModal({ visible: false, fileUrl: null, title: '' })}
+                  activeOpacity={0.8}
+                >
+                  <Feather name="arrow-left" size={20} color={COLORS.white} />
+                </TouchableOpacity>
+                <Text style={styles.viewerTitle} numberOfLines={1}>
+                  {viewerModal.title}
+                </Text>
+                {viewerModal.fileUrl && (
+                  <TouchableOpacity
+                    style={styles.viewerOpenBtn}
+                    onPress={async () => {
+                      if (viewerModal.fileUrl) {
+                        try {
+                          const filename = viewerModal.fileUrl.split('/').pop() || 'document.pdf';
+                          const fileUri = FileSystem.cacheDirectory + filename;
+                          const downloadResult = await FileSystem.downloadAsync(viewerModal.fileUrl, fileUri);
+                          if (downloadResult.status === 200) {
+                            await Sharing.shareAsync(downloadResult.uri, {
+                              mimeType: 'application/pdf',
+                              dialogTitle: 'Save Document',
+                              UTI: 'com.adobe.pdf'
+                            });
+                          }
+                        } catch (err) {
+                          console.error('Error downloading file:', err);
+                          Linking.openURL(viewerModal.fileUrl).catch(e =>
+                            console.error('Error opening URL:', e)
+                          );
+                        }
+                      }
                       setViewerModal({ visible: false, fileUrl: null, title: '' });
                     }}
-                    startInLoadingState={true}
-                    renderLoading={() => (
-                      <View style={styles.viewerLoading}>
-                        <ActivityIndicator size="large" color={COLORS.navy} />
-                        <Text style={styles.viewerLoadingText}>Loading document…</Text>
-                      </View>
-                    )}
-                  />
-                )
-              )}
-            </View>
-          </SafeAreaView>
-        </Modal>
-      </View>
-    </SafeAreaView>
+                    activeOpacity={0.8}
+                  >
+                    <Feather name="download" size={18} color={COLORS.gold} />
+                  </TouchableOpacity>
+                )}
+              </View>
+
+              {/* WebView / iframe */}
+              <View style={{ flex: 1, backgroundColor: COLORS.offWhite, overflow: 'hidden' }}>
+                {viewerModal.fileUrl && (
+                  Platform.OS === 'web' ? (
+                    <iframe
+                      src={`https://docs.google.com/gview?embedded=true&url=${encodeURIComponent(viewerModal.fileUrl)}`}
+                      style={{ flex: 1, width: '100%', height: '100%', border: 'none' }}
+                      title={viewerModal.title}
+                    />
+                  ) : (
+                    <WebView
+                      source={{
+                        uri: `https://docs.google.com/gview?embedded=true&url=${encodeURIComponent(viewerModal.fileUrl)}`,
+                      }}
+                      style={{ flex: 1 }}
+                      onLoadStart={() => setWebViewLoading(true)}
+                      onLoadEnd={() => setWebViewLoading(false)}
+                      onError={() => {
+                        setWebViewLoading(false);
+                        setViewerModal({ visible: false, fileUrl: null, title: '' });
+                      }}
+                      startInLoadingState={true}
+                      renderLoading={() => (
+                        <View style={styles.viewerLoading}>
+                          <ActivityIndicator size="large" color={COLORS.navy} />
+                          <Text style={styles.viewerLoadingText}>Loading document…</Text>
+                        </View>
+                      )}
+                    />
+                  )
+                )}
+              </View>
+            </SafeAreaView>
+          </Modal>
+        </View>
+      </SafeAreaView>
+    </>
   );
 }
 
 // ─── STYLES ────────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
-  safe:   { flex: 1, backgroundColor: '#133E75' },
+  safe: { flex: 1, backgroundColor: '#133E75' },
   layout: { flex: 1, flexDirection: 'row' },
 
   // ── Sidebar ──
-  sidebar: {
-    width: 250,
-    backgroundColor: '#133E75',
-    alignItems: 'center',
-    paddingTop: 20, paddingBottom: 24, paddingHorizontal: 10,
-    zIndex: 10,
-  },
   sidebarOverlay: {
     position: 'absolute',
     left: 0, top: 0, bottom: 0, right: 0,
     backgroundColor: 'rgba(0,0,0,0.5)',
     zIndex: 5,
   },
-   logoPill: {
-    marginTop: 20,
-    width: 70, height: 70, borderRadius: 35,
-    backgroundColor: 'rgba(255,255,255,0.15)',
-    alignItems: 'center', justifyContent: 'center',
-    marginBottom: 8, borderWidth: 2, borderColor: 'rgba(255,255,255,0.3)',
-  },
-    logoImage: {
-    width: 110,
-    height: 110,
-  },
-  sidebarSpacer: { height: 28 },
-  navItemInner: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  navItem: {
-    width: '100%', paddingVertical: 12, paddingHorizontal: 12,
-    borderRadius: 24, marginBottom: 8, alignItems: 'center',
-    borderWidth: 1.5, borderColor: COLORS.white, backgroundColor: '#133E75',
-  },
-  navItemActive: { backgroundColor: '#ffffff', borderColor: '#000000' },
-  navLabel: { fontSize: 13, fontWeight: '600', color: '#ffffff', letterSpacing: 0.3 },
-  navLabelActive: { color: '#000000', fontWeight: '800' },
-  logoutBtn: {
-    width: '100%',
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-    borderRadius: 24,
-    marginTop: 8,
-    alignItems: 'center',
-    borderWidth: 1.5,
-    borderColor: COLORS.white,
-    backgroundColor: 'rgba(255,255,255,0.1)',
-  },
-  logoutText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#ffffff',
-    letterSpacing: 0.3,
-  },
 
   // ── Main ──
   main: { flex: 1, backgroundColor: COLORS.offWhite, borderTopLeftRadius: 20 },
   mainMobile: { borderTopLeftRadius: 0 },
   mainContent: { padding: 20, paddingBottom: 40 },
-
-  // Mobile Header
-  mobileHeader: {
-    flexDirection: 'row', alignItems: 'center',
-    justifyContent: 'space-between', marginBottom: 16,
-    paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: COLORS.lightGray,
-  },
-  menuBtn: {
-    width: 40, height: 40, borderRadius: 20,
-    backgroundColor: COLORS.cardBg, alignItems: 'center', justifyContent: 'center',
-  },
-  menuIconContainer: { width: 20, height: 16, justifyContent: 'space-between' },
-  menuLine: { width: 20, height: 2, backgroundColor: '#133E75', borderRadius: 1 },
-  mobileTitle: { fontSize: 18, fontWeight: '800', color: COLORS.darkText },
 
   // Desktop Header
   header: {
@@ -1431,21 +1556,6 @@ const styles = StyleSheet.create({
     shadowColor: COLORS.shadow, shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 1, shadowRadius: 6, elevation: 3,
   },
-  bellWrapper: { width: 20, height: 22, alignItems: 'center' },
-  bellBody: {
-    width: 14, height: 12, borderRadius: 7,
-    borderWidth: 2, borderColor: COLORS.maroon, marginTop: 4,
-  },
-  bellBottom: {
-    width: 8, height: 4,
-    borderBottomLeftRadius: 4, borderBottomRightRadius: 4,
-    backgroundColor: '#8B0000', marginTop: -1,
-  },
-  bellDot: {
-    position: 'absolute', top: 0, right: 1,
-    width: 7, height: 7, borderRadius: 4,
-    backgroundColor: COLORS.gold, borderWidth: 1.5, borderColor: COLORS.cardBg,
-  },
   notifBadge: {
     position: 'absolute', top: -2, right: -2,
     width: 16, height: 16, borderRadius: 8,
@@ -1467,7 +1577,7 @@ const styles = StyleSheet.create({
     borderBottomColor: COLORS.lightGray,
     marginBottom: 14,
     overflowX: 'hidden',
-    overflow:'hidden',
+    overflow: 'hidden',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.30,
@@ -1512,6 +1622,8 @@ const styles = StyleSheet.create({
 
   // Search
   searchRow: { marginBottom: 14 },
+  searchRowInline: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 },
+  searchRowStack: { flexDirection: 'column', alignItems: 'stretch', gap: 10 },
   searchBox: {
     flexDirection: 'row', alignItems: 'center',
     backgroundColor: COLORS.white, borderRadius: 20,
@@ -1549,7 +1661,7 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
   },
   breadcrumbLink: { fontSize: 12, color: '#133E75', fontWeight: '600' },
-  breadcrumbSep:  { fontSize: 12, color: COLORS.midGray, marginHorizontal: 2 },
+  breadcrumbSep: { fontSize: 12, color: COLORS.midGray, marginHorizontal: 2 },
   breadcrumbCurrent: { fontSize: 12, color: COLORS.darkText, fontWeight: '700' },
 
   // ── Folder grids ──
@@ -1599,34 +1711,17 @@ const styles = StyleSheet.create({
   emptyText: { fontSize: 14, color: COLORS.midGray },
 
   // ── Add Folder Button ──
+  addFolderButtonsWrap: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  addFolderButtonsWrapMobile: { flexWrap: 'wrap' },
   addFolderBtn: {
-    flexDirection: 'row', alignItems: 'center', gap: 8,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4,
     backgroundColor: COLORS.navy,
-    paddingVertical: 8, paddingHorizontal: 14,
-    borderRadius: 20,
-    shadowColor: COLORS.navy,
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.3, shadowRadius: 6, elevation: 4,
+    paddingVertical: 7, paddingHorizontal: 14,
+    borderRadius: 8,
   },
-  addFolderBtnIconWrap: {
-    width: 22, height: 18,
-    justifyContent: 'flex-end',
-  },
-  addFolderBtnFolderTab: {
-    position: 'absolute', top: 0, left: 0,
-    width: 9, height: 5,
-    backgroundColor: 'rgba(255,255,255,0.5)',
-    borderTopLeftRadius: 2, borderTopRightRadius: 3,
-  },
-  addFolderBtnFolderBody: {
-    position: 'absolute', top: 3, left: 0,
-    width: 22, height: 15,
-    backgroundColor: 'rgba(255,255,255,0.25)',
-    borderRadius: 3, borderTopRightRadius: 3, borderTopLeftRadius: 1,
-    alignItems: 'center', justifyContent: 'center',
-  },
+  addFolderBtnMobile: { flexGrow: 1, flexBasis: '47%' },
   addFolderBtnPlus: {
-    fontSize: 12, fontWeight: '900', color: COLORS.white, lineHeight: 14,
+    fontSize: 15, fontWeight: '700', color: COLORS.white, lineHeight: 16,
   },
   addFolderBtnText: { fontSize: 13, fontWeight: '700', color: COLORS.white, letterSpacing: 0.2 },
 
@@ -1696,11 +1791,34 @@ const styles = StyleSheet.create({
   addFolderConfirmBtnDisabled: { backgroundColor: COLORS.midGray },
   addFolderConfirmText: { fontSize: 14, fontWeight: '700', color: COLORS.white },
 
+  // Category chips
+  categoryChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    borderWidth: 1.5,
+    borderColor: COLORS.lightGray,
+    backgroundColor: COLORS.white,
+  },
+  categoryChipActive: {
+    backgroundColor: COLORS.navy,
+    borderColor: COLORS.navy,
+  },
+  categoryChipText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: COLORS.subText,
+  },
+  categoryChipTextActive: {
+    color: COLORS.white,
+  },
+
   // ── Barangay-by-year table ──
   tableTopRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: isMobile ? 'column' : 'row',
+    alignItems: isMobile ? 'stretch' : 'center',
     justifyContent: 'space-between',
+    gap: isMobile ? 8 : 0,
     marginTop: 14,
     marginBottom: 10,
   },

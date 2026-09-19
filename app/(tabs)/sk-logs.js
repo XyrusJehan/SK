@@ -1,13 +1,19 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import {
   View, Text, TextInput, ScrollView, TouchableOpacity,
-  StyleSheet, SafeAreaView, StatusBar, Dimensions, Image,
+  StyleSheet, StatusBar, Dimensions, Image,
 } from 'react-native';
+// SafeAreaView from core 'react-native' is a no-op on Android. Use the
+// context-aware version so insets work on both platforms.
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { useNav } from './navContext';
 import { useAuth } from './authContext';
 import { supabase } from '../../utils/supabase';
-
+import { NotificationModal, useNotificationCenter, BellIcon } from './notificationCenter';
+import Sidebar from './../components/Sidebar';
+import Head from 'expo-router/head';
+import MobileHeader, { MobileHeaderSpacer } from './mobileHeader';
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const isMobile = SCREEN_WIDTH < 768;
 
@@ -48,14 +54,6 @@ const POSITIONS = ['All', 'Chairman', 'Secretary', 'Treasurer'];
 const DATE_RANGES = ['All time', 'Today', 'This week', 'This month', 'Last 3 months'];
 
 // ─── ICON COMPONENTS ──────────────────────────────────────────────────────────
-const MenuIcon = () => (
-  <View style={styles.menuIconContainer}>
-    <View style={styles.menuLine} />
-    <View style={styles.menuLine} />
-    <View style={styles.menuLine} />
-  </View>
-);
-
 // Dashboard: 2×2 grid of rounded squares
 const DashboardIcon = ({ color = '#fff', size = 16 }) => {
   const s = size * 0.38;
@@ -138,6 +136,9 @@ const LogoutNavIcon = ({ color = '#fff', size = 16 }) => (
     <View style={{ position: 'absolute', right: size * 0.02, width: size * 0.2, height: size * 0.2, borderTopWidth: 1.8, borderRightWidth: 1.8, borderColor: color, transform: [{ rotate: '45deg' }], marginTop: -size * 0.01 }} />
   </View>
 );
+
+// BellIcon now lives in notificationCenter.js and is imported above — shared
+// across every screen (SK + LYDO, desktop + mobile) instead of being redrawn here.
 
 const SearchIcon = ({ color = COLORS.midGray }) => (
   <View style={styles.searchIconWrap}>
@@ -231,6 +232,10 @@ export default function LogsScreen() {
 
   const barangayName = user?.barangay?.barangay_name || 'Unknown Barangay';
   const barangayId = user?.barangayId;
+
+  // ── Shared notification bell (returned/approved docs, templates, deadlines) ──
+  const notif = useNotificationCenter(barangayId);
+  const notifCount = notif.count;
 
   useEffect(() => {
     if (user && user.role !== 'sk') router.replace('/');
@@ -377,52 +382,16 @@ export default function LogsScreen() {
   const formatTime = (date) =>
     new Date(date).toLocaleTimeString('en-PH', { timeZone: 'Asia/Manila', hour: 'numeric', minute: '2-digit', hour12: true });
 
-  // ── Sidebar ────────────────────────────────────────────────────────────────
-  const NAV_ITEMS = [
-    { tab: 'Dashboard', IconComponent: DashboardIcon },
-    { tab: 'Documents', IconComponent: DocumentsIcon },
-    { tab: 'Planning',  IconComponent: PlanningIcon  },
-    { tab: 'Portal',    IconComponent: PortalIcon    },
-    { tab: 'Logs',      IconComponent: LogsIcon      },
-    { tab: 'Account',   IconComponent: AccountIcon   },
-  ];
 
-  const renderSidebar = () => (
-    <View style={[styles.sidebar, isMobile && !sidebarVisible && styles.sidebarHidden]}>
-      <View style={styles.logoPill}>
-        <Image
-          source={require('./../../assets/images/sk-logo.png')}
-          style={styles.logoImage}
-          resizeMode="contain"
-        />
-      </View>
-      <View style={{ height: 28 }} />
-      {NAV_ITEMS.map(({ tab, IconComponent }) => {
-        const active = activeTab === tab;
-        const iconColor = active ? '#133E75' : 'rgba(255,255,255,0.85)';
-        return (
-          <TouchableOpacity
-            key={tab}
-            style={[styles.navItem, active && styles.navItemActive]}
-            onPress={() => handleNavPress(tab)}
-            activeOpacity={0.8}
-          >
-            <View style={styles.navItemInner}>
-              <IconComponent color={iconColor} size={16} />
-              <Text style={[styles.navLabel, active && styles.navLabelActive]}>{tab}</Text>
-            </View>
-          </TouchableOpacity>
-        );
-      })}
-      <View style={{ flex: 1 }} />
-      <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout} activeOpacity={0.8}>
-        <View style={styles.navItemInner}>
-          <LogoutNavIcon color="rgba(255,255,255,0.85)" size={16} />
-          <Text style={styles.logoutText}>Logout</Text>
-        </View>
-      </TouchableOpacity>
-    </View>
-  );
+    const renderSidebar = () => (
+      <Sidebar
+        activeTab={activeTab}
+        onNavPress={handleNavPress}
+        onLogout={handleLogout}
+        isMobile={isMobile}
+        sidebarVisible={sidebarVisible}
+      />
+    );
 
   // ── Action badge ───────────────────────────────────────────────────────────
   const renderActionBadge = (action) => {
@@ -446,9 +415,11 @@ export default function LogsScreen() {
 
   return (
     <>
+      <Head>
+        <title>Logs · SK Monitoring</title>
+      </Head>
+      <SafeAreaView style={styles.safe} edges={isMobile ? ['left', 'right', 'bottom'] : ['top', 'left', 'right', 'bottom']}>
       <StatusBar barStyle="light-content" backgroundColor={COLORS.navy} />
-
-      <SafeAreaView ref={safeAreaRef} style={styles.safe}>
       {/* Dropdown overlays — rendered above everything, measured to anchor under their buttons */}
       <AnchoredDropdown
         visible={posDropVisible}
@@ -468,6 +439,13 @@ export default function LogsScreen() {
         onClose={() => setDateDropVisible(false)}
         title="Filter by Date Range"
       />
+      <NotificationModal
+        {...notif.modalProps}
+        onOpenRoute={(route) => {
+          notif.close();
+          setTimeout(() => router.push(route), 120);
+        }}
+      />
       <View style={styles.layout}>
         {isMobile && sidebarVisible && (
           <TouchableOpacity
@@ -478,31 +456,35 @@ export default function LogsScreen() {
         )}
         {renderSidebar()}
 
-        <ScrollView
-          style={[styles.main, isMobile && styles.mainMobile]}
-          contentContainerStyle={styles.mainContent}
-          showsVerticalScrollIndicator={false}
-        >
-          {/* Mobile Header */}
-          {isMobile && (
-            <View style={styles.mobileHeader}>
-              <TouchableOpacity style={styles.menuBtn} onPress={() => setSidebarVisible(!sidebarVisible)}>
-                <MenuIcon />
-              </TouchableOpacity>
-              <Text style={styles.mobileTitle}>Activity Logs</Text>
-              <View style={{ width: 40 }} />
-            </View>
-          )}
+        <View style={[styles.main, isMobile && styles.mainMobile]}>
+          <MobileHeader
+            title="Activity Logs"
+            onMenuPress={() => setSidebarVisible(!sidebarVisible)}
+            onBellPress={notif.open}
+            bellCount={notifCount}
+            BellIcon={BellIcon}
+            colors={COLORS}
+            hidden={isMobile && sidebarVisible}
+          />
+          <ScrollView
+            style={{ flex: 1 }}
+            contentContainerStyle={styles.mainContent}
+            showsVerticalScrollIndicator={false}
+          >
+          <MobileHeaderSpacer />
 
           {/* Page Header */}
-          <View style={styles.pageHeader}>
-            <View>
-              <Text style={styles.headerSub}>SANGGUNIANG KABATAAN</Text>
-              <Text style={styles.headerTitle}>{barangayName.toUpperCase()}</Text>
+          {!isMobile && (
+            <View style={styles.pageHeader}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.headerSub}>SANGGUNIANG KABATAAN</Text>
+                <Text style={styles.headerTitle}>{barangayName.toUpperCase()}</Text>
+              </View>
+            <TouchableOpacity style={styles.bellBtn} onPress={notif.open} activeOpacity={0.7}>
+              <BellIcon count={notifCount} />
+            </TouchableOpacity>
             </View>
-          </View>
-
-          <View style={styles.divider} />
+          )}
 
           {/* Section title */}
           <View style={styles.sectionTitleRow}>
@@ -667,6 +649,7 @@ export default function LogsScreen() {
           </View>
 
         </ScrollView>
+        </View>
       </View>
       </SafeAreaView>
     </>
@@ -716,20 +699,7 @@ const styles = StyleSheet.create({
   // ── Main area
   main: { flex: 1, backgroundColor: COLORS.offWhite, borderTopLeftRadius: 20 },
   mainMobile: { borderTopLeftRadius: 0 },
-  mainContent: { padding: isMobile ? 12 : 24, paddingBottom: isMobile ? 24 : 48 },
-
-  // ── Mobile header
-  mobileHeader: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    marginBottom: 12, paddingBottom: 10, borderBottomWidth: 1, borderBottomColor: COLORS.lightGray,
-  },
-  menuBtn: {
-    width: 40, height: 40, borderRadius: 20,
-    backgroundColor: COLORS.cardBg, alignItems: 'center', justifyContent: 'center',
-  },
-  menuIconContainer: { width: 20, height: 16, justifyContent: 'space-between' },
-  menuLine: { width: 20, height: 2, backgroundColor: COLORS.navy, borderRadius: 1 },
-  mobileTitle: { fontSize: 16, fontWeight: '800', color: COLORS.darkText },
+  mainContent: { padding: 20, paddingBottom: 40 },
 
   // ── Page header
   pageHeader: {
@@ -737,13 +707,25 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between', marginBottom: 12,
   },
   headerSub: {
-    fontSize: isMobile ? 9 : 11, fontWeight: '600', color: COLORS.subText,
+    fontSize: 10, fontWeight: '600', color: COLORS.subText,
     letterSpacing: 2, marginBottom: 2, textTransform: 'uppercase',
   },
   headerTitle: {
-    fontSize: isMobile ? 18 : 22, fontWeight: '900', color: COLORS.darkText, letterSpacing: 0.4,
+    fontSize: 22, fontWeight: '900', color: COLORS.darkText, letterSpacing: 0.3,
+    borderBottomWidth: 2, borderBottomColor: COLORS.lightGray, paddingBottom: 4, marginBottom: 6,
   },
-  divider: { height: 1.5, backgroundColor: COLORS.navy + '25', marginBottom: 20 },
+
+  // ── Bell ──
+  bellBtn: {
+    position: 'relative',
+    width: 40, height: 40, borderRadius: 20,
+    backgroundColor: COLORS.cardBg, alignItems: 'center', justifyContent: 'center',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08, shadowRadius: 6, elevation: 3,
+  },
+  bellBtnMobile: { position: 'relative' },
+  notifBadge:  { position: 'absolute', top: -2, right: -2, width: 16, height: 16, borderRadius: 8, backgroundColor: COLORS.gold, alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: COLORS.white },
+  notifBadgeText: { fontSize: 8, fontWeight: '900', color: COLORS.navy },
 
   // ── Section title
   sectionTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 20 },

@@ -1,16 +1,38 @@
-import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  View, Text, TextInput, ScrollView, TouchableOpacity,
-  StyleSheet, SafeAreaView, StatusBar, Dimensions, Image, Modal,
-  Platform, Alert, ActivityIndicator,
+  ActivityIndicator,
+  Alert,
+  Dimensions,
+  Linking,
+  Modal,
+  Platform,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text, TextInput,
+  TouchableOpacity,
+  View
 } from 'react-native';
-import { useRouter, useLocalSearchParams, useFocusEffect, useNavigation } from 'expo-router';
-import { useNav } from './navContext';
-import { useAuth } from './authContext';
-import { supabase } from '../../utils/supabase';
+// SafeAreaView from core 'react-native' is a no-op on Android. Use the
+// context-aware version so insets work on both platforms.
+import { Feather } from '@expo/vector-icons';
 import * as DocumentPicker from 'expo-document-picker';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
+import Head from 'expo-router/head';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { supabase } from '../../utils/supabase';
+import Sidebar from './../components/Sidebar';
+import { useAuth } from './authContext';
+import MobileHeader, { MobileHeaderSpacer } from './mobileHeader';
+import { useNav } from './navContext';
+import { BellIcon, NotificationModal, useNotificationCenter } from './notificationCenter';
 import { DocumentScannerButton } from './scanner/DocumentScannerButton';
 import { useDocumentScanner } from './scanner/useDocumentScanner';
+// WebView: use react-native-webview on native, iframe on web (matches management screen)
+let WebView = null;
+if (Platform.OS !== 'web') {
+  WebView = require('react-native-webview').WebView;
+}
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const isMobile = SCREEN_WIDTH < 768;
 
@@ -38,6 +60,9 @@ const COLORS = {
   darkText:  '#1A1A1A',
   subText:   '#666666',
   cardBg:    '#FFFFFF',
+  red:       '#D32F2F',
+  blue:      '#1565C0',
+  teal:      '#00796B',
   planning:   { header: '#7B9FD4', bg: '#EEF3FB', accent: '#2A4E8A' },
   financial:  { header: '#4CAF50', bg: '#EDF7EE', accent: '#1A6B38' },
   governance: { header: '#7C5CBF', bg: '#F2EEF9', accent: '#5A2EA0' },
@@ -46,166 +71,14 @@ const COLORS = {
 
 // ─── TABS ─────────────────────────────────────────────────────────────────────
 const NAV_TABS      = ['Dashboard', 'Documents', 'Planning', 'Portal', 'Logs','Account'];
-const DOCUMENT_TABS = ['Financial', 'Planning', 'Governance', 'Activities'];
-
-// Document types per folder category (from database schema)
-const DOCUMENT_TYPES = {
-  planning: [
-    'Comprehensive Barangay Youth Development Plan (CBYDP)',
-    'Annual Barangay Youth Investment Program (ABYIP)',
-    'SK PPK Template',
-    'Program of Work',
-    'Work Plans',
-    'Project Proposals',
-  ],
-  financial: [
-    'Approved Annual Budget',
-    'SK Supplemental Budget',
-    'Registry of Cash Receipts and Deposits',
-    'Registry of Cash Disbursements',
-    'Monthly Itemized List',
-    'Quarterly Financial Reports',
-    'Disbursement Vouchers',
-    'Liquidation Reports',
-  ],
-  governance: [
-    'Resolutions',
-    'Ordinances',
-  ],
-  performance: [
-    'Accomplishment Reports',
-    'Documentation',
-    'Event Reports',
-    'Minutes of Meetings',
-    'Barangay Youth Investment Monitoring Form',
-    'Monthly/Quarterly Accomplishment Report',
-  ],
-};
-
-const FOLDER_CATEGORIES = [
-  { label: 'Planning', value: 'planning' },
-  { label: 'Financial', value: 'financial' },
-  { label: 'Governance', value: 'governance' },
-  { label: 'Performance', value: 'performance' },
-];
+// DOCUMENT_TABS is built dynamically from document_category table; default fallback
+const DEFAULT_DOCUMENT_TABS = ['Financial', 'Planning', 'Governance', 'Activities'];
 
 // ─── DOCUMENT DATA ────────────────────────────────────────────────────────────
 // (Data now fetched from Supabase based on barangay_id)
 const DOCUMENTS_DATA = {};
 
 // ─── ICONS ────────────────────────────────────────────────────────────────────
-const MenuIcon = () => (
-  <View style={styles.menuIconContainer}>
-    {[0, 1, 2].map(i => <View key={i} style={styles.menuLine} />)}
-  </View>
-);
-
-// Dashboard: 2×2 grid of rounded squares
-const DashboardIcon = ({ color = '#fff', size = 16 }) => {
-  const s = size * 0.38;
-  const gap = size * 0.12;
-  const r = size * 0.12;
-  const box = { width: s, height: s, borderRadius: r, backgroundColor: color };
-  return (
-    <View style={{ width: size, height: size, justifyContent: 'center', alignItems: 'center' }}>
-      <View style={{ flexDirection: 'row', gap }}>
-        <View style={box} />
-        <View style={box} />
-      </View>
-      <View style={{ height: gap }} />
-      <View style={{ flexDirection: 'row', gap }}>
-        <View style={box} />
-        <View style={box} />
-      </View>
-    </View>
-  );
-};
-
-// Documents: file shape with fold + two lines
-const DocumentsIcon = ({ color = '#fff', size = 16 }) => {
-  const w = size * 0.6, h = size * 0.78;
-  const fold = size * 0.22;
-  return (
-    <View style={{ width: size, height: size, justifyContent: 'center', alignItems: 'center' }}>
-      <View style={{ width: w, height: h, justifyContent: 'flex-end', paddingBottom: size * 0.08, paddingHorizontal: size * 0.1 }}>
-        <View style={{ position: 'absolute', left: 0, right: 0, top: fold, bottom: 0, borderWidth: 1.5, borderColor: color, borderRadius: size * 0.08 }} />
-        <View style={{ position: 'absolute', top: 0, right: 0, width: fold, height: fold, backgroundColor: color, borderBottomLeftRadius: size * 0.06 }} />
-        <View style={{ position: 'absolute', top: 0, left: 0, width: w - fold, height: fold, borderTopWidth: 1.5, borderLeftWidth: 1.5, borderColor: color, borderTopLeftRadius: size * 0.08 }} />
-        <View style={{ height: 1.5, backgroundColor: color, borderRadius: 1, marginBottom: size * 0.1, width: '80%' }} />
-        <View style={{ height: 1.5, backgroundColor: color, borderRadius: 1, width: '55%' }} />
-      </View>
-    </View>
-  );
-};
-
-// Planning: calendar grid
-const PlanningIcon = ({ color = '#fff', size = 16 }) => {
-  const bw = 1.5;
-  return (
-    <View style={{ width: size, height: size, justifyContent: 'center', alignItems: 'center' }}>
-      <View style={{ width: size * 0.82, height: size * 0.75, borderWidth: bw, borderColor: color, borderRadius: size * 0.1, overflow: 'hidden' }}>
-        <View style={{ height: size * 0.22, backgroundColor: color, width: '100%' }} />
-        <View style={{ flex: 1, flexDirection: 'row', justifyContent: 'space-around', alignItems: 'center', paddingHorizontal: size * 0.05 }}>
-          {[0,1,2].map(i => <View key={i} style={{ width: size * 0.1, height: size * 0.1, borderRadius: size * 0.05, backgroundColor: color }} />)}
-        </View>
-      </View>
-      <View style={{ position: 'absolute', top: 0, flexDirection: 'row', gap: size * 0.32 }}>
-        {[0,1].map(i => <View key={i} style={{ width: size * 0.1, height: size * 0.2, backgroundColor: color, borderRadius: size * 0.05 }} />)}
-      </View>
-    </View>
-  );
-};
-
-// Portal: simple globe
-const PortalIcon = ({ color = '#fff', size = 16 }) => (
-  <View style={{ width: size, height: size, justifyContent: 'center', alignItems: 'center' }}>
-    <View style={{ width: size * 0.82, height: size * 0.82, borderRadius: size * 0.41, borderWidth: 1.5, borderColor: color, justifyContent: 'center', alignItems: 'center', overflow: 'hidden' }}>
-      <View style={{ position: 'absolute', height: 1.5, width: '100%', backgroundColor: color }} />
-      <View style={{ width: size * 0.38, height: size * 0.78, borderRadius: size * 0.19, borderWidth: 1.5, borderColor: color, backgroundColor: 'transparent' }} />
-    </View>
-  </View>
-);
-
-// Logs: clipboard with checkmark lines
-const LogsIcon = ({ color = '#fff', size = 16 }) => (
-  <View style={{ width: size, height: size, justifyContent: 'center', alignItems: 'center' }}>
-    <View style={{ width: size * 0.75, height: size * 0.85, borderWidth: 1.5, borderColor: color, borderRadius: size * 0.1, paddingHorizontal: size * 0.1, paddingVertical: size * 0.1, justifyContent: 'space-around' }}>
-      <View style={{ position: 'absolute', top: -size * 0.08, alignSelf: 'center', width: size * 0.3, height: size * 0.14, backgroundColor: color, borderRadius: size * 0.04 }} />
-      {[0,1,2].map(i => (
-        <View key={i} style={{ flexDirection: 'row', alignItems: 'center', gap: size * 0.08, marginTop: i === 0 ? size * 0.1 : 0 }}>
-          <View style={{ width: size * 0.1, height: size * 0.1, borderRadius: size * 0.05, backgroundColor: color }} />
-          <View style={{ flex: 1, height: 1.5, backgroundColor: color, borderRadius: 1 }} />
-        </View>
-      ))}
-    </View>
-  </View>
-);
-
-// Account: head + shoulders silhouette
-const AccountIcon = ({ color = '#fff', size = 16 }) => (
-  <View style={{ width: size, height: size, justifyContent: 'center', alignItems: 'center' }}>
-    <View style={{ width: size * 0.38, height: size * 0.38, borderRadius: size * 0.19, borderWidth: 1.5, borderColor: color, marginBottom: size * 0.04 }} />
-    <View style={{ width: size * 0.72, height: size * 0.36, borderBottomLeftRadius: size * 0.36, borderBottomRightRadius: size * 0.36, borderWidth: 1.5, borderColor: color, borderTopWidth: 0, overflow: 'hidden' }} />
-  </View>
-);
-
-// Logout: door with arrow
-const LogoutNavIcon = ({ color = '#fff', size = 16 }) => (
-  <View style={{ width: size, height: size, justifyContent: 'center', alignItems: 'center' }}>
-    <View style={{ position: 'absolute', left: 0, top: 0, width: size * 0.55, height: size, borderWidth: 1.5, borderColor: color, borderRadius: size * 0.08 }} />
-    <View style={{ position: 'absolute', right: size * 0.02, width: size * 0.52, height: 1.8, backgroundColor: color, borderRadius: 1 }} />
-    <View style={{ position: 'absolute', right: size * 0.02, width: size * 0.2, height: size * 0.2, borderTopWidth: 1.8, borderRightWidth: 1.8, borderColor: color, transform: [{ rotate: '45deg' }], marginTop: -size * 0.01 }} />
-  </View>
-);
-
-const BellIcon = ({ hasNotif }) => (
-  <View style={styles.bellWrapper}>
-    <View style={styles.bellBody} />
-    <View style={styles.bellBottom} />
-    {hasNotif && <View style={styles.bellDot} />}
-  </View>
-);
-
 // ─── FILE ICON ────────────────────────────────────────────────────────────────
 const FileIcon = ({ name }) => {
   const ext = name?.split('.').pop()?.toLowerCase();
@@ -218,6 +91,20 @@ const FileIcon = ({ name }) => {
   );
 };
 
+// View icon — matches sk-document-management
+const ViewIcon = () => (
+  <View style={styles.actionIconWrap}>
+    <Feather name="eye" size={isMobile ? 13 : 15} color={COLORS.teal} />
+  </View>
+);
+
+// Save / download icon — matches sk-document-management
+const SaveIcon = () => (
+  <View style={styles.actionIconWrap}>
+    <Feather name="download" size={isMobile ? 13 : 15} color={COLORS.navy} />
+  </View>
+);
+
 
 // ─── MAIN SCREEN ──────────────────────────────────────────────────────────────
 export default function SKDocumentListScreen() {
@@ -229,6 +116,10 @@ export default function SKDocumentListScreen() {
   // Get user's barangay from auth context
   const barangayName = user?.barangay?.barangay_name || 'Unknown Barangay';
   const barangayId = user?.barangayId;
+
+  // ── Shared notification bell (returned/approved docs, templates, deadlines) ──
+  const notif = useNotificationCenter(barangayId);
+  const notifCount = notif.count;
 
   // Helper function to log SK activity
   const logActivity = async (action, description) => {
@@ -243,24 +134,110 @@ export default function SKDocumentListScreen() {
     }
   };
 
-  // Determine initial tab from params (category passed from sk-document)
-  const initTab = DOCUMENT_TABS.includes(params?.category) ? params.category : 'Financial';
+  // Reference table data — fetched from database; start empty so the UI doesn't
+  // show stale hardcoded values before the fetch completes.
+  const [documentCategories, setDocumentCategories] = useState([]);
+  const [documentTypes, setDocumentTypes] = useState([]);
+  const [folderYears, setFolderYears] = useState([]);
+
+  // Build DOCUMENT_TABS from fetched documentCategories.
+  // Use fallback list while categories are loading so the tab bar renders.
+  const DOCUMENT_TABS = documentCategories.length > 0
+    ? documentCategories.map(c => c.document_category)
+    : DEFAULT_DOCUMENT_TABS;
+
+  // Determine initial tab from params (category passed from sk-document).
+  // Lookup is done against fetched categories by id or by name.
+  const getInitialTab = () => {
+    const catParam = params?.category;
+    if (!catParam) return DOCUMENT_TABS[0] || 'Financial';
+    const found = documentCategories.find(
+      c => c.document_category === catParam || String(c.id) === String(catParam)
+    );
+    if (found && DOCUMENT_TABS.includes(found.document_category)) {
+      return found.document_category;
+    }
+    return DOCUMENT_TABS[0] || 'Financial';
+  };
   const initSubType = params?.subType || null;
 
-  const [activeDocTab, setActiveDocTab] = useState(initTab);
+  const [activeDocTab, setActiveDocTab] = useState(getInitialTab);
   const [activeSubType, setActiveSubType]   = useState(initSubType);
+
+  // Sync the active tab when params change (e.g., when navigating from sk-document with a new category)
+  useEffect(() => {
+    const newTab = getInitialTab();
+    if (newTab !== activeDocTab) {
+      setActiveDocTab(newTab);
+      setActiveSubType(initSubType);
+    }
+  }, [params?.category, params?.subType, documentCategories]);
   const [searchText, setSearchText]         = useState('');
   const [sortMode, setSortMode]             = useState('Newest'); // 'Newest' | 'Name'
   const [sidebarVisible, setSidebarVisible] = useState(false);
   const [dropdownOpen, setDropdownOpen]     = useState(false);
-  const [notifCount]                        = useState(2);
   const [documents, setDocuments]           = useState([]);
 
   // Upload modal state
   const [uploadModalVisible, setUploadModalVisible] = useState(false);
   const [uploadTitle, setUploadTitle] = useState('');
-  const [uploadCategory, setUploadCategory] = useState('planning');
-  const [uploadDocType, setUploadDocType] = useState('');
+  const [uploadCategory, setUploadCategory] = useState(null); // Will store category_id
+  const [uploadDocType, setUploadDocType] = useState(null);   // Will store document_type_id
+  const [uploadYear, setUploadYear] = useState(null);        // Will store folder_year_id
+
+
+  // Fetch reference tables data on mount
+  useEffect(() => {
+    const fetchReferenceData = async () => {
+      try {
+        // Fetch document categories
+        console.log('Fetching document_category...');
+        const { data: categories, error: catError } = await supabase
+          .from('document_category')
+          .select('id, document_category, year')
+          .order('document_category');
+
+        console.log('document_category result:', { categories, catError });
+        if (!catError && categories) {
+          setDocumentCategories(categories);
+        } else if (catError) {
+          console.error('Error fetching categories:', catError);
+        }
+
+        // Fetch document types
+        console.log('Fetching document_types...');
+        const { data: types, error: typeError } = await supabase
+          .from('document_types')
+          .select('id, document_type, category, year')
+          .order('document_type');
+
+        console.log('document_types result:', { types, typeError });
+        if (!typeError && types) {
+          setDocumentTypes(types);
+        } else if (typeError) {
+          console.error('Error fetching document types:', typeError);
+        }
+
+        // Fetch folder years
+        console.log('Fetching folder_year...');
+        const { data: years, error: yearError } = await supabase
+          .from('folder_year')
+          .select('id, fiscal_year')
+          .order('fiscal_year', { ascending: false });
+
+        console.log('folder_year result:', { years, yearError });
+        if (!yearError && years) {
+          setFolderYears(years);
+        } else if (yearError) {
+          console.error('Error fetching folder years:', yearError);
+        }
+      } catch (error) {
+        console.error('Error fetching reference data:', error);
+      }
+    };
+
+    fetchReferenceData();
+  }, []);
 
   // Scanner hook for auto-trigger
   const scanner = useDocumentScanner();
@@ -280,8 +257,47 @@ export default function SKDocumentListScreen() {
       }
     }, [params?.openScanner, scanner])
   );
+
+  // Handle openUpload param from dashboard compliance tasks
+  useEffect(() => {
+    if (params?.openUpload === 'true') {
+      // Resolve category id by name from fetched categories
+      if (params?.category && documentCategories.length > 0) {
+        const found = documentCategories.find(c => c.document_category === params.category);
+        if (found) {
+          setUploadCategory(found.id);
+        }
+      }
+      if (params?.subType) {
+        // Resolve docType by name (params may pass either an id or a name)
+        if (documentTypes.length > 0) {
+          const matchedType = documentTypes.find(
+            t => t.document_type === params.subType || String(t.id) === String(params.subType)
+          );
+          if (matchedType) {
+            setUploadDocType(matchedType.id);
+            setUploadTitle(params.docTitle || matchedType.document_type);
+          } else {
+            setUploadDocType(params.subType);
+            setUploadTitle(params.docTitle || params.subType);
+          }
+        } else {
+          setUploadDocType(params.subType);
+          setUploadTitle(params.docTitle || params.subType);
+        }
+      }
+      // Open the upload modal
+      setUploadModalVisible(true);
+      // Clear the URL param after triggering
+      setTimeout(() => {
+        router.setParams({ openUpload: undefined });
+      }, 500);
+    }
+  }, [params?.openUpload, params?.category, params?.subType, documentCategories, documentTypes]);
+
   const [categoryDropdownOpen, setCategoryDropdownOpen] = useState(false);
   const [docTypeDropdownOpen, setDocTypeDropdownOpen] = useState(false);
+  const [yearDropdownOpen, setYearDropdownOpen] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [selectedFile, setSelectedFile] = useState(null);
 
@@ -291,16 +307,16 @@ export default function SKDocumentListScreen() {
   // Fetch existing document types whenever the upload modal opens or category changes
   useEffect(() => {
     const fetchExistingDocTypes = async () => {
-      if (!barangayId || !uploadModalVisible) return;
+      if (!barangayId || !uploadModalVisible || !uploadCategory) return;
       try {
         const { data, error } = await supabase
           .from('documents')
           .select('document_type')
           .eq('barangay_id', barangayId)
-          .eq('folder_category', uploadCategory);
+          .eq('folder_category', String(uploadCategory));
 
         if (!error && data) {
-          setExistingDocTypes(data.map(d => d.document_type).filter(Boolean));
+          setExistingDocTypes(data.map(d => Number(d.document_type)).filter(Boolean));
         }
       } catch (err) {
         console.error('Error fetching existing doc types:', err);
@@ -311,8 +327,9 @@ export default function SKDocumentListScreen() {
   }, [barangayId, uploadCategory, uploadModalVisible]);
 
   // Get document types for selected category, excluding already-uploaded ones
-  const currentDocTypes = (DOCUMENT_TYPES[uploadCategory] || []).filter(
-    type => !existingDocTypes.includes(type)
+  // Now using the database reference table
+  const currentDocTypes = documentTypes.filter(
+    type => type.category === uploadCategory && !existingDocTypes.includes(type.id)
   );
 
   // Fetch documents for this barangay filtered by category — re-fetch every time screen is focused
@@ -320,48 +337,71 @@ export default function SKDocumentListScreen() {
     if (!barangayId) return;
 
     try {
-      // Map tab categories to folder_category values
-      const categoryMap = {
-        'Financial': 'financial',
-        'Planning': 'planning',
-        'Governance': 'governance',
-        'Activities': 'performance'
-        };
-        const folderCategory = categoryMap[activeDocTab];
+      // Resolve the active tab name → category id from the fetched categories
+      const activeCategory = documentCategories.find(
+        c => c.document_category === activeDocTab
+      );
+      const categoryId = activeCategory?.id;
 
-        const query = supabase
-          .from('documents')
-          .select('document_id, title, folder_category, document_type, status, year, created_at')
-          .eq('barangay_id', barangayId);
+      const query = supabase
+        .from('documents')
+        .select('document_id, title, folder_category, document_type, status, year, created_at, file_url')
+        .eq('barangay_id', barangayId);
 
-        if (folderCategory) {
-          query.eq('folder_category', folderCategory);
-        }
-
-        const { data: docs, error } = await query.order('created_at', { ascending: false });
-
-        if (error) {
-          console.error('Error fetching documents:', error);
-          return;
-        }
-
-        const formattedDocs = docs?.map(doc => ({
-          id: doc.document_id,
-          name: doc.title || 'Untitled',
-          date: doc.created_at ? new Date(doc.created_at).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
-        })) || [];
-
-        setDocuments(formattedDocs);
-      } catch (error) {
-        console.error('Error:', error);
+      // Filter by category ID (stored as string in folder_category)
+      if (categoryId) {
+        query.eq('folder_category', String(categoryId));
       }
-  }, [barangayId, activeDocTab]);
+
+      const { data: docs, error } = await query.order('created_at', { ascending: false });
+
+      if (error) {
+        console.error('Error fetching documents:', error);
+        return;
+      }
+
+      // For docs without a file_url on the parent row, fall back to the latest
+      // version's file_url from document_versions.
+      const docsNeedingVersion = (docs || []).filter(d => !d.file_url);
+      let latestVersionByDoc = {};
+      if (docsNeedingVersion.length > 0) {
+        const ids = docsNeedingVersion.map(d => d.document_id);
+        const { data: versions, error: verErr } = await supabase
+          .from('document_versions')
+          .select('document_id, file_url, version_number')
+          .in('document_id', ids)
+          .order('version_number', { ascending: false });
+        if (!verErr && versions) {
+          versions.forEach(v => {
+            if (!latestVersionByDoc[v.document_id]) {
+              latestVersionByDoc[v.document_id] = v.file_url;
+            }
+          });
+        }
+      }
+
+      // Transform the data to include readable category and document type names
+      const formattedDocs = docs?.map(doc => ({
+        id: doc.document_id,
+        name: doc.title || 'Untitled',
+        date: doc.created_at ? new Date(doc.created_at).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
+        category_name: documentCategories.find(c => c.id === Number(doc.folder_category))?.document_category || doc.folder_category || '',
+        doc_type_name: documentTypes.find(t => t.id === Number(doc.document_type))?.document_type || doc.document_type || '',
+        year_value: folderYears.find(y => y.id === Number(doc.year))?.fiscal_year || doc.year,
+        file_url: doc.file_url || latestVersionByDoc[doc.document_id] || null,
+      })) || [];
+
+      setDocuments(formattedDocs);
+    } catch (error) {
+      console.error('Error:', error);
+    }
+  }, [barangayId, activeDocTab, documentCategories, documentTypes, folderYears]);
 
   // Re-fetch whenever the screen comes into focus
   useFocusEffect(
     useCallback(() => {
       fetchDocuments();
-    }, [barangayId, activeDocTab])
+    }, [barangayId, activeDocTab, documentCategories])
   );
 
   // Also re-fetch immediately when the active tab changes
@@ -377,9 +417,6 @@ export default function SKDocumentListScreen() {
   // Accent color based on active tab
   const tabColor = COLORS[activeDocTab.toLowerCase()] || COLORS.planning;
 
-  // SubTypes for active tab (from fetched documents)
-  const subTypes = [];
-
   // When tab changes, reset subType
   const handleTabChange = (tab) => {
     setActiveDocTab(tab);
@@ -388,13 +425,28 @@ export default function SKDocumentListScreen() {
     setSearchText('');
   };
 
+  // Build subTypes from the document types that belong to the active category.
+  // Each entry carries both id and name so filtering can match by id (exact)
+  // while still rendering the human-readable label.
+  const subTypes = useMemo(() => {
+    const activeCategory = documentCategories.find(c => c.document_category === activeDocTab);
+    if (!activeCategory) return [];
+    return documentTypes
+      .filter(t => t.category === activeCategory.id)
+      .map(t => ({ id: t.id, name: t.document_type }));
+  }, [documentCategories, documentTypes, activeDocTab]);
+
   // All docs for current tab (or filtered by subType)
   const allDocs = useMemo(() => {
     if (activeSubType) {
+      // If params passed docTypeId, prefer an exact id match; otherwise substring on title.
+      if (params?.docTypeId) {
+        return documents.filter(d => String(d.document_type) === String(params.docTypeId));
+      }
       return documents.filter(d => d.name.includes(activeSubType));
     }
     return documents;
-  }, [activeDocTab, activeSubType, documents]);
+  }, [activeDocTab, activeSubType, documents, params?.docTypeId]);
 
   // Apply search + sort
   const visibleDocs = useMemo(() => {
@@ -413,6 +465,43 @@ export default function SKDocumentListScreen() {
     return toPhilippineDate(dateStr, { year: 'numeric', month: 'short', day: 'numeric' });
   };
 
+  // In-app viewer (matches sk-document-management): full-screen modal with
+  // a WebView/iframe rendering the file through the Google Docs viewer.
+  const [viewerModal, setViewerModal] = useState({ visible: false, fileUrl: null, title: '' });
+  const [webViewLoading, setWebViewLoading] = useState(false);
+  const [downloadModalVisible, setDownloadModalVisible] = useState(false);
+  const [documentToDownload, setDocumentToDownload] = useState(null);
+
+  const handleViewDocument = (doc) => {
+    if (!doc?.file_url) {
+      Alert.alert('No File', 'This document does not have a file attached.');
+      return;
+    }
+    setViewerModal({ visible: true, fileUrl: doc.file_url, title: doc.name });
+    setWebViewLoading(true);
+  };
+
+  const handleDownloadDocument = (doc) => {
+    if (!doc?.file_url) {
+      Alert.alert('No File', 'This document does not have a file attached.');
+      return;
+    }
+    setDocumentToDownload({ fileUrl: doc.file_url, title: doc.name });
+    setDownloadModalVisible(true);
+  };
+
+  const handleDownloadConfirm = async () => {
+    if (!documentToDownload?.fileUrl) return;
+    setDownloadModalVisible(false);
+    setDocumentToDownload(null);
+    try {
+      await Linking.openURL(documentToDownload.fileUrl);
+    } catch (err) {
+      console.error('Download error:', err);
+      Alert.alert('Download Failed', `Could not open the file: ${err.message}`);
+    }
+  };
+
   const handleNavPress = (tab) => {
     setActiveTab(tab);
     setSidebarVisible(false);
@@ -423,6 +512,8 @@ export default function SKDocumentListScreen() {
     if (tab === 'Logs')      router.push('/(tabs)/sk-logs');
     if (tab === 'Account')   router.push('/(tabs)/sk-account');
   };
+
+  const handleLogout = () => { logout(); router.replace('/'); };
 
   // Handle upload form submission
   // File picker function
@@ -450,7 +541,7 @@ export default function SKDocumentListScreen() {
   };
 
   const handleUpload = async () => {
-    if (!uploadTitle.trim() || !uploadDocType) {
+    if (!uploadTitle.trim() || !uploadCategory || !uploadDocType || !uploadYear) {
       alert('Please fill in all fields');
       return;
     }
@@ -461,9 +552,11 @@ export default function SKDocumentListScreen() {
 
     setUploading(true);
     try {
-      const currentYear = new Date().getFullYear();
-
       let fileUrl = null;
+
+      // Get the year value from the selected folder_year
+      const selectedYear = folderYears.find(y => y.id === uploadYear);
+      const yearValue = selectedYear?.fiscal_year || new Date().getFullYear();
 
       // Upload file to Supabase storage if selected
       if (selectedFile) {
@@ -471,7 +564,7 @@ export default function SKDocumentListScreen() {
         const sanitizedName = selectedFile.name
           .replace(/[^\w\s.-]/g, '')
           .replace(/\s+/g, '_');
-        const fileName = `${barangayId}_${currentYear}_${Date.now()}_${sanitizedName}`;
+        const fileName = `${barangayId}_${yearValue}_${Date.now()}_${sanitizedName}`;
 
         // Fetch the file and convert to blob
         const response = await fetch(selectedFile.uri);
@@ -498,17 +591,17 @@ export default function SKDocumentListScreen() {
         fileUrl = urlData.publicUrl;
       }
 
-      // Create document record
+      // Create document record with foreign key references
       const { data: docData, error } = await supabase
         .from('documents')
         .insert({
           barangay_id: barangayId,
           submitted_by: user.userId,
           title: uploadTitle.trim(),
-          folder_category: uploadCategory,
-          document_type: uploadDocType,
+          folder_category: String(uploadCategory),
+          document_type: String(uploadDocType),
+          year: uploadYear,
           status: 'saved',
-          year: currentYear,
           file_url: fileUrl,
           created_at: new Date().toISOString(),
           saved_at: new Date().toISOString(),
@@ -537,13 +630,17 @@ export default function SKDocumentListScreen() {
           });
       }
 
+      // Get category name for activity log
+      const categoryName = documentCategories.find(c => c.id === uploadCategory)?.document_category || 'Unknown';
+
       // Log the activity
-      await logActivity('Create document', `Created document "${uploadTitle.trim()}" in ${uploadCategory}`);
+      await logActivity('Create document', `Created document "${uploadTitle.trim()}" in ${categoryName}`);
 
       // Reset form and close modal
       setUploadTitle('');
-      setUploadCategory('planning');
-      setUploadDocType('');
+      setUploadCategory(null);
+      setUploadDocType(null);
+      setUploadYear(null);
       setSelectedFile(null);
       setUploadModalVisible(false);
       setUploading(false);
@@ -560,95 +657,66 @@ export default function SKDocumentListScreen() {
   // Reset upload form
   const resetUploadForm = () => {
     setUploadTitle('');
-    setUploadCategory('planning');
-    setUploadDocType('');
+    setUploadCategory(null);
+    setUploadDocType(null);
+    setUploadYear(null);
     setCategoryDropdownOpen(false);
     setDocTypeDropdownOpen(false);
+    setYearDropdownOpen(false);
     setSelectedFile(null);
     setExistingDocTypes([]);
   };
 
-  // ── Sidebar ──
-  const NAV_ITEMS = [
-    { tab: 'Dashboard', IconComponent: DashboardIcon },
-    { tab: 'Documents', IconComponent: DocumentsIcon },
-    { tab: 'Planning',  IconComponent: PlanningIcon  },
-    { tab: 'Portal',    IconComponent: PortalIcon    },
-    { tab: 'Logs',      IconComponent: LogsIcon      },
-    { tab: 'Account',   IconComponent: AccountIcon   },
-  ];
 
+  
+  // ── Sidebar (rendered by the shared Sidebar module) ──
   const renderSidebar = () => (
-    <View style={[styles.sidebar, isMobile && !sidebarVisible && styles.sidebarHidden]}>
-      <View style={styles.logoPill}>
-        <Image
-          source={require('./../../assets/images/sk-logo.png')}
-          style={styles.logoImage}
-          resizeMode="contain"
-        />
-      </View>
-      <View style={{ height: 28 }} />
-      {NAV_ITEMS.map(({ tab, IconComponent }) => {
-        const active = activeTab === tab;
-        const iconColor = active ? '#133E75' : 'rgba(255,255,255,0.85)';
-        return (
-          <TouchableOpacity
-            key={tab}
-            style={[styles.navItem, active && styles.navItemActive]}
-            onPress={() => handleNavPress(tab)}
-            activeOpacity={0.8}
-          >
-            <View style={styles.navItemInner}>
-              <IconComponent color={iconColor} size={16} />
-              <Text style={[styles.navLabel, active && styles.navLabelActive]}>{tab}</Text>
-            </View>
-          </TouchableOpacity>
-        );
-      })}
-      <View style={{ flex: 1 }} />
-      <TouchableOpacity style={styles.logoutBtn} onPress={() => { logout(); router.replace('/'); }} activeOpacity={0.8}>
-        <View style={styles.navItemInner}>
-          <LogoutNavIcon color="rgba(255,255,255,0.85)" size={16} />
-          <Text style={styles.logoutText}>Logout</Text>
-        </View>
-      </TouchableOpacity>
-    </View>
+    <Sidebar
+      activeTab={activeTab}
+      onNavPress={handleNavPress}
+      onLogout={handleLogout}
+      isMobile={isMobile}
+      sidebarVisible={sidebarVisible}
+    />
   );
 
   // ── Main Content ──
   const renderContent = () => (
-    <ScrollView
-      style={[styles.main, isMobile && styles.mainMobile]}
-      contentContainerStyle={styles.mainContent}
-      showsVerticalScrollIndicator={false}
-    >
-      {/* Mobile Header */}
-      {isMobile && (
-        <View style={styles.mobileHeader}>
-          <TouchableOpacity style={styles.menuBtn} onPress={() => setSidebarVisible(true)}>
-            <MenuIcon />
-          </TouchableOpacity>
-          <Text style={styles.mobileTitle}>Documents</Text>
-          <TouchableOpacity style={styles.bellBtn}>
-            <BellIcon hasNotif={notifCount > 0} />
-          </TouchableOpacity>
-        </View>
-      )}
+    <View style={[styles.main, isMobile && styles.mainMobile]}>
+      {/* Pinned mobile header — sits above the ScrollView, never scrolls away */}
+      <MobileHeader
+        title="Documents"
+        onMenuPress={() => setSidebarVisible(true)}
+        onBellPress={notif.open}
+        bellCount={notifCount}
+        BellIcon={BellIcon}
+        colors={COLORS}
+        hidden={isMobile && sidebarVisible}
+      />
+      <ScrollView
+        style={styles.mainScroll}
+        contentContainerStyle={styles.mainContent}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Spacer so the first row of content isn't hidden under the pinned header */}
+        <MobileHeaderSpacer />
 
-      {/* Desktop Header */}
-      {!isMobile && (
-        <View style={styles.header}>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.headerSub}>SANGGUNIANG KABATAAN</Text>
-            <Text style={styles.headerTitle}>{barangayName.toUpperCase()}</Text>
+        {/* Desktop Header */}
+        {!isMobile && (
+          <View style={styles.header}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.headerSub}>SANGGUNIANG KABATAAN</Text>
+              <Text style={styles.headerTitle}>{barangayName.toUpperCase()}</Text>
+            </View>
+            <View style={styles.headerRight}>
+              <TouchableOpacity style={styles.bellBtn} onPress={notif.open} activeOpacity={0.7}>
+                <BellIcon count={notifCount} />
+              </TouchableOpacity>
+            </View>
           </View>
-          <TouchableOpacity style={styles.bellBtn}>
-            <BellIcon hasNotif={notifCount > 0} />
-          </TouchableOpacity>
-        </View>
-      )}
+        )}
 
-      {/* Category label + All dropdown + Tab bar */}
+        {/* Category label + All dropdown + Tab bar */}
       <View style={styles.categoryRow}>
         <Text style={styles.categoryLabel}>Category:</Text>
       </View>
@@ -692,10 +760,14 @@ export default function SKDocumentListScreen() {
         <View style={styles.docTabBar}>
           {DOCUMENT_TABS.map(tab => {
             const active = activeDocTab === tab;
+            const tabTint = COLORS[tab.toLowerCase()] || COLORS.planning;
             return (
               <TouchableOpacity
                 key={tab}
-                style={[styles.docTab, active && styles.docTabActive]}
+                style={[
+                  styles.docTab,
+                  active && [styles.docTabActive, { backgroundColor: tabTint.header, borderColor: tabTint.header, shadowColor: tabTint.header }],
+                ]}
                 onPress={() => handleTabChange(tab)}
                 activeOpacity={0.8}
               >
@@ -738,35 +810,6 @@ export default function SKDocumentListScreen() {
         </View>
       </View>
 
-      {/* SubType filter pills */}
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        style={styles.pillsScroll}
-        contentContainerStyle={styles.pillsRow}
-      >
-        <TouchableOpacity
-          style={[styles.pill, !activeSubType && { backgroundColor: tabColor.header }]}
-          onPress={() => setActiveSubType(null)}
-          activeOpacity={0.8}
-        >
-          <Text style={[styles.pillText, !activeSubType && styles.pillTextActive]}>All</Text>
-        </TouchableOpacity>
-        {subTypes.map(sub => {
-          const active = activeSubType === sub;
-          return (
-            <TouchableOpacity
-              key={sub}
-              style={[styles.pill, active && { backgroundColor: tabColor.header }]}
-              onPress={() => setActiveSubType(active ? null : sub)}
-              activeOpacity={0.8}
-            >
-              <Text style={[styles.pillText, active && styles.pillTextActive]}>{sub}</Text>
-            </TouchableOpacity>
-          );
-        })}
-      </ScrollView>
-
       {/* Document List Table */}
       <View style={[styles.tableContainer, { borderColor: tabColor.header + '55' }]}>
         {/* Sort row */}
@@ -789,22 +832,35 @@ export default function SKDocumentListScreen() {
         <View style={[styles.tableHeader, { backgroundColor: tabColor.bg }]}>
           <Text style={[styles.tableHeaderText, { flex: 3 }]}>Document Name</Text>
           <Text style={[styles.tableHeaderText, { flex: 1, textAlign: 'right' }]}>Date</Text>
+          <Text style={[styles.tableHeaderText, { width: 90, textAlign: 'center' }]}>Action</Text>
         </View>
 
         {/* Table Rows */}
         {visibleDocs.length > 0 ? (
           visibleDocs.map((doc, idx) => (
-            <TouchableOpacity
+            <View
               key={doc.id}
               style={[styles.tableRow, idx % 2 === 1 && { backgroundColor: tabColor.bg + '55' }]}
-              activeOpacity={0.7}
             >
               <View style={styles.tableRowLeft}>
-                <FileIcon name={doc.name} />
                 <Text style={styles.docName} numberOfLines={1}>{doc.name}</Text>
               </View>
               <Text style={styles.docDate}>{formatDate(doc.date)}</Text>
-            </TouchableOpacity>
+              <View style={styles.rowActions}>
+                <TouchableOpacity
+                  activeOpacity={0.7}
+                  onPress={() => handleDownloadDocument(doc)}
+                >
+                  <SaveIcon />
+                </TouchableOpacity>
+                <TouchableOpacity
+                  activeOpacity={0.7}
+                  onPress={() => handleViewDocument(doc)}
+                >
+                  <ViewIcon />
+                </TouchableOpacity>
+              </View>
+            </View>
           ))
         ) : (
           <View style={styles.emptyState}>
@@ -814,12 +870,24 @@ export default function SKDocumentListScreen() {
           </View>
         )}
       </View>
-    </ScrollView>
+      </ScrollView>
+    </View>
   );
 
   return (
-    <SafeAreaView style={styles.safe}>
+    <>
+      <Head>
+        <title>Document List · SK Monitoring</title>
+      </Head>
+      <SafeAreaView style={styles.safe} edges={isMobile ? ['left', 'right', 'bottom'] : ['top', 'left', 'right', 'bottom']}>
       <StatusBar barStyle="light-content" backgroundColor={COLORS.navy} />
+      <NotificationModal
+        {...notif.modalProps}
+        onOpenRoute={(route) => {
+          notif.close();
+          setTimeout(() => router.push(route), 120);
+        }}
+      />
       <View style={styles.layout}>
         {isMobile && sidebarVisible && (
           <TouchableOpacity
@@ -860,44 +928,50 @@ export default function SKDocumentListScreen() {
               <Text style={styles.modalLabel}>Folder Category</Text>
               <View style={styles.modalCategoryDropdownWrapper}>
                 <TouchableOpacity
-                  style={styles.modalDropdown}
-                  onPress={() => { setCategoryDropdownOpen(!categoryDropdownOpen); setDocTypeDropdownOpen(false); }}
+                  style={[styles.modalDropdown, !uploadCategory && styles.modalDropdownPlaceholder]}
+                  onPress={() => { setCategoryDropdownOpen(!categoryDropdownOpen); setDocTypeDropdownOpen(false); setYearDropdownOpen(false); }}
                   activeOpacity={0.8}
                 >
-                  <Text style={styles.modalDropdownText}>
-                    {FOLDER_CATEGORIES.find(c => c.value === uploadCategory)?.label || 'Select Category'}
+                  <Text style={[styles.modalDropdownText, !uploadCategory && styles.modalDropdownPlaceholderText]}>
+                    {documentCategories.find(c => c.id === uploadCategory)?.document_category || 'Select Category'}
                   </Text>
                   <Text style={styles.modalDropdownArrow}>{categoryDropdownOpen ? '▲' : '▼'}</Text>
                 </TouchableOpacity>
                 {categoryDropdownOpen && (
                   <View style={styles.modalDropdownMenu}>
-                    {FOLDER_CATEGORIES.map(cat => (
+                    {documentCategories.length > 0 ? documentCategories.map(cat => (
                       <TouchableOpacity
-                        key={cat.value}
-                        style={[styles.modalDropdownItem, uploadCategory === cat.value && styles.modalDropdownItemActive]}
-                        onPress={() => { setUploadCategory(cat.value); setUploadDocType(''); setCategoryDropdownOpen(false); }}
+                        key={cat.id}
+                        style={[styles.modalDropdownItem, uploadCategory === cat.id && styles.modalDropdownItemActive]}
+                        onPress={() => { setUploadCategory(cat.id); setUploadDocType(null); setCategoryDropdownOpen(false); }}
                         activeOpacity={0.8}
                       >
-                        <Text style={[styles.modalDropdownItemText, uploadCategory === cat.value && styles.modalDropdownItemTextActive]}>
-                          {cat.label}
+                        <Text style={[styles.modalDropdownItemText, uploadCategory === cat.id && styles.modalDropdownItemTextActive]}>
+                          {cat.document_category}
                         </Text>
-                        {uploadCategory === cat.value && <Text style={styles.modalDropdownCheck}>✓</Text>}
+                        {uploadCategory === cat.id && <Text style={styles.modalDropdownCheck}>✓</Text>}
                       </TouchableOpacity>
-                    ))}
+                    )) : (
+                      <View style={{ paddingVertical: 16, paddingHorizontal: 14 }}>
+                        <Text style={{ fontSize: 13, color: COLORS.subText, textAlign: 'center' }}>
+                          No categories available. Please contact admin to add document categories.
+                        </Text>
+                      </View>
+                    )}
                   </View>
                 )}
               </View>
 
               {/* Document Type Dropdown */}
               <Text style={styles.modalLabel}>Document Type</Text>
-              <View style={styles.modalDropdownWrapper}>
+              <View style={styles.modalDocTypeDropdownWrapper}>
                 <TouchableOpacity
                   style={[styles.modalDropdown, !uploadDocType && styles.modalDropdownPlaceholder]}
-                  onPress={() => { if (uploadCategory) { setDocTypeDropdownOpen(!docTypeDropdownOpen); setCategoryDropdownOpen(false); } }}
+                  onPress={() => { if (uploadCategory) { setDocTypeDropdownOpen(!docTypeDropdownOpen); setCategoryDropdownOpen(false); setYearDropdownOpen(false); } }}
                   activeOpacity={0.8}
                 >
                   <Text style={[styles.modalDropdownText, !uploadDocType && styles.modalDropdownPlaceholderText]}>
-                    {uploadDocType || 'Select Document Type'}
+                    {documentTypes.find(t => t.id === uploadDocType)?.document_type || 'Select Document Type'}
                   </Text>
                   <Text style={styles.modalDropdownArrow}>{docTypeDropdownOpen ? '▲' : '▼'}</Text>
                 </TouchableOpacity>
@@ -905,20 +979,22 @@ export default function SKDocumentListScreen() {
                   <ScrollView style={styles.modalDropdownMenu} showsVerticalScrollIndicator={false}>
                     {currentDocTypes.length > 0 ? currentDocTypes.map(type => (
                       <TouchableOpacity
-                        key={type}
-                        style={[styles.modalDropdownItem, uploadDocType === type && styles.modalDropdownItemActive]}
-                        onPress={() => { setUploadDocType(type); setDocTypeDropdownOpen(false); }}
+                        key={type.id}
+                        style={[styles.modalDropdownItem, uploadDocType === type.id && styles.modalDropdownItemActive]}
+                        onPress={() => { setUploadDocType(type.id); setUploadTitle(type.document_type); setDocTypeDropdownOpen(false); }}
                         activeOpacity={0.8}
                       >
-                        <Text style={[styles.modalDropdownItemText, uploadDocType === type && styles.modalDropdownItemTextActive]}>
-                          {type}
+                        <Text style={[styles.modalDropdownItemText, uploadDocType === type.id && styles.modalDropdownItemTextActive]}>
+                          {type.document_type}
                         </Text>
-                        {uploadDocType === type && <Text style={styles.modalDropdownCheck}>✓</Text>}
+                        {uploadDocType === type.id && <Text style={styles.modalDropdownCheck}>✓</Text>}
                       </TouchableOpacity>
                     )) : (
                       <View style={{ paddingVertical: 16, paddingHorizontal: 14 }}>
                         <Text style={{ fontSize: 13, color: COLORS.subText, textAlign: 'center' }}>
-                          All document types for this category have already been uploaded.
+                          {documentTypes.some(t => t.category === uploadCategory)
+                            ? 'All document types for this category have already been uploaded.'
+                            : 'No document types available for this category.'}
                         </Text>
                       </View>
                     )}
@@ -926,10 +1002,42 @@ export default function SKDocumentListScreen() {
                 )}
               </View>
 
-              {/* Year Display */}
+              {/* Year Dropdown */}
               <Text style={styles.modalLabel}>Year</Text>
-              <View style={styles.modalYearDisplay}>
-                <Text style={styles.modalYearText}>{new Date().getFullYear()}</Text>
+              <View style={styles.modalDropdownWrapper}>
+                <TouchableOpacity
+                  style={[styles.modalDropdown, !uploadYear && styles.modalDropdownPlaceholder]}
+                  onPress={() => { setYearDropdownOpen(!yearDropdownOpen); setCategoryDropdownOpen(false); setDocTypeDropdownOpen(false); }}
+                  activeOpacity={0.8}
+                >
+                  <Text style={[styles.modalDropdownText, !uploadYear && styles.modalDropdownPlaceholderText]}>
+                    {folderYears.find(y => y.id === uploadYear)?.fiscal_year || 'Select Year'}
+                  </Text>
+                  <Text style={styles.modalDropdownArrow}>{yearDropdownOpen ? '▲' : '▼'}</Text>
+                </TouchableOpacity>
+                {yearDropdownOpen && (
+                  <View style={styles.modalDropdownMenu}>
+                    {folderYears.length > 0 ? folderYears.map(year => (
+                      <TouchableOpacity
+                        key={year.id}
+                        style={[styles.modalDropdownItem, uploadYear === year.id && styles.modalDropdownItemActive]}
+                        onPress={() => { setUploadYear(year.id); setYearDropdownOpen(false); }}
+                        activeOpacity={0.8}
+                      >
+                        <Text style={[styles.modalDropdownItemText, uploadYear === year.id && styles.modalDropdownItemTextActive]}>
+                          {year.fiscal_year}
+                        </Text>
+                        {uploadYear === year.id && <Text style={styles.modalDropdownCheck}>✓</Text>}
+                      </TouchableOpacity>
+                    )) : (
+                      <View style={{ paddingVertical: 16, paddingHorizontal: 14 }}>
+                        <Text style={{ fontSize: 13, color: COLORS.subText, textAlign: 'center' }}>
+                          No years available. Please contact admin to add folder years.
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+                )}
               </View>
 
               {/* File Picker */}
@@ -981,8 +1089,121 @@ export default function SKDocumentListScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* ── Document Viewer (matches sk-document-management) ── */}
+      <Modal
+        visible={viewerModal.visible}
+        animationType="slide"
+        transparent={false}
+        onRequestClose={() => setViewerModal({ visible: false, fileUrl: null, title: '' })}
+      >
+        <SafeAreaView style={{ flex: 1, backgroundColor: COLORS.navy }}>
+          <View style={styles.viewerHeader}>
+            <TouchableOpacity
+              style={styles.viewerBackBtn}
+              onPress={() => setViewerModal({ visible: false, fileUrl: null, title: '' })}
+              activeOpacity={0.8}
+            >
+              <Feather name="arrow-left" size={20} color={COLORS.white} />
+            </TouchableOpacity>
+            <Text style={styles.viewerTitle} numberOfLines={1}>
+              {viewerModal.title}
+            </Text>
+            {viewerModal.fileUrl && (
+              <TouchableOpacity
+                style={styles.viewerOpenBtn}
+                onPress={() => {
+                  setViewerModal({ visible: false, fileUrl: null, title: '' });
+                  setDocumentToDownload({ fileUrl: viewerModal.fileUrl, title: viewerModal.title });
+                  setDownloadModalVisible(true);
+                }}
+                activeOpacity={0.8}
+              >
+                <Feather name="download" size={18} color={COLORS.gold} />
+              </TouchableOpacity>
+            )}
+          </View>
+
+          <View style={{ flex: 1, backgroundColor: COLORS.offWhite, overflow: 'hidden' }}>
+            {viewerModal.fileUrl && (
+              Platform.OS === 'web' ? (
+                <iframe
+                  src={`https://docs.google.com/gview?embedded=true&url=${encodeURIComponent(viewerModal.fileUrl)}`}
+                  style={{ flex: 1, width: '100%', height: '100%', border: 'none' }}
+                  title={viewerModal.title}
+                />
+              ) : (
+                <WebView
+                  source={{
+                    uri: `https://docs.google.com/gview?embedded=true&url=${encodeURIComponent(viewerModal.fileUrl)}`,
+                  }}
+                  style={{ flex: 1 }}
+                  onLoadStart={() => setWebViewLoading(true)}
+                  onLoadEnd={() => setWebViewLoading(false)}
+                  onError={() => {
+                    setWebViewLoading(false);
+                    Alert.alert('Load Failed', 'Could not load the document. Try opening it externally.');
+                    setViewerModal({ visible: false, fileUrl: null, title: '' });
+                  }}
+                  startInLoadingState={true}
+                  renderLoading={() => (
+                    <View style={styles.viewerLoading}>
+                      <ActivityIndicator size="large" color={COLORS.navy} />
+                      <Text style={styles.viewerLoadingText}>Loading document…</Text>
+                    </View>
+                  )}
+                />
+              )
+            )}
+          </View>
+        </SafeAreaView>
+      </Modal>
+
+      {/* ── Download Confirmation Modal (matches sk-document-management) ── */}
+      <Modal
+        visible={downloadModalVisible}
+        animationType="fade"
+        transparent={true}
+        onRequestClose={() => { setDownloadModalVisible(false); setDocumentToDownload(null); }}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.dlModalContent}>
+            <View style={styles.modalIconStrip}>
+              <View style={[styles.modalIconCircle, { backgroundColor: '#DBEAFE' }]}>
+                <Feather name="download" size={26} color={COLORS.blue} />
+              </View>
+            </View>
+            <View style={styles.dlModalBody}>
+              <Text style={styles.dlModalTitle}>Download Document</Text>
+              <Text style={styles.dlModalBodyText}>
+                Do you want to download{' '}
+                <Text style={styles.modalHighlight}>"{documentToDownload?.title}"</Text>?
+              </Text>
+            </View>
+            <View style={styles.modalDivider} />
+            <View style={styles.dlModalFooter}>
+              <TouchableOpacity
+                style={styles.dlModalCancelBtn}
+                onPress={() => { setDownloadModalVisible(false); setDocumentToDownload(null); }}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.dlModalCancelBtnText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalActionBtn, { backgroundColor: COLORS.blue }]}
+                onPress={handleDownloadConfirm}
+                activeOpacity={0.8}
+              >
+                <Feather name="download" size={14} color={COLORS.white} style={{ marginRight: 6 }} />
+                <Text style={styles.modalActionBtnText}>Download</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   </SafeAreaView>
+    </>
   );
 }
 
@@ -991,63 +1212,19 @@ const styles = StyleSheet.create({
   safe:   { flex: 1, backgroundColor: COLORS.navy },
   layout: { flex: 1, flexDirection: 'row' },
 
-  // ── Sidebar ──
-  sidebar: {
-    width: 250, backgroundColor: COLORS.navy,
-    alignItems: 'center', paddingTop: 20, paddingBottom: 24,
-    paddingHorizontal: 10, zIndex: 20,
-    ...(isMobile ? {
-      position: 'absolute', top: 0, left: 0, bottom: 0, zIndex: 20,
-    } : {}),
-  },
-  sidebarHidden: {
-    display: 'none',
-  },
+  // ── Sidebar now rendered by the shared Sidebar module ──
   sidebarOverlay: {
     position: 'absolute', left: 0, top: 0, bottom: 0, right: 0,
     backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 15,
   },
-  logoPill: {
-    marginTop: 20, width: 70, height: 70, borderRadius: 35,
-    backgroundColor: 'rgba(255,255,255,0.15)',
-    alignItems: 'center', justifyContent: 'center',
-    marginBottom: 8, borderWidth: 2, borderColor: 'rgba(255,255,255,0.3)',
-  },
-  logoImage:      { width: 100, height: 100 },
-  navItem: {
-    width: '100%', paddingVertical: 12, paddingHorizontal: 12,
-    borderRadius: 24, marginBottom: 8, alignItems: 'center',
-    borderWidth: 1.5, borderColor: COLORS.white, backgroundColor: COLORS.navy,
-  },
-  navItemInner: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  navItemActive:  { backgroundColor: COLORS.white, borderColor: COLORS.white },
-  navLabel:       { fontSize: 13, fontWeight: '600', color: 'rgba(255,255,255,0.85)', letterSpacing: 0.3 },
-  navLabelActive: { color: '#000', fontWeight: '800' },
-  logoutBtn: {
-    width: '100%', paddingVertical: 12, paddingHorizontal: 12, borderRadius: 24,
-    marginTop: 8, alignItems: 'center', borderWidth: 1.5, borderColor: COLORS.white,
-    backgroundColor: 'rgba(255,255,255,0.1)',
-  },
-  logoutText: { fontSize: 13, fontWeight: '600', color: '#fff', letterSpacing: 0.3 },
 
   // ── Main ──
+  // `main` is the flex container that MobileHeader (pinned, absolute) and the
+  // ScrollView sit inside as siblings. `mainScroll` is the ScrollView itself.
   main:        { flex: 1, backgroundColor: COLORS.offWhite, borderTopLeftRadius: 20 },
   mainMobile:  { borderTopLeftRadius: 0 },
+  mainScroll:  { flex: 1 },
   mainContent: { padding: 20, paddingBottom: 40 },
-
-  // Mobile header
-  mobileHeader: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    marginBottom: 16, paddingBottom: 12,
-    borderBottomWidth: 1, borderBottomColor: COLORS.lightGray,
-  },
-  menuBtn: {
-    width: 40, height: 40, borderRadius: 20,
-    backgroundColor: COLORS.cardBg, alignItems: 'center', justifyContent: 'center',
-  },
-  menuIconContainer: { width: 20, height: 16, justifyContent: 'space-between' },
-  menuLine:          { width: 20, height: 2, backgroundColor: COLORS.navy, borderRadius: 1 },
-  mobileTitle:       { fontSize: 18, fontWeight: '800', color: COLORS.darkText },
 
   // Desktop header
   header: {
@@ -1055,19 +1232,21 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between', marginBottom: 12,
   },
   headerSub:   { fontSize: 10, fontWeight: '600', color: COLORS.subText, letterSpacing: 2, textTransform: 'uppercase', marginBottom: 2 },
-  headerTitle: { fontSize: 22, fontWeight: '900', color: COLORS.darkText },
+  headerTitle: {
+    fontSize: 22, fontWeight: '900', color: COLORS.darkText, letterSpacing: 0.3,
+    borderBottomWidth: 2, borderBottomColor: COLORS.lightGray, paddingBottom: 4, marginBottom: 6,
+  },
+  headerRight: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
 
-  // Bell
+  // Bell — unread-count badge lives in BellIcon (notificationCenter.js);
+  // only the button container is styled here. (Removed a leftover
+  // hand-rolled bell + gold badge that predated the shared component.)
   bellBtn: {
     width: 40, height: 40, borderRadius: 20,
     backgroundColor: COLORS.cardBg, alignItems: 'center', justifyContent: 'center',
     shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.08, shadowRadius: 6, elevation: 3,
   },
-  bellWrapper: { width: 20, height: 22, alignItems: 'center' },
-  bellBody:    { width: 14, height: 12, borderRadius: 7, borderWidth: 2, borderColor: '#8B0000', marginTop: 4 },
-  bellBottom:  { width: 8, height: 4, borderBottomLeftRadius: 4, borderBottomRightRadius: 4, backgroundColor: '#8B0000', marginTop: -1 },
-  bellDot:     { position: 'absolute', top: 0, right: 1, width: 7, height: 7, borderRadius: 4, backgroundColor: COLORS.gold, borderWidth: 1.5, borderColor: COLORS.cardBg },
 
   // Upload button
   uploadBtn: {
@@ -1112,7 +1291,7 @@ const styles = StyleSheet.create({
 
   // Filter row
   filterRow: {
-    flexDirection: 'row', alignItems: 'flex-start', marginBottom: 12, gap: 6,
+    flexDirection: 'row', alignItems: 'flex-start', marginBottom: 16, gap: 6,
     zIndex: 10,
   },
   dropdownContainer: {
@@ -1156,7 +1335,7 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.15)', alignItems: 'center', justifyContent: 'center',
   },
   docTabActive: {
-    backgroundColor: COLORS.gold, borderRadius: 4, borderColor: COLORS.gold,
+    backgroundColor: COLORS.gold, borderColor: COLORS.gold,
     shadowColor: COLORS.gold, shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.4, shadowRadius: 4, elevation: 3,
   },
@@ -1206,6 +1385,12 @@ const styles = StyleSheet.create({
   fileIconText: { fontSize: 7, fontWeight: '900', color: COLORS.white, letterSpacing: 0.5 },
   docName:      { flex: 1, fontSize: 12, color: COLORS.darkText, fontWeight: '500' },
   docDate:      { flex: 1, fontSize: 11, color: COLORS.subText, textAlign: 'right' },
+  rowActions: {
+    width: 90, flexDirection: 'row', alignItems: 'center',
+    justifyContent: 'center', gap: isMobile ? 2 : 4,
+  },
+  actionIconWrap: { padding: 4 },
+  actionIconText: { fontSize: isMobile ? 14 : 16 },
 
   // Empty state
   emptyState:   { alignItems: 'center', paddingVertical: 60 },
@@ -1237,6 +1422,7 @@ const styles = StyleSheet.create({
   },
   modalDropdownWrapper: { position: 'relative', marginBottom: 12, zIndex: 100 },
   modalCategoryDropdownWrapper: { position: 'relative', marginBottom: 12, zIndex: 200 },
+  modalDocTypeDropdownWrapper: { position: 'relative', marginBottom: 12, zIndex: 150 },
   modalDropdown: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     backgroundColor: COLORS.offWhite, borderRadius: 8, borderWidth: 1, borderColor: COLORS.lightGray,
@@ -1301,4 +1487,101 @@ const styles = StyleSheet.create({
   },
   modalUploadBtnDisabled: { backgroundColor: COLORS.midGray },
   modalUploadBtnText: { fontSize: 14, fontWeight: '700', color: COLORS.white },
+
+  // ── Download / Viewer Modals (matches sk-document-management) ──
+  dlModalContent: {
+    width: '88%', maxWidth: 380,
+    backgroundColor: COLORS.white,
+    borderRadius: 20,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.25,
+    shadowRadius: 20,
+    elevation: 20,
+  },
+  dlModalBody: {
+    paddingHorizontal: 24, paddingTop: 14, paddingBottom: 20, alignItems: 'center',
+  },
+  dlModalTitle: {
+    fontSize: 17, fontWeight: '800', color: COLORS.darkText,
+    textAlign: 'center', marginBottom: 10, letterSpacing: 0.2,
+  },
+  dlModalBodyText: {
+    fontSize: 13.5, color: COLORS.subText, lineHeight: 20,
+    textAlign: 'center',
+  },
+  dlModalFooter: {
+    flexDirection: 'row', gap: 10,
+    paddingHorizontal: 20, paddingVertical: 16,
+    backgroundColor: COLORS.offWhite,
+  },
+  dlModalCancelBtn: {
+    flex: 1, paddingVertical: 13, borderRadius: 10,
+    borderWidth: 1.5, borderColor: COLORS.lightGray,
+    alignItems: 'center', backgroundColor: COLORS.white,
+  },
+  dlModalCancelBtnText: {
+    fontSize: 14, fontWeight: '700', color: COLORS.subText,
+  },
+  modalIconStrip: {
+    alignItems: 'center',
+    paddingTop: 28,
+    paddingBottom: 4,
+    backgroundColor: COLORS.white,
+  },
+  modalIconCircle: {
+    width: 64, height: 64, borderRadius: 32,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  modalDivider: {
+    height: 1, backgroundColor: COLORS.lightGray,
+  },
+  modalHighlight: {
+    fontWeight: '700', color: COLORS.darkText,
+  },
+  modalActionBtn: {
+    flex: 1, flexDirection: 'row', paddingVertical: 13, borderRadius: 10,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  modalActionBtnText: {
+    fontSize: 14, fontWeight: '700', color: COLORS.white,
+  },
+
+  // ── Document Viewer ──
+  viewerHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.navy,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    gap: 10,
+  },
+  viewerBackBtn: {
+    padding: 6,
+    borderRadius: 8,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+  },
+  viewerTitle: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: '700',
+    color: COLORS.white,
+  },
+  viewerOpenBtn: {
+    padding: 6,
+    borderRadius: 8,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+  },
+  viewerLoading: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.offWhite,
+    gap: 12,
+  },
+  viewerLoadingText: {
+    fontSize: 13,
+    color: COLORS.subText,
+  },
 });
