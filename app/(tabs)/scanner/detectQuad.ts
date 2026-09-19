@@ -23,6 +23,32 @@ export const DEFAULT_QUAD: QuadCorners = {
 const getLuminance = (r: number, g: number, b: number): number =>
   0.299 * r + 0.587 * g + 0.114 * b;
 
+/** 0 (fully neutral: black/white/gray) .. 255 (fully saturated colour). */
+const getSaturation = (r: number, g: number, b: number): number =>
+  Math.max(r, g, b) - Math.min(r, g, b);
+
+// A busy/patterned background (branded packaging, printed fabric, a kid's
+// backpack, etc.) produces just as much raw Sobel edge magnitude as the real
+// page border, so a hard edge threshold can't tell them apart on its own.
+// Colour usually can: a printed page is close to neutral (white/gray paper,
+// black text), a busy background is usually saturated. But the single
+// strongest edge pixel at any transition — including the true page border —
+// is exactly where the two colours BLEND, so it's often not very neutral
+// itself; requiring each edge pixel to individually pass a strict neutrality
+// test (an earlier version of this file did that) ends up discarding the
+// real border along with the noise. Using saturation as a soft WEIGHT on the
+// edge-energy sums below, instead of a hard per-pixel pass/fail, avoids that:
+// a busy background's edges get scaled down (spread across many pixels, so
+// the effect compounds), while the true border keeps most of its strength
+// even where individual pixels are only moderately neutral.
+const SAT_FLOOR = 30;  // at/below this saturation, edge keeps full weight
+const SAT_CEIL = 140;  // at/above this saturation, edge is fully discounted
+const neutralWeight = (sat: number): number => {
+  if (sat <= SAT_FLOOR) return 1;
+  if (sat >= SAT_CEIL) return 0;
+  return 1 - (sat - SAT_FLOOR) / (SAT_CEIL - SAT_FLOOR);
+};
+
 const getOtsuThreshold = (data: ArrayLike<number>, w: number, h: number): number => {
   const histogram = new Uint32Array(256);
   for (let i = 0; i < data.length; i += 4) {
@@ -80,36 +106,53 @@ export const detectQuadFromRGBA = (data: ArrayLike<number>, cw: number, ch: numb
     }
   }
 
-  // Find threshold for strong edges
-  const sortedEdges = Float32Array.from(edges).sort();
-  const medianEdge = sortedEdges[Math.floor(sortedEdges.length * 0.5)];
-  const edgeThreshold = Math.max(medianEdge * 4, 25);
-
-  // Find document content pixels
-  const isDoc = new Uint8Array(cw * ch);
+  // Weight each pixel's edge magnitude by how neutral its colour is (see
+  // neutralWeight above), and fold in the brightness/content test too — as a
+  // soft multiplier rather than a hard AND, so a transition pixel that's only
+  // partly consistent still contributes instead of being zeroed outright.
+  const weightedEdge = new Float32Array(cw * ch);
   for (let i = 0; i < cw * ch; i++) {
     const px = i * 4;
-    const lum = getLuminance(data[px], data[px + 1], data[px + 2]);
+    const r = data[px], g = data[px + 1], b = data[px + 2];
+    const lum = getLuminance(r, g, b);
     const isContent = isBrightBg ? lum < bgThreshold : lum > 200;
-    const hasEdge = edges[i] > edgeThreshold;
-    if (isContent && hasEdge) isDoc[i] = 1;
+    const sat = getSaturation(r, g, b);
+    weightedEdge[i] = edges[i] * neutralWeight(sat) * (isContent ? 1 : 0.35);
   }
 
-  // Find document bounds by scanning from each side
-  let top = 0, bottom = ch - 1, left = 0, right = cw - 1;
+  // Collapse into row/column energy profiles. A busy background smears its
+  // (down-weighted) edge noise fairly evenly across every row and column; the
+  // real page border concentrates energy at ONE row/column, so it still wins
+  // the argmax even though no single pixel on it may stand out on its own.
+  const rowEnergy = new Float32Array(ch);
+  const colEnergy = new Float32Array(cw);
+  for (let y = 0; y < ch; y++) {
+    let sum = 0;
+    for (let x = 0; x < cw; x++) sum += weightedEdge[y * cw + x];
+    rowEnergy[y] = sum;
+  }
+  for (let x = 0; x < cw; x++) {
+    let sum = 0;
+    for (let y = 0; y < ch; y++) sum += weightedEdge[y * cw + x];
+    colEnergy[x] = sum;
+  }
 
-  scan_top: for (let y = 0; y < ch; y++) {
-    for (let x = 0; x < cw; x++) if (isDoc[y * cw + x]) { top = y; break scan_top; }
-  }
-  scan_bottom: for (let y = ch - 1; y >= 0; y--) {
-    for (let x = 0; x < cw; x++) if (isDoc[y * cw + x]) { bottom = y; break scan_bottom; }
-  }
-  scan_left: for (let x = 0; x < cw; x++) {
-    for (let y = 0; y < ch; y++) if (isDoc[y * cw + x]) { left = x; break scan_left; }
-  }
-  scan_right: for (let x = cw - 1; x >= 0; x--) {
-    for (let y = 0; y < ch; y++) if (isDoc[y * cw + x]) { right = x; break scan_right; }
-  }
+  const argmaxIn = (arr: Float32Array, from: number, to: number): number => {
+    let best = from, bestVal = -Infinity;
+    for (let i = from; i < to; i++) {
+      if (arr[i] > bestVal) { bestVal = arr[i]; best = i; }
+    }
+    return best;
+  };
+
+  // The page is assumed to leave some margin on every side — true of a
+  // normal scan photo — so each border is the strongest energy peak within
+  // the outer third of its dimension (same assumption the native build's
+  // axis-aligned fallback already makes).
+  let top = argmaxIn(rowEnergy, 0, Math.floor(ch / 3));
+  let bottom = argmaxIn(rowEnergy, Math.floor((2 * ch) / 3), ch);
+  let left = argmaxIn(colEnergy, 0, Math.floor(cw / 3));
+  let right = argmaxIn(colEnergy, Math.floor((2 * cw) / 3), cw);
 
   // Validate bounds - if document too small or not found, use defaults
   const docWidth = right - left;
@@ -131,7 +174,7 @@ export const detectQuadFromRGBA = (data: ArrayLike<number>, cw: number, ch: numb
         const tx = Math.round(searchX + r * Math.cos(rad));
         const ty = Math.round(searchY + r * Math.sin(rad));
         if (tx >= 0 && tx < cw && ty >= 0 && ty < ch) {
-          const edgeVal = edges[ty * cw + tx];
+          const edgeVal = weightedEdge[ty * cw + tx];
           const gx = gradients[(ty * cw + tx) * 2];
           const gy = gradients[(ty * cw + tx) * 2 + 1];
 
