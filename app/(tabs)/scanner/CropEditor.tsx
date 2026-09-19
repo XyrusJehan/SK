@@ -4,8 +4,8 @@
  * Supports both rectangular cropping and perspective quadrilateral cropping.
  */
 
-import React, { useRef, useEffect, useState } from 'react';
-import { Platform, View, Image, StyleSheet } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { Image, LayoutChangeEvent, PanResponder, Platform, StyleSheet, View } from 'react-native';
 import type { CropRegion, QuadCorners } from './useDocumentScanner';
 
 interface CropEditorProps {
@@ -345,19 +345,140 @@ function CropEditorWeb({ imageUri, region, corners, onChange, onCornersChange }:
   );
 }
 
-// ─── Native fallback ──────────────────────────────────────────────────────────
+// ─── Native implementation (rectangle crop only — no perspective) ─────────────
+//
+// v1 scope: unlike the web editor, this only supports a rectangular region
+// (matches useDocumentScanner.native.ts, which ignores cropCorners on native).
+// Drag the center handle to move, drag a corner to resize.
 
-function CropEditorNative({ imageUri }: CropEditorProps) {
+function CropEditorNative({ imageUri, region, onChange }: CropEditorProps) {
+  const [layout, setLayout] = useState({ width: 0, height: 0 });
+  const regionRef = useRef(region);
+  const onChangeRef = useRef(onChange);
+  const dragStart = useRef<{ handle: string; x: number; y: number; region: CropRegion } | null>(null);
+
+  useEffect(() => { regionRef.current = region; }, [region]);
+  useEffect(() => { onChangeRef.current = onChange; }, [onChange]);
+
+  const clamp = (v: number, min: number, max: number) => Math.min(max, Math.max(min, v));
+
+  const makeResponder = (handle: string) =>
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onStartShouldSetPanResponderCapture: () => true,
+      onMoveShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponderCapture: () => true,
+      // Refuse to hand the gesture back once granted — without this, the
+      // parent ScrollView in CropModal can steal the touch mid-drag as soon
+      // as it sees vertical movement, which is why the handles felt "stuck".
+      onPanResponderTerminationRequest: () => false,
+      onPanResponderGrant: (e) => {
+        dragStart.current = {
+          handle,
+          x: e.nativeEvent.pageX,
+          y: e.nativeEvent.pageY,
+          region: { ...regionRef.current },
+        };
+      },
+      onPanResponderMove: (e) => {
+        if (!dragStart.current || !layout.width || !layout.height) return;
+        const { handle: h, x: startX, y: startY, region: r } = dragStart.current;
+        const dx = ((e.nativeEvent.pageX - startX) / layout.width) * 100;
+        const dy = ((e.nativeEvent.pageY - startY) / layout.height) * 100;
+        let next: CropRegion;
+
+        if (h === 'move') {
+          next = {
+            x: clamp(r.x + dx, 0, 100 - r.w),
+            y: clamp(r.y + dy, 0, 100 - r.h),
+            w: r.w,
+            h: r.h,
+          };
+        } else {
+          let nx = r.x, ny = r.y, nw = r.w, nh = r.h;
+          if (h.includes('e')) nw = clamp(r.w + dx, 10, 100 - r.x);
+          if (h.includes('s')) nh = clamp(r.h + dy, 10, 100 - r.y);
+          if (h.includes('w')) {
+            const clampedX = clamp(r.x + dx, 0, r.x + r.w - 10);
+            nw = r.w - (clampedX - r.x);
+            nx = clampedX;
+          }
+          if (h.includes('n')) {
+            const clampedY = clamp(r.y + dy, 0, r.y + r.h - 10);
+            nh = r.h - (clampedY - r.y);
+            ny = clampedY;
+          }
+          next = { x: nx, y: ny, w: nw, h: nh };
+        }
+        onChangeRef.current?.(next);
+      },
+      onPanResponderRelease: () => { dragStart.current = null; },
+    });
+
+  // One PanResponder per handle, memoized for the component's lifetime
+  const responders = useRef({
+    move: makeResponder('move'),
+    nw: makeResponder('nw'),
+    ne: makeResponder('ne'),
+    se: makeResponder('se'),
+    sw: makeResponder('sw'),
+  }).current;
+
+  const onLayout = (e: LayoutChangeEvent) => {
+    const { width, height } = e.nativeEvent.layout;
+    setLayout({ width, height });
+  };
+
+  const corners: { id: keyof typeof responders; top: number; left: number }[] = [
+    { id: 'nw', top: region.y, left: region.x },
+    { id: 'ne', top: region.y, left: region.x + region.w },
+    { id: 'se', top: region.y + region.h, left: region.x + region.w },
+    { id: 'sw', top: region.y + region.h, left: region.x },
+  ];
+
   return (
-    <View style={nativeStyles.container}>
+    <View style={nativeStyles.container} onLayout={onLayout}>
       <Image source={{ uri: imageUri }} style={nativeStyles.image} resizeMode="contain" />
+      <View style={nativeStyles.dim} pointerEvents="none" />
+
+      {/* Crop rectangle outline + move handle */}
+      <View
+        style={[
+          nativeStyles.rect,
+          {
+            top: `${region.y}%`, left: `${region.x}%`,
+            width: `${region.w}%`, height: `${region.h}%`,
+          },
+        ]}
+        {...responders.move.panHandlers}
+      />
+
+      {corners.map((c) => (
+        <View
+          key={c.id}
+          style={[nativeStyles.handle, { top: `${c.top}%`, left: `${c.left}%` }]}
+          {...responders[c.id].panHandlers}
+        />
+      ))}
     </View>
   );
 }
 
 const nativeStyles = StyleSheet.create({
-  container: { width: '100%', minHeight: 260, backgroundColor: '#000', borderRadius: 8, overflow: 'hidden' },
-  image: { width: '100%', height: 300 },
+  container: {
+    width: '100%', minHeight: 280, backgroundColor: '#000',
+    borderRadius: 8, overflow: 'hidden', position: 'relative',
+  },
+  image: { width: '100%', height: 300, opacity: 0.5 },
+  dim: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.35)' },
+  rect: {
+    position: 'absolute', borderWidth: 2, borderColor: '#E8C547',
+    backgroundColor: 'rgba(232,197,71,0.12)',
+  },
+  handle: {
+    position: 'absolute', width: 26, height: 26, marginTop: -13, marginLeft: -13,
+    backgroundColor: '#E8C547', borderRadius: 4, borderWidth: 3, borderColor: '#133E75',
+  },
 });
 
 export const CropEditor = Platform.OS === 'web' ? CropEditorWeb : CropEditorNative;

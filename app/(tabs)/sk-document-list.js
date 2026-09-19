@@ -28,6 +28,11 @@ import { useNav } from './navContext';
 import { BellIcon, NotificationModal, useNotificationCenter } from './notificationCenter';
 import { DocumentScannerButton } from './scanner/DocumentScannerButton';
 import { useDocumentScanner } from './scanner/useDocumentScanner';
+// Native fetch()/Blob support is unreliable for local file:// URIs (uploads
+// silently truncate to 0 bytes) — read the file as base64 + decode to an
+// ArrayBuffer instead. Web keeps using fetch().blob(), which works fine there.
+import { decode as decodeBase64 } from 'base64-arraybuffer';
+import * as FileSystem from 'expo-file-system/legacy';
 // WebView: use react-native-webview on native, iframe on web (matches management screen)
 let WebView = null;
 if (Platform.OS !== 'web') {
@@ -566,13 +571,25 @@ export default function SKDocumentListScreen() {
           .replace(/\s+/g, '_');
         const fileName = `${barangayId}_${yearValue}_${Date.now()}_${sanitizedName}`;
 
-        // Fetch the file and convert to blob
-        const response = await fetch(selectedFile.uri);
-        const blob = await response.blob();
+        // Fetch the file and convert to a payload supabase-js can upload.
+        // On native, fetch(uri).blob() for local file:// URIs is unreliable
+        // (RN's Blob/XHR support can silently produce a truncated/0-byte
+        // blob), so read + base64-decode into an ArrayBuffer instead. Web
+        // keeps the simple fetch/blob path, which works correctly there.
+        let fileData;
+        if (Platform.OS === 'web') {
+          const response = await fetch(selectedFile.uri);
+          fileData = await response.blob();
+        } else {
+          const base64 = await FileSystem.readAsStringAsync(selectedFile.uri, {
+            encoding: FileSystem.EncodingType.Base64,
+          });
+          fileData = decodeBase64(base64);
+        }
 
         const { data: uploadData, error: uploadError } = await supabase.storage
           .from('documents')
-          .upload(fileName, blob, {
+          .upload(fileName, fileData, {
             contentType: selectedFile.type || 'application/octet-stream',
           });
 

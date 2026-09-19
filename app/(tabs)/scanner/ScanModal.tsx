@@ -6,19 +6,19 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  Modal,
-  View,
-  Text,
-  TouchableOpacity,
-  ScrollView,
-  Image,
   ActivityIndicator,
-  StyleSheet,
-  Platform,
   Animated,
   Dimensions,
+  Image,
+  Modal,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from 'react-native';
-import type { UseDocumentScannerReturn, FilterMode, ScannedPage } from './useDocumentScanner';
+import type { FilterMode, ScannedPage, UseDocumentScannerReturn } from './useDocumentScanner';
 
 const { height: SCREEN_HEIGHT, width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -531,7 +531,12 @@ const s = StyleSheet.create({
     justifyContent: 'center', alignItems: 'center',
   },
   sheet: {
-    width: '94%', maxWidth: 520, maxHeight: SCREEN_HEIGHT * 0.88,
+    // `height` (not just maxHeight) is required: the ScrollView below uses
+    // flex:1, and on native a flex child inside a parent with no definite
+    // height resolves to 0 — the body silently disappears, leaving only the
+    // header visible. Web doesn't hit this because browser flexbox sizes
+    // flex children by content when the parent has no set height.
+    width: '94%', maxWidth: 520, height: SCREEN_HEIGHT * 0.88,
     backgroundColor: C.offWhite, borderRadius: 22, overflow: 'hidden',
     shadowColor: '#000', shadowOffset: { width: 0, height: 24 },
     shadowOpacity: 0.4, shadowRadius: 40, elevation: 30,

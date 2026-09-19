@@ -3,13 +3,20 @@
  * Full-screen crop modal — professional pop-in design.
  */
 
-import React, { useState, useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  Modal, View, Text, TouchableOpacity, ScrollView,
-  TextInput, ActivityIndicator, StyleSheet, Animated, Dimensions,
+  ActivityIndicator,
+  Animated, Dimensions,
+  Modal,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import { CropEditor } from './CropEditor';
-import type { UseDocumentScannerReturn, CropRegion } from './useDocumentScanner';
+import type { CropRegion, UseDocumentScannerReturn } from './useDocumentScanner';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -244,9 +251,12 @@ const s = StyleSheet.create({
     alignItems: 'center',
   },
   sheet: {
+    // See ScanModal.tsx: `height` (not just maxHeight) is required so the
+    // flex:1 ScrollView below has a definite parent height to expand into
+    // on native — otherwise Yoga resolves it to 0 and the body vanishes.
     width: '94%',
     maxWidth: 520,
-    maxHeight: SCREEN_HEIGHT * 0.9,
+    height: SCREEN_HEIGHT * 0.9,
     backgroundColor: C.offWhite,
     borderRadius: 22,
     overflow: 'hidden',
