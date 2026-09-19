@@ -165,7 +165,16 @@ export function CropModal({ scanner }: CropModalProps) {
                   <TouchableOpacity
                     key={p.label}
                     style={s.presetBtn}
-                    onPress={() => setCropRegion(p.region)}
+                    onPress={() => {
+                      setCropRegion(p.region);
+                      // Also reset corners to match the rectangular preset
+                      setCropCorners({
+                        tl: { x: p.region.x, y: p.region.y },
+                        tr: { x: p.region.x + p.region.w, y: p.region.y },
+                        br: { x: p.region.x + p.region.w, y: p.region.y + p.region.h },
+                        bl: { x: p.region.x, y: p.region.y + p.region.h },
+                      });
+                    }}
                     activeOpacity={0.8}
                   >
                     <Text style={s.presetBtnText}>{p.icon}  {p.label}</Text>

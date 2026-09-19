@@ -4,9 +4,16 @@
  * Supports both rectangular cropping and perspective quadrilateral cropping.
  */
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Image, LayoutChangeEvent, PanResponder, Platform, StyleSheet, View } from 'react-native';
 import type { CropRegion, QuadCorners } from './useDocumentScanner';
+
+// NOTE: Skia is no longer imported here — this component only draws the
+// lightweight handle/overlay UI (plain RN Views), which doesn't need it.
+// The actual pixel-level Skia work (perspective warp + edge-detection
+// auto-crop) lives in useDocumentScanner.native.ts, where the real crop
+// happens once the user confirms. Importing the Skia bindings in a file
+// that never calls them just pulls in the native module for nothing.
 
 interface CropEditorProps {
   imageUri: string;
@@ -37,18 +44,6 @@ function CropEditorWeb({ imageUri, region, corners, onChange, onCornersChange }:
     startCorners: QuadCorners;
   } | null>(null);
   const [mode, setMode] = useState<'region' | 'corners'>('corners');
-
-  // Determine if corners form a non-rectangular quad
-  const isPerspective = corners ? (
-    Math.abs(corners.tl.x - region.x) > 1 ||
-    Math.abs(corners.tl.y - region.y) > 1 ||
-    Math.abs(corners.tr.x - (region.x + region.w)) > 1 ||
-    Math.abs(corners.tr.y - region.y) > 1 ||
-    Math.abs(corners.br.x - (region.x + region.w)) > 1 ||
-    Math.abs(corners.br.y - (region.y + region.h)) > 1 ||
-    Math.abs(corners.bl.x - region.x) > 1 ||
-    Math.abs(corners.bl.y - (region.y + region.h)) > 1
-  ) : false;
 
   useEffect(() => {
     regionRef.current = region;
@@ -193,9 +188,6 @@ function CropEditorWeb({ imageUri, region, corners, onChange, onCornersChange }:
     br: { x: region.x + region.w, y: region.y + region.h },
     bl: { x: region.x, y: region.y + region.h },
   };
-
-  // Determine if we're in perspective mode (asymmetric quad)
-  const perspectiveMode = isPerspective || mode === 'corners';
 
   const cornerHandles = [
     { id: 'tl', x: activeCorners.tl.x, y: activeCorners.tl.y, cursor: 'nw-resize' },
@@ -345,139 +337,255 @@ function CropEditorWeb({ imageUri, region, corners, onChange, onCornersChange }:
   );
 }
 
-// ─── Native implementation (rectangle crop only — no perspective) ─────────────
+// ─── Native implementation (free 4-corner perspective editor) ────────────────
 //
-// v1 scope: unlike the web editor, this only supports a rectangular region
-// (matches useDocumentScanner.native.ts, which ignores cropCorners on native).
-// Drag the center handle to move, drag a corner to resize.
+// Mirrors the web editor: four INDEPENDENT corner handles, always visible,
+// with the real quadrilateral drawn between them.
+// - Drag a corner handle to move just that corner
+// - Drag inside the quad to move the whole thing
+// - Double-tap a corner to snap it back to the bounding-box corner
+//
+// Coordinates: every % here is relative to the IMAGE itself. The "stage" View
+// below is sized to the photo's exact aspect ratio (no letterboxing), so
+// 50% / 50% is the true centre of the picture — which is what the Skia warp in
+// useDocumentScanner.native.ts assumes when it converts % → source pixels.
+// (Before, the photo used resizeMode="contain" inside a fixed-height box, so
+// any non-matching aspect ratio shifted the handles off the pixels they
+// appeared to sit on.)
+//
+// The quad is drawn with plain rotated Views on purpose: importing Skia or
+// react-native-svg here would drag a native module into the web bundle.
 
-function CropEditorNative({ imageUri, region, onChange }: CropEditorProps) {
-  const [layout, setLayout] = useState({ width: 0, height: 0 });
-  const regionRef = useRef(region);
+type CornerKey = 'tl' | 'tr' | 'br' | 'bl';
+type HandleId = 'move' | CornerKey;
+
+const CORNER_IDS: CornerKey[] = ['tl', 'tr', 'br', 'bl'];
+const MAX_STAGE_HEIGHT = 420;
+const STAGE_PAD = 18;        // room around the stage so edge handles aren't clipped
+const HANDLE_SIZE = 30;
+const EDGE_THICKNESS = 2.5;
+const GOLD = '#E8C547';
+const NAVY = '#133E75';
+
+const clampNum = (v: number, min: number, max: number) => Math.min(max, Math.max(min, v));
+
+const cornersToBox = (c: QuadCorners) => {
+  const xs = [c.tl.x, c.tr.x, c.br.x, c.bl.x];
+  const ys = [c.tl.y, c.tr.y, c.br.y, c.bl.y];
+  return { minX: Math.min(...xs), maxX: Math.max(...xs), minY: Math.min(...ys), maxY: Math.max(...ys) };
+};
+
+/** One straight edge of the quad, drawn as a rotated bar with a dark under-stroke for contrast. */
+function QuadEdge({ a, b }: { a: { x: number; y: number }; b: { x: number; y: number } }) {
+  const len = Math.hypot(b.x - a.x, b.y - a.y);
+  const angle = Math.atan2(b.y - a.y, b.x - a.x);
+  const cx = (a.x + b.x) / 2;
+  const cy = (a.y + b.y) / 2;
+  const rotate = [{ rotate: `${angle}rad` }];
+  return (
+    <>
+      <View
+        pointerEvents="none"
+        style={{
+          position: 'absolute', left: cx - len / 2, top: cy - (EDGE_THICKNESS + 3) / 2,
+          width: len, height: EDGE_THICKNESS + 3, backgroundColor: 'rgba(0,0,0,0.45)', transform: rotate,
+        }}
+      />
+      <View
+        pointerEvents="none"
+        style={{
+          position: 'absolute', left: cx - len / 2, top: cy - EDGE_THICKNESS / 2,
+          width: len, height: EDGE_THICKNESS, backgroundColor: GOLD, transform: rotate,
+        }}
+      />
+    </>
+  );
+}
+
+function CropEditorNative({ imageUri, region, corners, onChange, onCornersChange }: CropEditorProps) {
+  const [containerW, setContainerW] = useState(0);
+  const [aspect, setAspect] = useState(3 / 4); // width / height — replaced once Image.getSize resolves
+
+  useEffect(() => {
+    let cancelled = false;
+    Image.getSize(
+      imageUri,
+      (w, h) => { if (!cancelled && w > 0 && h > 0) setAspect(w / h); },
+      () => { /* keep the default aspect; handles still work, just less exact */ },
+    );
+    return () => { cancelled = true; };
+  }, [imageUri]);
+
+  // Fit the photo inside (container width × MAX_STAGE_HEIGHT), preserving aspect.
+  const availW = Math.max(0, containerW - STAGE_PAD * 2);
+  let stageW = availW;
+  let stageH = availW / aspect;
+  if (stageH > MAX_STAGE_HEIGHT) {
+    stageH = MAX_STAGE_HEIGHT;
+    stageW = stageH * aspect;
+  }
+
+  const activeCorners: QuadCorners = corners || {
+    tl: { x: region.x, y: region.y },
+    tr: { x: region.x + region.w, y: region.y },
+    br: { x: region.x + region.w, y: region.y + region.h },
+    bl: { x: region.x, y: region.y + region.h },
+  };
+
+  // The PanResponders below are created ONCE (see `responders`), so their
+  // callbacks only ever see what they read through refs. Refs are refreshed on
+  // every render, so `.current` is always the latest value.
+  const stageRef = useRef({ width: 0, height: 0 });
+  const cornersRef = useRef(activeCorners);
   const onChangeRef = useRef(onChange);
-  const dragStart = useRef<{ handle: string; x: number; y: number; region: CropRegion } | null>(null);
+  const onCornersChangeRef = useRef(onCornersChange);
+  stageRef.current = { width: stageW, height: stageH };
+  cornersRef.current = activeCorners;
+  onChangeRef.current = onChange;
+  onCornersChangeRef.current = onCornersChange;
 
-  useEffect(() => { regionRef.current = region; }, [region]);
-  useEffect(() => { onChangeRef.current = onChange; }, [onChange]);
+  const dragStart = useRef<{ handle: HandleId; corners: QuadCorners } | null>(null);
+  const lastTap = useRef(0);
 
-  const clamp = (v: number, min: number, max: number) => Math.min(max, Math.max(min, v));
+  /** Push new corners up, and keep `region` equal to their bounding box. */
+  const emit = (c: QuadCorners) => {
+    onCornersChangeRef.current?.(c);
+    const { minX, maxX, minY, maxY } = cornersToBox(c);
+    onChangeRef.current?.({ x: minX, y: minY, w: maxX - minX, h: maxY - minY });
+  };
 
-  const makeResponder = (handle: string) =>
+  const makeResponder = (handle: HandleId) =>
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
       onStartShouldSetPanResponderCapture: () => true,
       onMoveShouldSetPanResponder: () => true,
       onMoveShouldSetPanResponderCapture: () => true,
-      // Refuse to hand the gesture back once granted — without this, the
-      // parent ScrollView in CropModal can steal the touch mid-drag as soon
-      // as it sees vertical movement, which is why the handles felt "stuck".
       onPanResponderTerminationRequest: () => false,
-      onPanResponderGrant: (e) => {
-        dragStart.current = {
-          handle,
-          x: e.nativeEvent.pageX,
-          y: e.nativeEvent.pageY,
-          region: { ...regionRef.current },
-        };
-      },
-      onPanResponderMove: (e) => {
-        if (!dragStart.current || !layout.width || !layout.height) return;
-        const { handle: h, x: startX, y: startY, region: r } = dragStart.current;
-        const dx = ((e.nativeEvent.pageX - startX) / layout.width) * 100;
-        const dy = ((e.nativeEvent.pageY - startY) / layout.height) * 100;
-        let next: CropRegion;
-
-        if (h === 'move') {
-          next = {
-            x: clamp(r.x + dx, 0, 100 - r.w),
-            y: clamp(r.y + dy, 0, 100 - r.h),
-            w: r.w,
-            h: r.h,
-          };
-        } else {
-          let nx = r.x, ny = r.y, nw = r.w, nh = r.h;
-          if (h.includes('e')) nw = clamp(r.w + dx, 10, 100 - r.x);
-          if (h.includes('s')) nh = clamp(r.h + dy, 10, 100 - r.y);
-          if (h.includes('w')) {
-            const clampedX = clamp(r.x + dx, 0, r.x + r.w - 10);
-            nw = r.w - (clampedX - r.x);
-            nx = clampedX;
-          }
-          if (h.includes('n')) {
-            const clampedY = clamp(r.y + dy, 0, r.y + r.h - 10);
-            nh = r.h - (clampedY - r.y);
-            ny = clampedY;
-          }
-          next = { x: nx, y: ny, w: nw, h: nh };
+      onPanResponderGrant: () => {
+        const now = Date.now();
+        if (handle !== 'move' && now - lastTap.current < 300) {
+          // Double-tap → snap this corner to the matching corner of the bounding box.
+          const c = cornersRef.current;
+          const { minX, maxX, minY, maxY } = cornersToBox(c);
+          const snapped: QuadCorners = { ...c };
+          if (handle === 'tl') snapped.tl = { x: minX, y: minY };
+          if (handle === 'tr') snapped.tr = { x: maxX, y: minY };
+          if (handle === 'br') snapped.br = { x: maxX, y: maxY };
+          if (handle === 'bl') snapped.bl = { x: minX, y: maxY };
+          emit(snapped);
+          lastTap.current = 0;
+          dragStart.current = null;
+          return;
         }
-        onChangeRef.current?.(next);
+        lastTap.current = now;
+        dragStart.current = { handle, corners: { ...cornersRef.current } };
+      },
+      onPanResponderMove: (_e, g) => {
+        const start = dragStart.current;
+        const { width, height } = stageRef.current;
+        if (!start || !width || !height) return;
+        const dx = (g.dx / width) * 100;
+        const dy = (g.dy / height) * 100;
+        const sc = start.corners;
+
+        if (start.handle === 'move') {
+          // Translate the whole quad, stopping when any corner reaches the image edge.
+          const { minX, maxX, minY, maxY } = cornersToBox(sc);
+          const mx = clampNum(dx, -minX, 100 - maxX);
+          const my = clampNum(dy, -minY, 100 - maxY);
+          emit({
+            tl: { x: sc.tl.x + mx, y: sc.tl.y + my },
+            tr: { x: sc.tr.x + mx, y: sc.tr.y + my },
+            br: { x: sc.br.x + mx, y: sc.br.y + my },
+            bl: { x: sc.bl.x + mx, y: sc.bl.y + my },
+          });
+        } else {
+          const k = start.handle;
+          emit({
+            ...sc,
+            [k]: { x: clampNum(sc[k].x + dx, 0, 100), y: clampNum(sc[k].y + dy, 0, 100) },
+          });
+        }
       },
       onPanResponderRelease: () => { dragStart.current = null; },
+      onPanResponderTerminate: () => { dragStart.current = null; },
     });
 
-  // One PanResponder per handle, memoized for the component's lifetime
-  const responders = useRef({
-    move: makeResponder('move'),
-    nw: makeResponder('nw'),
-    ne: makeResponder('ne'),
-    se: makeResponder('se'),
-    sw: makeResponder('sw'),
-  }).current;
+  // `useRef({...}).current` would still re-run makeResponder every render;
+  // useMemo with [] genuinely builds each responder exactly once.
+  const responders = useMemo<Record<HandleId, ReturnType<typeof PanResponder.create>>>(
+    () => ({
+      move: makeResponder('move'),
+      tl: makeResponder('tl'),
+      tr: makeResponder('tr'),
+      br: makeResponder('br'),
+      bl: makeResponder('bl'),
+    }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [],
+  );
 
-  const onLayout = (e: LayoutChangeEvent) => {
-    const { width, height } = e.nativeEvent.layout;
-    setLayout({ width, height });
-  };
-
-  const corners: { id: keyof typeof responders; top: number; left: number }[] = [
-    { id: 'nw', top: region.y, left: region.x },
-    { id: 'ne', top: region.y, left: region.x + region.w },
-    { id: 'se', top: region.y + region.h, left: region.x + region.w },
-    { id: 'sw', top: region.y + region.h, left: region.x },
-  ];
+  // % → stage pixels
+  const P = (pt: { x: number; y: number }) => ({ x: (pt.x / 100) * stageW, y: (pt.y / 100) * stageH });
+  const px = { tl: P(activeCorners.tl), tr: P(activeCorners.tr), br: P(activeCorners.br), bl: P(activeCorners.bl) };
+  const box = cornersToBox(activeCorners);
 
   return (
-    <View style={nativeStyles.container} onLayout={onLayout}>
-      <Image source={{ uri: imageUri }} style={nativeStyles.image} resizeMode="contain" />
-      <View style={nativeStyles.dim} pointerEvents="none" />
+    <View
+      style={nativeStyles.container}
+      onLayout={(e: LayoutChangeEvent) => setContainerW(e.nativeEvent.layout.width)}
+    >
+      {stageW > 0 && stageH > 0 && (
+        <View style={{ width: stageW, height: stageH }}>
+          {/* stretch is exact here: the stage already has the photo's aspect ratio */}
+          <Image source={{ uri: imageUri }} style={nativeStyles.image} resizeMode="stretch" />
 
-      {/* Crop rectangle outline + move handle */}
-      <View
-        style={[
-          nativeStyles.rect,
-          {
-            top: `${region.y}%`, left: `${region.x}%`,
-            width: `${region.w}%`, height: `${region.h}%`,
-          },
-        ]}
-        {...responders.move.panHandlers}
-      />
+          {/* Drag surface for moving the whole quad (its bounding box) */}
+          <View
+            style={{
+              position: 'absolute',
+              left: (box.minX / 100) * stageW, top: (box.minY / 100) * stageH,
+              width: ((box.maxX - box.minX) / 100) * stageW,
+              height: ((box.maxY - box.minY) / 100) * stageH,
+            }}
+            {...responders.move.panHandlers}
+          />
 
-      {corners.map((c) => (
-        <View
-          key={c.id}
-          style={[nativeStyles.handle, { top: `${c.top}%`, left: `${c.left}%` }]}
-          {...responders[c.id].panHandlers}
-        />
-      ))}
+          {/* The actual quadrilateral */}
+          <QuadEdge a={px.tl} b={px.tr} />
+          <QuadEdge a={px.tr} b={px.br} />
+          <QuadEdge a={px.br} b={px.bl} />
+          <QuadEdge a={px.bl} b={px.tl} />
+
+          {/* Four independent corner handles */}
+          {CORNER_IDS.map((id) => (
+            <View
+              key={id}
+              hitSlop={{ top: 14, bottom: 14, left: 14, right: 14 }}
+              style={[
+                nativeStyles.handle,
+                { left: px[id].x - HANDLE_SIZE / 2, top: px[id].y - HANDLE_SIZE / 2 },
+              ]}
+              {...responders[id].panHandlers}
+            />
+          ))}
+        </View>
+      )}
     </View>
   );
 }
 
 const nativeStyles = StyleSheet.create({
   container: {
-    width: '100%', minHeight: 280, backgroundColor: '#000',
-    borderRadius: 8, overflow: 'hidden', position: 'relative',
+    width: '100%', minHeight: 200, backgroundColor: '#000',
+    borderRadius: 8, overflow: 'hidden',
+    alignItems: 'center', justifyContent: 'center',
+    paddingVertical: STAGE_PAD, paddingHorizontal: STAGE_PAD,
   },
-  image: { width: '100%', height: 300, opacity: 0.5 },
-  dim: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.35)' },
-  rect: {
-    position: 'absolute', borderWidth: 2, borderColor: '#E8C547',
-    backgroundColor: 'rgba(232,197,71,0.12)',
-  },
+  image: { ...StyleSheet.absoluteFillObject },
   handle: {
-    position: 'absolute', width: 26, height: 26, marginTop: -13, marginLeft: -13,
-    backgroundColor: '#E8C547', borderRadius: 4, borderWidth: 3, borderColor: '#133E75',
+    position: 'absolute', width: HANDLE_SIZE, height: HANDLE_SIZE, borderRadius: HANDLE_SIZE / 2,
+    backgroundColor: GOLD, borderWidth: 3, borderColor: NAVY, zIndex: 10,
   },
 });
 
